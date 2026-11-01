@@ -503,3 +503,59 @@ def test_multipart_range_body_is_well_formed_and_complete(server, tree):
     for part, (start, end) in zip(parts, spans):  # noqa: B905 - 3.9 has no strict=
         assert part["Content-Range"].split()[1] == f"{start}-{end}/{len(data)}"
         assert part.get_payload(decode=True) == data[start : end + 1]
+
+
+def test_repeated_uploads_of_one_name_do_not_overwrite_each_other(tmp_path, free_port):
+    """Two uploads in the same second used to get the same `-<epoch>` name."""
+    root = tmp_path / "shared"
+    root.mkdir()
+    (root / "existing.txt").write_text("ORIGINAL", encoding="utf-8")
+    server = ShareServer(
+        Manifest.build([root]), host="127.0.0.1", port=free_port, allow_upload=True, upload_dir=root
+    )
+    server.start()
+    assert server.wait_until_ready(timeout=5)
+    try:
+        names = []
+        for attempt in range(4):
+            payload = f"attempt {attempt}".encode()
+            request = urllib.request.Request(
+                f"http://127.0.0.1:{server.port}/api/upload?name=existing.txt",
+                data=payload,
+                method="POST",
+            )
+            with urllib.request.urlopen(request, timeout=10) as response:
+                names.append(json.loads(response.read())["name"])
+        assert len(set(names)) == 4, f"names collided: {names}"
+        assert (root / "existing.txt").read_text() == "ORIGINAL", "the share's own file must survive"
+        assert sorted((root / name).read_text() for name in names) == [f"attempt {n}" for n in range(4)]
+    finally:
+        server.stop()
+
+
+def test_a_short_upload_reports_failure_and_leaves_no_file(tmp_path, free_port):
+    """A client that promises more than it sends must not get a clean filename."""
+    import socket
+
+    root = tmp_path / "shared"
+    root.mkdir()
+    server = ShareServer(
+        Manifest.build([root]), host="127.0.0.1", port=free_port, allow_upload=True, upload_dir=root
+    )
+    server.start()
+    assert server.wait_until_ready(timeout=5)
+    try:
+        with socket.create_connection(("127.0.0.1", server.port), timeout=10) as sock:
+            sock.sendall(
+                b"POST /api/upload?name=short.txt HTTP/1.1\r\nHost: x\r\n"
+                b"Content-Length: 1000\r\nConnection: close\r\n\r\nonly nine"
+            )
+            sock.shutdown(socket.SHUT_WR)
+            reply = b""
+            while chunk := sock.recv(65536):
+                reply += chunk
+        assert b"400" in reply.split(b"\r\n")[0]
+        assert b"incomplete" in reply
+        assert not (root / "short.txt").exists(), "a partial file must not be kept"
+    finally:
+        server.stop()

@@ -20,6 +20,7 @@ block the whole share.
 from __future__ import annotations
 
 import base64
+import contextlib
 import hashlib
 import hmac
 import html
@@ -138,6 +139,26 @@ FREE_PIN_ATTEMPTS = 5
 #: Longest any client is made to wait, in seconds.
 MAX_PIN_LOCKOUT = 60.0
 _ATTEMPT_LOCK = threading.Lock()
+
+
+def _unique_upload_path(target_dir: Path, name: str) -> Path:
+    """A path that does not exist yet, created exclusively.
+
+    Two uploads of the same name in the same second must not collide: the old
+    ``f"{stem}-{int(time.time())}"`` suffix produced the *same* name for both,
+    so the second silently overwrote the first while both reported success.
+    ``O_EXCL`` makes the choice atomic, so concurrent uploads cannot race.
+    """
+    stem, suffix = Path(name).stem, Path(name).suffix
+    for counter in range(1000):
+        candidate = target_dir / (name if counter == 0 else f"{stem}-{counter}{suffix}")
+        try:
+            descriptor = os.open(candidate, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
+        except FileExistsError:
+            continue
+        os.close(descriptor)
+        return candidate
+    raise OSError(f"no free filename for {name!r} in {target_dir}")
 
 
 def _is_loopback(address: str) -> bool:
@@ -1125,9 +1146,7 @@ class ShareRequestHandler(BaseHTTPRequestHandler):
         safe = platforms.safe_filename(Path(name).name)
         target_dir = self.ctx.upload_dir or platforms.downloads_dir() / "local-file-sharer"
         target_dir.mkdir(parents=True, exist_ok=True)
-        target = target_dir / safe
-        if target.exists():
-            target = target_dir / f"{target.stem}-{int(time.time())}{target.suffix}"
+        target = _unique_upload_path(target_dir, safe)
         length = int(self.headers.get("Content-Length") or 0)
         received = 0
         try:
@@ -1140,7 +1159,21 @@ class ShareRequestHandler(BaseHTTPRequestHandler):
                     received += len(chunk)
                     self.ctx.tracker.add_received(len(chunk))
         except OSError as exc:
+            # Do not leave a half-written file behind under a name the sender
+            # was told about: the whole point is that the file is complete.
+            with contextlib.suppress(OSError):
+                target.unlink()
             self.send_json({"error": f"upload failed: {exc}"}, status=500)
+            return
+        if received < length:
+            # The client hung up mid-upload. Reporting success here would hand
+            # back a truncated file with a clean name.
+            with contextlib.suppress(OSError):
+                target.unlink()
+            self.send_json(
+                {"error": f"upload incomplete: {received} of {length} bytes", "bytes": received},
+                status=400,
+            )
             return
         self.send_json({"ok": True, "name": target.name, "bytes": received, "path": str(target)})
 

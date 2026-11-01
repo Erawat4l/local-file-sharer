@@ -21,6 +21,14 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   `/download/`. `base_url` is normalised where it is set and where it is used.
 - **Tracker**: announcing to a server that has a torrent but no registry
   answered `404 tracker disabled`; the registry is now created on demand.
+- **Upload collisions**: two uploads of the same name in the same second both
+  reported `ok: true` but were written to the *same* `-<epoch>` filename, so the
+  second silently destroyed the first. Names are now chosen with an atomic
+  `O_EXCL` create (`existing-1.txt`, `existing-2.txt`, …), which also survives
+  concurrent uploads.
+- **Truncated uploads**: a client that promised more bytes than it sent got
+  `ok: true` and left a partial file under a clean name. That now returns `400`
+  and the stub is removed.
 - **429 responses** now carry `Retry-After` (RFC 6585), so a script can wait
   the right amount instead of retrying blind.
 - **PIN lockout bypass**: `client_ip()` trusted `X-Forwarded-For` from anyone,
