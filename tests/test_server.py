@@ -768,3 +768,41 @@ def test_only_the_error_page_css_answers_after_expiry(share_tree, free_port):
         assert sorted(reachable) == ["/static/app.css"], f"these answered after expiry: {reachable}"
     finally:
         server.stop()
+
+
+def test_the_tracker_counts_exactly_what_it_sends(tmp_path, free_port):
+    """Every download path goes through this; a race here would be invisible."""
+    import threading
+
+    root = tmp_path / "s"
+    root.mkdir()
+    size = 120_000
+    (root / "a.bin").write_bytes(b"\xab" * size)
+    server = ShareServer(Manifest.build([root]), host="127.0.0.1", port=free_port)
+    server.start()
+    assert server.wait_until_ready(timeout=5)
+    try:
+        entry = next(iter(server.context.manifest.iter_files()))
+        target = url(server, f"/f/{entry.file_id}")
+
+        assert json.loads(get(server, "/api/stats").read())["bytes_sent"] == 0
+        assert len(urllib.request.urlopen(target, timeout=30).read()) == size
+        after_one = json.loads(get(server, "/api/stats").read())
+        assert after_one["bytes_sent"] == size
+        assert after_one["files"] == [{"name": "a.bin", "sent": size, "total": size}]
+
+        threads = [
+            threading.Thread(target=lambda: urllib.request.urlopen(target, timeout=30).read())
+            for _ in range(8)
+        ]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+
+        final = json.loads(get(server, "/api/stats").read())
+        assert final["bytes_sent"] == size * 9, "concurrent sends must not lose bytes"
+        assert final["requests"] == 9
+        assert final["peak_speed"] >= 0
+    finally:
+        server.stop()
