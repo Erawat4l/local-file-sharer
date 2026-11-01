@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import threading
 import time
 import urllib.request
@@ -303,3 +304,14 @@ def test_share_stops_on_expiry(share_tree: Path, runner_setup, free_port):
     )
     assert result.url
     assert time.time() - started < 20
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX permissions only")
+def test_the_state_file_is_private_to_the_user(tmp_path):
+    """History holds absolute paths and share URLs — not for other accounts."""
+    from local_file_sharer.state import State
+
+    store = State(tmp_path / "state.json")
+    store.add_recent("/home/someone/private-project")
+    store.save()
+    assert (tmp_path / "state.json").stat().st_mode & 0o777 == 0o600

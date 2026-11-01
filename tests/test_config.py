@@ -227,3 +227,13 @@ def test_a_broken_config_file_points_at_the_file():
         assert "nothing was written" not in hints
     finally:
         config_path.unlink(missing_ok=True)
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX permissions only")
+def test_the_config_file_is_private_to_the_user():
+    """It can hold `share.pin`, so 0644 would show the PIN to every local user."""
+    from local_file_sharer.config import Config
+
+    target = Path(os.environ["HOME"]) / "private" / "config.toml"
+    Config().save(target)
+    assert target.stat().st_mode & 0o777 == 0o600

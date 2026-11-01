@@ -71,7 +71,11 @@ class State:
         try:
             platforms.ensure_dir(self.path.parent)
             tmp = self.path.with_suffix(".json.tmp")
-            tmp.write_text(payload, encoding="utf-8")
+            # The history holds absolute paths and share URLs; on a multi-user
+            # machine that is nobody else's business. Create it 0600.
+            descriptor = os.open(tmp, os.O_CREAT | os.O_WRONLY | os.O_TRUNC, 0o600)
+            with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+                handle.write(payload)
             os.replace(tmp, self.path)
         except OSError:
             pass

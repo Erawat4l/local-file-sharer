@@ -231,7 +231,11 @@ class Config:
         platforms.ensure_dir(target.parent)
         text = dump_config(self)
         tmp = target.with_suffix(target.suffix + ".tmp")
-        tmp.write_text(text, encoding="utf-8")
+        # This file can hold `share.pin` in plain text, so keep it private to the
+        # user rather than the 0644 a plain write_text would give it.
+        descriptor = os.open(tmp, os.O_CREAT | os.O_WRONLY | os.O_TRUNC, 0o600)
+        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+            handle.write(text)
         tmp.replace(target)
         return target
 

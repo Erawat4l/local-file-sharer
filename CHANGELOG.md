@@ -21,6 +21,10 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   `/download/`. `base_url` is normalised where it is set and where it is used.
 - **Tracker**: announcing to a server that has a torrent but no registry
   answered `404 tracker disabled`; the registry is now created on demand.
+- **Config and state files are private (0600)**: `config.toml` stores
+  `share.pin` in plain text and `state.json` remembers absolute paths and share
+  URLs, but both were created world-readable (0644). They are now written with
+  `O_CREAT`/0600 on POSIX.
 - **`config set` advice**: a rejected value told the user to "fix the value in
   ~/.config/local-file-sharer/config.toml" — but nothing had been written, so the
   file was the one place the problem was *not*. A bad argument now says so and
