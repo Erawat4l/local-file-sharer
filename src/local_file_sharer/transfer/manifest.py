@@ -323,6 +323,15 @@ def file_entry(path: Path, *, rel: str, root_name: str = "") -> FileEntry:
     return FileEntry(path=path, rel=rel, size=size, mtime=mtime, root_name=root_name)
 
 
+def _stays_inside(path: Path, folder: Path) -> bool:
+    """True when *path* really resolves to something under *folder*."""
+    try:
+        path.resolve().relative_to(folder.resolve())
+    except (OSError, ValueError):
+        return False
+    return True
+
+
 def walk_folder(folder: Path, *, root_name: str = "", max_files: int = 200_000) -> list[FileEntry]:
     """Recursively collect files under *folder* with POSIX-style relative paths."""
     entries: list[FileEntry] = []
@@ -335,6 +344,11 @@ def walk_folder(folder: Path, *, root_name: str = "", max_files: int = 200_000) 
                 rel = full.relative_to(folder).as_posix()
             except ValueError:
                 rel = filename
+            # A symlink pointing outside the shared folder would quietly publish
+            # whatever it targets (~/.ssh/id_rsa for a shared ~/Documents). Only
+            # files that really live under the share are listed.
+            if not _stays_inside(full, folder):
+                continue
             entries.append(file_entry(full, rel=f"{folder_name}/{rel}", root_name=folder_name))
             if len(entries) >= max_files:
                 return entries

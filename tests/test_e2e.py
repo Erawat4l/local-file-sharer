@@ -585,3 +585,34 @@ def test_the_downloader_page_actually_runs_and_saves_every_file(server):
     )
     assert result.returncode == 0, f"{result.stdout}\n{result.stderr}"
     assert "ok" in result.stdout
+
+
+# ── awkward but perfectly legal filenames ───────────────────────────────────
+def test_files_with_unicode_spaces_and_percent_literals_are_served(tmp_path, free_port):
+    """Real folders contain these; each must download byte-for-byte."""
+    root = tmp_path / "shared"
+    root.mkdir()
+    expected = {
+        "résumé 2024.pdf": b"pdf",
+        "日本語のファイル.txt": b"japanese",
+        "emoji 🎉📁.txt": b"emoji",
+        "with space and#hash.txt": b"hash",
+        "percent%20literal.txt": b"percent",
+        "quote'and\"dquote.txt": b"quotes",
+    }
+    for name, payload in expected.items():
+        (root / name).write_bytes(payload)
+
+    server = ShareServer(Manifest.build([root]), host="127.0.0.1", port=free_port)
+    server.start()
+    assert server.wait_until_ready(timeout=5)
+    try:
+        manifest = json.loads(urllib.request.urlopen(f"http://127.0.0.1:{server.port}/api/manifest").read())
+        by_name = {entry["name"]: entry for entry in manifest["files"]}
+        assert set(expected) <= set(by_name), f"missing from the manifest: {set(expected) - set(by_name)}"
+        for name, payload in expected.items():
+            url = f"http://127.0.0.1:{server.port}/f/{by_name[name]['id']}"
+            with urllib.request.urlopen(url, timeout=10) as response:
+                assert response.read() == payload, f"{name!r} came back corrupted"
+    finally:
+        server.stop()

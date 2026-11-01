@@ -21,6 +21,11 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   `/download/`. `base_url` is normalised where it is set and where it is used.
 - **Tracker**: announcing to a server that has a torrent but no registry
   answered `404 tracker disabled`; the registry is now created on demand.
+- **Symlinks leaked files outside the share**: `walk_folder` listed every
+  directory entry, so sharing `~/Documents` with one stray `innocent.txt ->
+  ~/.ssh/id_rsa` link published the private key. Links are now followed only
+  when they resolve inside the shared folder; dangling links are skipped too.
+  (Naming a symlink as the *path argument* still shares it — that is explicit.)
 - **QR codes are verified, not just rendered**: the existing tests only checked
   that the output contained `<svg`. New tests assert the symbol's structure
   (three finder patterns, separators, alternating timing patterns, the always-dark
