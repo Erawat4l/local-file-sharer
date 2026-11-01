@@ -587,7 +587,7 @@ python3 -m venv .venv && . .venv/bin/activate
 pip install -e ".[dev]"
 
 ruff check src tests && ruff format --check src tests
-pytest -q                      # ~300 tests, loopback sockets only
+pytest -q                      # ~350 tests, loopback sockets only
 pytest --cov=local_file_sharer
 ```
 

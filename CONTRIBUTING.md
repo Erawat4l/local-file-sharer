@@ -115,6 +115,10 @@ we can emit the data descriptor` is gold.
   fixtures instead of hard-coded paths and ports.
 - Prefer asserting on behaviour (bytes served, HTTP status, computed sizes) over
   snapshots of rendered text.
+- Page JavaScript is tested for real: `tests/js/downloader_smoke.js` loads
+  `downloader.html`'s own script in a small DOM shim under Node, fires the
+  *#download-all* click and checks every file reassembles byte-identically. It
+  skips when `node` is missing, so keep it runnable without any npm install.
 
 ```bash
 pytest -q tests/test_server.py -k range
