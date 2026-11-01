@@ -21,6 +21,10 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   `/download/`. `base_url` is normalised where it is set and where it is used.
 - **Tracker**: announcing to a server that has a torrent but no registry
   answered `404 tracker disabled`; the registry is now created on demand.
+- **Auth surface is pinned**: a test asserts that only `/healthz`,
+  `/favicon.ico` and `/robots.txt` answer without the PIN, sweeping the whole
+  route table. Verified it fails when `/api/manifest` is added to the exempt
+  list, so the next "just exempt this one too" cannot slip through.
 - **`/api/stats` leaked on PIN-protected shares**: the endpoint was exempt from
   the PIN check so the login page could show a counter, but its payload names
   every shared file and lists each visitor's IP and byte count. It now requires

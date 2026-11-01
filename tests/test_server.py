@@ -679,3 +679,49 @@ def test_healthz_stays_public_so_a_monitor_can_poll_it(share_tree, free_port):
         assert json.loads(get(server, "/healthz").read())["ok"] is True
     finally:
         server.stop()
+
+
+def test_only_three_routes_are_reachable_without_the_pin(share_tree, free_port):
+    """A future 'just exempt this one too' must fail here, loudly.
+
+    /healthz, /favicon.ico and /robots.txt are deliberately public. Everything
+    else — including the API surface — has to stay behind the PIN.
+    """
+    manifest = Manifest.build([share_tree / "hello.txt"])
+    server = ShareServer(manifest, host="127.0.0.1", port=free_port, pin="4242", allow_upload=True)
+    server.start()
+    try:
+        assert server.wait_until_ready(timeout=5)
+        entry = next(iter(manifest.iter_files()))
+        item = manifest.items[0]
+        candidates = [
+            "/",
+            "/index.html",
+            "/static/app.css",
+            f"/f/{entry.file_id}",
+            f"/download/{entry.file_id}",
+            "/download/all.zip",
+            f"/zip/{item.item_id}",
+            f"/raw/{entry.rel}",
+            "/api/manifest",
+            "/api/links",
+            "/api/stats",
+            "/api/qr",
+            "/api/expiry",
+            "/api/expired",
+            "/torrent",
+            "/announce",
+            "/scrape",
+            f"/webseed/{entry.rel}",
+        ]
+        reachable = []
+        for path in candidates:
+            try:
+                response = urllib.request.urlopen(url(server, path), timeout=5)
+            except urllib.error.HTTPError:
+                continue
+            reachable.append((path, response.status))
+            response.read()
+        assert reachable == [], f"reachable without the PIN: {reachable}"
+    finally:
+        server.stop()
