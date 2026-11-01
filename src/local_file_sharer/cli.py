@@ -298,6 +298,10 @@ def cmd_menu(cfg: Config, state: State, args: argparse.Namespace) -> int:
 
 def cmd_share(cfg: Config, state: State, args: argparse.Namespace, paths: list[Path]) -> int:
     from .share import ShareResult  # noqa: F401
+    from .ui.console import human_output_to_stderr
+
+    # stdout belongs to the JSON object at the end; keep it parseable.
+    human_output_to_stderr(bool(args.json))
 
     mode = args.mode or cfg.share.serve_mode or "download"
     pin = cfg.share.pin

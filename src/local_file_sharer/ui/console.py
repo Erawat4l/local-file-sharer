@@ -53,6 +53,22 @@ def _rich_theme(theme: Theme) -> RichTheme:
     )
 
 
+#: When set, human output goes to stderr so stdout stays machine-readable.
+_human_to_stderr = False
+
+
+def human_output_to_stderr(enabled: bool = True) -> None:
+    """Send panels, banners and progress to stderr, keeping stdout clean.
+
+    ``start --json`` prints one JSON object on stdout; without this the banner
+    and the "share ready" panel land there too, and `start … --json | jq` fails
+    on the first box-drawing character.
+    """
+    global _console, _human_to_stderr
+    _human_to_stderr = enabled
+    _console = None  # rebuilt on next use with the new stream
+
+
 def console() -> Console:
     """The process-wide console (created lazily so tests can patch it)."""
     global _console, _theme
@@ -66,6 +82,7 @@ def console() -> Console:
             soft_wrap=False,
             emoji=True,
             log_time=False,
+            stderr=_human_to_stderr,
         )
     return _console
 

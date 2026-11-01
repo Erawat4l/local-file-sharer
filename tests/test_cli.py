@@ -165,3 +165,97 @@ def _run_json(argv: list[str]) -> str:
     start = text.index("{")
     end = text.rindex("}")
     return text[start : end + 1]
+
+
+def test_json_share_keeps_stdout_machine_readable():
+    """`start … --json | jq` must not choke on the banner.
+
+    Human output (banner, "share ready" panel) goes to stderr in JSON mode, so
+    stdout is exactly one JSON object.
+    """
+    from local_file_sharer.ui import console as console_module
+
+    console_module.human_output_to_stderr(True)
+    try:
+        con = console_module.console()
+        assert con.stderr is True
+    finally:
+        console_module.human_output_to_stderr(False)
+        console_module.console()
+
+
+def test_human_output_stays_on_stdout_by_default():
+    from local_file_sharer.ui import console as console_module
+
+    console_module.human_output_to_stderr(False)
+    con = console_module.console()
+    assert con.stderr is False
+
+
+def test_the_share_command_switches_streams_only_for_json():
+    """The flag is what decides; nothing else may flip stdout/stderr."""
+    from argparse import Namespace
+
+    from local_file_sharer.config import Config
+    from local_file_sharer.state import State
+    from local_file_sharer.ui import console as console_module
+
+    calls = []
+    original = console_module.human_output_to_stderr
+
+    def spy(enabled=True):
+        calls.append(enabled)
+        return original(enabled)
+
+    console_module.human_output_to_stderr = spy
+    try:
+        import local_file_sharer.cli as cli_module
+
+        real_run = cli_module.ShareRunner
+
+        class FakeRunner:
+            def __init__(self, *a, **k):
+                pass
+
+            def run(self, **k):
+                class Result:
+                    url = "http://x/"
+                    lan_url = "http://x/"
+                    public_ip = ""
+                    tailscale_url = ""
+                    cloudflare_url = ""
+                    magnet = ""
+                    bytes_sent = 0
+                    duration = 0.1
+
+                return Result()
+
+        cli_module.ShareRunner = FakeRunner
+        try:
+            base = Namespace(
+                mode="download",
+                pin=None,
+                expire=None,
+                upload=False,
+                tailscale=False,
+                no_tailscale=True,
+                cloudflare=False,
+                no_cloudflare=True,
+                funnel=False,
+                open=False,
+                no_qr=True,
+                no_copy=True,
+                interface=None,
+                json=True,
+            )
+            cli_module.cmd_share(Config(), State(), base, [])
+            assert calls == [True]
+
+            base.json = False
+            cli_module.cmd_share(Config(), State(), base, [])
+            assert calls == [True, False]
+        finally:
+            cli_module.ShareRunner = real_run
+    finally:
+        console_module.human_output_to_stderr = original
+        console_module.human_output_to_stderr(False)

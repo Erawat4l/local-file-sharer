@@ -21,6 +21,10 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   `/download/`. `base_url` is normalised where it is set and where it is used.
 - **Tracker**: announcing to a server that has a torrent but no registry
   answered `404 tracker disabled`; the registry is now created on demand.
+- **`start … --json` now keeps stdout clean**: the banner and the "share ready"
+  panel went to stdout alongside the final JSON object, so `--json | jq` failed
+  on the first box-drawing character. Human output moves to stderr in JSON mode;
+  stdout is exactly one object. Non-JSON output is unchanged.
 - **ZIP edge cases are covered**: verified by hand that a 3 GiB single-file
   archive (ZIP64 territory) has a valid EOCD and central directory, that a
   3000-file archive zips completely with correct CRCs, and that a range taken
