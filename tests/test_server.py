@@ -725,3 +725,46 @@ def test_only_three_routes_are_reachable_without_the_pin(share_tree, free_port):
         assert reachable == [], f"reachable without the PIN: {reachable}"
     finally:
         server.stop()
+
+
+def test_only_the_error_page_css_answers_after_expiry(share_tree, free_port):
+    """The expired page needs CSS; a monitor needs healthz and /api/expired.
+
+    Everything else must go quiet, or an expired link keeps serving the share.
+    """
+    import time
+
+    manifest = Manifest.build([share_tree / "hello.txt"], expires_at=time.time() - 1)
+    server = ShareServer(manifest, host="127.0.0.1", port=free_port)
+    server.start()
+    try:
+        assert server.wait_until_ready(timeout=5)
+        entry = next(iter(manifest.iter_files()))
+        candidates = [
+            "/",
+            "/index.html",
+            f"/f/{entry.file_id}",
+            "/download/all.zip",
+            "/raw/hello.txt",
+            "/webseed/hello.txt",
+            "/api/manifest",
+            "/api/stats",
+            "/api/links",
+            "/api/qr",
+            "/torrent",
+            "/announce",
+            "/scrape",
+            "/static/app.css",  # expected to answer: the 410 page needs it
+            "/api/expiry",  # not exempt: it is the countdown API
+        ]
+        reachable = []
+        for path in candidates:
+            try:
+                response = urllib.request.urlopen(url(server, path), timeout=5)
+            except urllib.error.HTTPError:
+                continue
+            reachable.append(path)
+            response.read()
+        assert sorted(reachable) == ["/static/app.css"], f"these answered after expiry: {reachable}"
+    finally:
+        server.stop()

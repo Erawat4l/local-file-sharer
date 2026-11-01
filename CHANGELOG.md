@@ -21,6 +21,10 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   `/download/`. `base_url` is normalised where it is set and where it is used.
 - **Tracker**: announcing to a server that has a torrent but no registry
   answered `404 tracker disabled`; the registry is now created on demand.
+- **Expiry surface is pinned too**: after expiry only `/static/app.css` answers
+  from the content routes — the 410 page needs it to look right —
+  so nothing can start serving a dead link. (`/healthz` and `/api/expired`
+  stay available for monitoring; `/api/expiry`, the countdown, does not.)
 - **Auth surface is pinned**: a test asserts that only `/healthz`,
   `/favicon.ico` and `/robots.txt` answer without the PIN, sweeping the whole
   route table. Verified it fails when `/api/manifest` is added to the exempt
