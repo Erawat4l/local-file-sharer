@@ -63,9 +63,10 @@ def _device_table(tracker: TransferTracker, theme: Theme) -> Table:
         return table
     for device in devices[:6]:
         state = "idle" if device.last_seen < time.time() - 3 else "active"
+        label = device.label if len(device.label) <= 18 else device.label[:17] + "…"
         table.add_row(
             Text(
-                f"{'📱' if 'android' in device.user_agent.lower() else '💻'} {device.label}",
+                f"{'📱' if 'android' in device.user_agent.lower() else '💻'} {label}",
                 style=theme.secondary,
             ),
             device.ip,
@@ -87,11 +88,13 @@ def _file_progress(tracker: TransferTracker, theme: Theme, limit: int, width: in
         sent = min(int(record["sent"]), total)
         ratio = percent(sent, total)
         name = record["name"].split("/")[-1]
-        bar_width = max(8, width - 46)
+        bar_width = max(8, min(28, width // 2 - 34))
+        filled = bar(sent, total, bar_width)
         row = Text()
         row.append(f"{name[:24]:<24}", style=theme.secondary)
         row.append(" ")
-        row.append(bar(sent, total, bar_width), style=theme.accent)
+        row.append(filled.replace("░", "█"), style=theme.accent)
+        row.append("░" * filled.count("░"), style=f"dim {theme.faint}")
         row.append(f" {ratio:5.1f}%", style=theme.muted)
         row.append(f"  {human_size(sent)}/{human_size(total)}", style=theme.faint)
         rows.append(row)

@@ -188,3 +188,29 @@ def clock(seconds: float) -> str:
     if h:
         return f"{h}:{m:02d}:{s:02d}"
     return f"{m}:{s:02d}"
+
+
+# ── icons ────────────────────────────────────────────────────────────────────
+# Some emoji-ish glyphs (⬇ ▶ ⚙ ⌨ ⚠ ✔ ⬆ ⏏ ✖) live in the "ambiguous width" range:
+# rich measures them as one cell but most terminals (and every browser) draw
+# them two cells wide, which shifts everything to their right. Presenting them
+# with a trailing VS16 makes rich agree with the terminal, so layout stays put.
+_WIDE_ICONS = "\u2197\u2328\u23cf\u23f8\u25b6\u2699\u26a0\u2714\u2716\u2b06\u2b07"
+
+
+def icon(glyph: str) -> str:
+    """Return *glyph* padded with VS16 when Rich would under-measure it."""
+    if glyph and glyph[0] in _WIDE_ICONS and not glyph.endswith("\ufe0f"):
+        return glyph + "\ufe0f"
+    return glyph
+
+
+def icon_width_safe(text: str) -> str:
+    """Apply :func:`icon` to every ambiguous-width glyph inside *text*."""
+    out = []
+    for index, char in enumerate(text):
+        if char in _WIDE_ICONS and text[index + 1 : index + 2] != "\ufe0f":
+            out.append(char + "\ufe0f")
+        else:
+            out.append(char)
+    return "".join(out)

@@ -1,0 +1,80 @@
+# Changelog
+
+All notable changes to this project are documented here.
+
+The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
+this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+### Planned
+- WebRTC data channels for NAT-to-NAT transfers
+- Resumable browser uploads
+- QR pairing codes that prefill PIN + expiry
+
+## [1.0.0] — 2026-11-01
+
+The first stable release: one command, four share modes, a real transfer engine.
+
+### Added
+
+**Sharing**
+- `start` — one command that opens the interactive menu, or shares the paths you
+  pass on the command line.
+- Four modes: **download** (forced + resumable, folders auto-zipped), **serve**
+  (web file browser), **stream** (media player with seeking) and **torrent**
+  (`.torrent` + `magnet:`, built-in HTTP tracker and BEP-19 webseed).
+- Optional PIN gate, auto-expiring links and browser uploads back to the host.
+- One-key clipboard copy of links and one-liners, `--open`, `--json`.
+
+**File picker**
+- Scroll-friendly, never clears the screen, fits any terminal width, inline
+  icons, no *Type* column, Windows drive letters.
+- Fuzzy search (`/`), number ranges (`6,7,8` / `6-8`), select-all, favourite
+  folders, recents, and a live summary of files, subfolders, size and
+  shareability.
+
+**Transfer engine**
+- `os.sendfile` zero-copy on Linux/macOS/Termux, `socket.sendfile` on Windows.
+- 4 MiB socket buffers, `TCP_NODELAY`, `TCP_WINDOW_CLAMP` where supported.
+- HTTP `Range`, `multipart/byteranges`, `ETag`/`If-Range`, `HEAD`, and a
+  16-connection parallel download button in the web UI.
+- Streaming ZIP64 with deterministic offsets — a resumed folder download is
+  byte-identical to an uninterrupted one.
+- Live statistics (`/api/stats`) powering the terminal dashboard and the web
+  UIs.
+
+**CLI**
+- Animated gradient banner with three themes (**dark**, **light**, **neon**).
+- Live transfer dashboard: speed, ETA, per-file progress, connected devices,
+  total sent — redrawn in place, never clearing the screen.
+- `start doctor` — dependencies, tools, sendfile, buffers, LAN/public IP,
+  firewall, tunnels, config, clipboard, with friendly fixes instead of
+  tracebacks. `--json` for CI.
+- `start config show|init|path|get|set|reset` (TOML, env overrides,
+  `config.local.toml` for secrets).
+- `start theme`, `start completions fish|bash|powershell|zsh`, `start banner`,
+  `start --update`, `start version/help`.
+
+**Network**
+- LAN/Wi-Fi address detection with interface *kinds*, preferring Wi-Fi over
+  Ethernet and ignoring virtual bridges.
+- Public IP lookup in a background thread.
+- Tailscale auto-detection with `serve`/`--funnel` prompts.
+- Cloudflare quick tunnels with an explicit slow-speed warning.
+
+**Web UIs**
+- Download station, file browser and media player, matching the product design
+  system; cache disabled (`no-store`), no CDN, works fully offline.
+
+**Packaging & docs**
+- `pip`/`pipx` install with a `start` console script (`local-file-sharer` alias).
+- `install.sh` (Termux/Linux/macOS) and `install.ps1` (Windows) with fish
+  integration, plus `shell/windows/share.cmd` because `start` is a shell built-in.
+- GitHub Actions: ruff, pytest on Linux/Windows across Python 3.9–3.13, and
+  tagged releases that attach a standalone Windows `.exe`.
+- README with screenshots, feature table and troubleshooting; CONTRIBUTING,
+  SECURITY, issue/PR templates; MIT license.
+
+[Unreleased]: https://github.com/Erawat4l/local-file-sharer/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/Erawat4l/local-file-sharer/releases/tag/v1.0.0

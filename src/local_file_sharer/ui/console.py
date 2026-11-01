@@ -87,6 +87,12 @@ def set_theme(theme: Theme) -> None:
     )
 
 
+def set_console(console: Console) -> None:
+    """Swap the process-wide console (tests, screenshots, embedded use)."""
+    global _console
+    _console = console
+
+
 def current_theme() -> Theme:
     return _theme or Theme()
 

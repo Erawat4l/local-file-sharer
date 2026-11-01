@@ -31,18 +31,18 @@ from .ui.console import console, current_theme, screen_width
 from .ui.picker_ui import run_picker
 
 ACTIONS = [
-    ("1", "Download", "download", "⬇", "forced download · resumable · folders auto-zip"),
+    ("1", "Download", "download", "⬇️", "forced download · resumable · folders auto-zip"),
     ("2", "Serve", "serve", "🌐", "web file browser for this device or the whole folder"),
-    ("3", "Stream", "stream", "▶", "media player with instant seeking"),
+    ("3", "Stream", "stream", "▶️", "media player with instant seeking"),
     ("4", "Torrent", "torrent", "🌱", ".torrent + magnet · built-in tracker + webseed"),
     ("r", "Recent", "recent", "🕘", "re-share a recently shared file"),
-    ("f", "Favourites", "favorites", "★", "jump to a favourite folder"),
-    ("c", "Config", "config", "⚙", "edit settings, theme and PIN"),
+    ("f", "Favourites", "favorites", "⭐", "jump to a favourite folder"),
+    ("c", "Config", "config", "⚙️", "edit settings, theme and PIN"),
     ("d", "Doctor", "doctor", "🩺", "check dependencies, firewall and network"),
     ("t", "Theme", "theme", "🎨", "switch dark / light / neon"),
-    ("u", "Update", "update", "⬆", "check GitHub for a new release"),
+    ("u", "Update", "update", "⬆️", "check GitHub for a new release"),
     ("?", "Help", "help", "?", "keys, one-liners and troubleshooting"),
-    ("q", "Quit", "quit", "⏏", "leave the menu"),
+    ("q", "Quit", "quit", "⏏️", "leave the menu"),
 ]
 
 

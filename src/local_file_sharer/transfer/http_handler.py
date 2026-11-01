@@ -21,11 +21,14 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import hmac
 import html
 import json
+import math
 import mimetypes
 import re
 import socket
+import threading
 import time
 import urllib.parse
 from collections.abc import Sequence
@@ -88,10 +91,33 @@ class ShareContext:
         return "lfs_auth"
 
     def auth_ok(self, provided: str) -> bool:
-        return not self.pin or provided == self.pin
+        if not self.pin:
+            return True
+        return hmac.compare_digest(provided.encode("utf-8", "replace"), self.pin.encode("utf-8"))
+
+    # ── brute-force protection ──────────────────────────────────────────────
+    def note_failure(self, client: str) -> None:
+        with _ATTEMPT_LOCK:
+            _FAILED_ATTEMPTS[client] = _FAILED_ATTEMPTS.get(client, 0) + 1
+            _LOCKED_UNTIL[client] = time.time() + min(60.0, 2.0 * _FAILED_ATTEMPTS[client])
+
+    def note_success(self, client: str) -> None:
+        with _ATTEMPT_LOCK:
+            _FAILED_ATTEMPTS.pop(client, None)
+            _LOCKED_UNTIL.pop(client, None)
+
+    def locked_for(self, client: str) -> float:
+        """Seconds the client must still wait after too many wrong PINs."""
+        with _ATTEMPT_LOCK:
+            until = _LOCKED_UNTIL.get(client, 0.0)
+        return max(0.0, until - time.time())
 
 
 _EPHEMERAL_TOKENS: dict[str, float] = {}
+#: Per-client failed PIN attempts → exponential-ish lockouts (in-process only).
+_FAILED_ATTEMPTS: dict[str, int] = {}
+_LOCKED_UNTIL: dict[str, float] = {}
+_ATTEMPT_LOCK = threading.Lock()
 
 
 def issue_token(pin: str, *, ttl: float = 12 * 3600) -> str:
@@ -112,9 +138,9 @@ def token_valid(pin: str, token: str) -> bool:
     for offset in (-1, 0, 1):
         raw = f"{pin}:{int(time.time() // (12 * 3600)) + offset}".encode()
         candidate = base64.urlsafe_b64encode(hashlib.sha256(raw).digest()[:16]).decode("ascii").rstrip("=")
-        if candidate == token:
+        if hmac.compare_digest(candidate, token):
             return True
-    return token == expected_now
+    return hmac.compare_digest(token, expected_now)
 
 
 # ── Handler ────────────────────────────────────────────────────────────────
@@ -338,12 +364,22 @@ class ShareRequestHandler(BaseHTTPRequestHandler):
         token = self._cookie_token()
         if token_valid(self.ctx.pin, token):
             return True
+        client = self.client_ip()
+        wait = self.ctx.locked_for(client)
+        if wait > 0:
+            self.send_html(
+                self._login_page(wrong=True, wait=wait),
+                status=HTTPStatus.TOO_MANY_REQUESTS,
+            )
+            return False
         header_pin = self.headers.get("X-LFS-PIN", "")
         if header_pin and self.ctx.auth_ok(header_pin):
+            self.ctx.note_success(client)
             self._set_auth_cookie()
             return True
         provided = (query.get("pin") or [""])[0]
         if provided and self.ctx.auth_ok(provided):
+            self.ctx.note_success(client)
             self._pending_cookie = self._auth_cookie_header()
             if self.command == "GET" and path not in ("/",):
                 rest = "&".join(f"{k}={v[0]}" for k, v in query.items() if k != "pin")
@@ -356,9 +392,12 @@ class ShareRequestHandler(BaseHTTPRequestHandler):
             fields = urllib.parse.parse_qs(body.decode("utf-8", "replace"))
             candidate = (fields.get("pin") or [""])[0]
             if candidate and self.ctx.auth_ok(candidate):
+                self.ctx.note_success(client)
                 self._pending_cookie = self._auth_cookie_header()
                 self.redirect("/")
                 return False
+        if provided or header_pin or self.command == "POST":
+            self.ctx.note_failure(client)
         self.send_html(self._login_page(wrong=bool(provided or header_pin)), status=HTTPStatus.UNAUTHORIZED)
         return False
 
@@ -379,12 +418,18 @@ class ShareRequestHandler(BaseHTTPRequestHandler):
         token = issue_token(self.ctx.pin)
         return "Set-Cookie", f"{self.ctx.cookie_name}={token}; Path=/; HttpOnly; SameSite=Lax"
 
-    def _login_page(self, *, wrong: bool = False) -> str:
+    def _login_page(self, *, wrong: bool = False, wait: float = 0.0) -> str:
         template = (self.ctx.assets or {}).get("login.html", LOGIN_FALLBACK)
+        if wait > 0:
+            message = f"Too many attempts — try again in {math.ceil(wait)}s."
+        elif wrong:
+            message = "Wrong PIN — try again."
+        else:
+            message = ""
         return (
             template.replace("{{brand}}", APP_NAME)
-            .replace("{{error}}", "Wrong PIN — try again." if wrong else "")
-            .replace("{{hidden}}", "is-visible" if wrong else "")
+            .replace("{{error}}", message)
+            .replace("{{hidden}}", "is-visible" if message else "")
         )
 
     # ── pages ──────────────────────────────────────────────────────────────

@@ -110,7 +110,7 @@ def error_panel(
         body.append(Text(""))
         body.append(Text(detail, style=theme.faint))
     return Panel(
-        Group(*body), title=f"⚠ {title}", title_align="left", border_style=theme.danger, padding=(1, 2)
+        Group(*body), title=f"⚠️ {title}", title_align="left", border_style=theme.danger, padding=(1, 2)
     )
 
 
@@ -120,6 +120,7 @@ def info_panel(
     title: str = "",
     border: str | None = None,
     value_style: str | None = None,
+    expand: bool = False,
 ) -> Panel:
     theme = current_theme()
     grid = Table.grid(padding=(0, 2))
@@ -133,7 +134,7 @@ def info_panel(
         title_align="left",
         border_style=border or theme.border,
         padding=(0, 1),
-        expand=False,
+        expand=expand,
     )
 
 
@@ -199,7 +200,7 @@ def speed_bar(speed: float, *, peak: float = 0.0, width: int = 24) -> Text:
 
 def mode_badge(mode: str) -> Text:
     theme = current_theme()
-    icons = {"download": "⬇", "serve": "🌐", "stream": "▶", "torrent": "🌱"}
+    icons = {"download": "⬇️", "serve": "🌐", "stream": "▶️", "torrent": "🌱"}
     labels = {"download": "Download", "serve": "Serve", "stream": "Stream", "torrent": "Torrent"}
     text = Text()
     text.append(f" {icons.get(mode, '•')} {labels.get(mode, mode)} ", style=f"bold black on {theme.accent}")

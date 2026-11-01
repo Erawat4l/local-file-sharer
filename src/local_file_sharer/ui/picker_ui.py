@@ -169,7 +169,7 @@ def _row(index: int, entry: Entry, state: PickerState, width: int, *, active: bo
     selected = str(entry.path) in state.selected
     number = f"{index:>3}"
     marker = "▸" if active else " "
-    check = "●" if selected else ("◍" if entry.is_dir else "○")
+    check = "●" if selected else ("◆" if entry.is_dir else "○")
     size = entry.display_size
     name_width = max(12, width - 30)
     name = fit(entry.name, name_width)
@@ -186,14 +186,17 @@ def _row(index: int, entry: Entry, state: PickerState, width: int, *, active: bo
     text.append(" " * pad_width)
     text.append(size.rjust(10), style=theme.muted if entry.is_dir else theme.faint)
     if entry.link:
-        text.append(" ↗", style=theme.info)
+        text.append(" ↗️", style=theme.info)
     return text
 
 
 def _selection_bar(state: PickerState, width: int) -> RenderableType:
     theme = current_theme()
     if not state.selected:
-        return Text("nothing selected — Space toggles a row, `a` selects all", style=theme.faint)
+        return Group(
+            Text("nothing selected · Space toggles a row · `a` selects all", style=theme.faint),
+            Text(""),
+        )
     paths = list(state.selected.values())
     summary = analyze(paths, max_entries=20_000)
     chips = [

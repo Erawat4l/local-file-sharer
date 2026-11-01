@@ -267,3 +267,68 @@ def test_stream_mode_redirects_to_player(share_tree, free_port):
         assert "Playlist" in body or "player" in body.lower()
     finally:
         server.stop()
+
+
+def test_pin_brute_force_is_throttled(share_tree, free_port):
+    """Wrong PINs must not be free: after a few failures the client is locked out."""
+    from local_file_sharer.transfer.http_handler import _FAILED_ATTEMPTS, _LOCKED_UNTIL
+
+    _FAILED_ATTEMPTS.clear()
+    _LOCKED_UNTIL.clear()
+    manifest = Manifest.build([share_tree / "hello.txt"])
+    server = ShareServer(manifest, host="127.0.0.1", port=free_port, pin="4242")
+    server.start()
+    try:
+        assert server.wait_until_ready(timeout=5)
+        for _ in range(6):
+            with pytest.raises(urllib.error.HTTPError):
+                get(server, "/?pin=0000")
+        with pytest.raises(urllib.error.HTTPError) as excinfo:
+            get(server, "/?pin=4242")
+        assert excinfo.value.code == 429
+        assert b"Too many attempts" in excinfo.value.read()
+        context = server.context
+        client = next(iter(_LOCKED_UNTIL))
+        context.note_success(client)
+        assert context.locked_for(client) == 0
+        assert b"hello.txt" in get(server, "/?pin=4242").read()
+    finally:
+        for mapping in (_FAILED_ATTEMPTS, _LOCKED_UNTIL):
+            mapping.clear()
+        server.stop()
+
+
+def test_auth_cookie_is_sent_with_the_login_page(share_tree, free_port):
+    """A successful ``?pin=`` must set the cookie on the *same* response."""
+    manifest = Manifest.build([share_tree / "hello.txt"])
+    server = ShareServer(manifest, host="127.0.0.1", port=free_port, pin="4242")
+    server.start()
+    try:
+        assert server.wait_until_ready(timeout=5)
+        with urllib.request.urlopen(url(server, "/?pin=4242"), timeout=10) as response:
+            cookie = response.headers.get("Set-Cookie") or ""
+            body = response.read()
+        assert "lfs_auth=" in cookie and "HttpOnly" in cookie and "SameSite=Lax" in cookie
+        assert b"hello.txt" in body
+        value = cookie.split("lfs_auth=", 1)[1].split(";", 1)[0]
+        request = urllib.request.Request(url(server, "/"), headers={"Cookie": f"lfs_auth={value}"})
+        with urllib.request.urlopen(request, timeout=10) as response:
+            assert response.status == 200
+    finally:
+        server.stop()
+
+
+def test_expiry_endpoints_stay_open(share_tree, free_port):
+    """An expired share must still answer /healthz and /api/expired."""
+    import time
+
+    manifest = Manifest.build([share_tree / "hello.txt"], expires_at=time.time() - 1)
+    server = ShareServer(manifest, host="127.0.0.1", port=free_port)
+    server.start()
+    try:
+        assert server.wait_until_ready(timeout=5)
+        assert get(server, "/healthz").status == 200
+        payload = json.load(get(server, "/api/expired"))
+        assert payload["expired"] is True
+    finally:
+        server.stop()
