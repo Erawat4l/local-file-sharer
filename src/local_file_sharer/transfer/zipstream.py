@@ -111,6 +111,13 @@ class ZipItem:
     def needs_zip64(self) -> bool:
         return self.size >= ZIP64_THRESHOLD
 
+    def exists(self) -> bool:
+        """A file can vanish between building the manifest and asking for a zip."""
+        try:
+            return self.path.is_file()
+        except OSError:
+            return False
+
     def dos_datetime(self) -> tuple[int, int]:
         try:
             tm = time.localtime(self.mtime or time.time())
@@ -184,7 +191,10 @@ class ZipStream:
         compression: int = 1,
         comment: str = "local-file-sharer",
     ) -> None:
-        self.items = list(items)
+        # Drop entries that are already gone. Padding them with NULs produced an
+        # archive whose sizes and CRCs all checked out but whose contents were
+        # fabricated zeros — the downloader had no way to notice.
+        self.items = [item for item in items if item.exists()]
         self.compression = max(0, min(int(compression), 9))
         self.comment = comment
         self._entries: list[_Entry] = []
@@ -437,7 +447,7 @@ class ZipStream:
         try:
             handle: BinaryIO = open(entry.item.path, "rb")  # noqa: SIM115 - closed below
         except OSError:
-            yield from self._emit_zeros(entry, start, end, skip, crc)
+            yield from self._emit_marker(entry, start, end, skip, crc)
             return
         try:
             if skip:
@@ -457,9 +467,18 @@ class ZipStream:
             handle.close()
         entry.crc = crc
 
-    def _emit_zeros(self, entry: _Entry, start: int, end: int, skip: int, crc: int) -> Iterator[bytes]:
-        """A file vanished mid-transfer: keep the archive structurally valid."""
-        block = b"\0" * (256 * 1024)
+    def _emit_marker(self, entry: _Entry, start: int, end: int, skip: int, crc: int) -> Iterator[bytes]:
+        """A file vanished mid-transfer: keep the archive valid but *honest*.
+
+        The entry keeps its advertised size so the stream stays resumable, and
+        the payload is a visible marker rather than NULs — an all-zero file
+        downloads perfectly, verifies its CRC and is silently wrong, which is
+        the worst possible outcome for someone backing up a folder.
+        """
+        notice = (
+            f"local-file-sharer: {entry.item.arcname} disappeared while this archive was being built.\n"
+        ).encode()
+        block = (notice * (256 * 1024 // max(1, len(notice)) + 1))[: 256 * 1024]
         position = entry.data_start + skip
         remaining = entry.item.size - skip
         while remaining > 0:

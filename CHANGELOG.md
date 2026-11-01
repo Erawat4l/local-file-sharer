@@ -21,6 +21,13 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   `/download/`. `base_url` is normalised where it is set and where it is used.
 - **Tracker**: announcing to a server that has a torrent but no registry
   answered `404 tracker disabled`; the registry is now created on demand.
+- **A file deleted mid-archive was replaced with zeros**: if a file vanished
+  before its turn in a streamed ZIP, the entry was padded with NULs to keep the
+  archive valid — so the download had the right size, a *correct CRC* and
+  fabricated content. Files that are already gone at request time are now left
+  out of the archive; a file that disappears after the stream is laid out keeps
+  its size (so resume still works) but carries a readable marker saying it
+  vanished, instead of a silent block of zeros.
 - **Transfer counters are trustworthy**: verified that `bytes_sent` equals the
   file size exactly, that a `Range` adds only its own bytes, and that 20
   concurrent downloads produce exactly 20 × size with 20 requests. A test now

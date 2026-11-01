@@ -98,3 +98,51 @@ def test_zip_write_to(share_tree, tmp_path):
     target = stream.write_to(tmp_path / "out.zip")
     assert target.stat().st_size == stream.total_size
     assert zipfile.ZipFile(target).testzip() is None
+
+
+# ── files that vanish while the archive is being made ───────────────────────
+def test_a_file_deleted_before_the_request_is_left_out(tmp_path):
+    """Inventing a 5000-byte zero-filled entry is worse than omitting it."""
+    from local_file_sharer.transfer.zipstream import ZipItem, ZipStream
+
+    keep = tmp_path / "keep.txt"
+    keep.write_text("keep me", encoding="utf-8")
+    doomed = tmp_path / "doomed.bin"
+    doomed.write_bytes(b"d" * 5000)
+
+    items = [ZipItem.from_path(keep, arcname="s/keep.txt"), ZipItem.from_path(doomed, arcname="s/doomed.bin")]
+    doomed.unlink()  # gone before the ZipStream is even built
+
+    stream = ZipStream(items, compression=0)
+    data = b"".join(stream.iter_stream(0, stream.total_size))
+    assert len(data) == stream.total_size
+    archive = zipfile.ZipFile(io.BytesIO(data))
+    assert archive.namelist() == ["s/keep.txt"]
+    assert archive.testzip() is None
+    assert archive.read("s/keep.txt") == b"keep me"
+
+
+def test_a_file_deleted_after_the_stream_starts_shows_a_notice(tmp_path):
+    """The stream must stay byte-exact (resumable) *and* not lie about content."""
+    from local_file_sharer.transfer.zipstream import ZipItem, ZipStream
+
+    keep = tmp_path / "keep.txt"
+    keep.write_text("keep me", encoding="utf-8")
+    doomed = tmp_path / "doomed.bin"
+    doomed.write_bytes(b"d" * 2000)
+
+    stream = ZipStream(
+        [ZipItem.from_path(keep, arcname="s/keep.txt"), ZipItem.from_path(doomed, arcname="s/doomed.bin")],
+        compression=0,
+    )
+    doomed.unlink()  # vanishes after the layout is fixed
+
+    data = b"".join(stream.iter_stream(0, stream.total_size))
+    assert len(data) == stream.total_size, "a shrinking stream would break a resume"
+
+    archive = zipfile.ZipFile(io.BytesIO(data))
+    assert archive.testzip() is None, "the archive must stay internally valid"
+    payload = archive.read("s/doomed.bin")
+    assert len(payload) == 2000, "the advertised size is kept"
+    assert payload != bytes(len(payload)), "all-zero content would look like a real file"
+    assert payload.startswith(b"local-file-sharer:"), "say what happened, in the file itself"
