@@ -21,6 +21,11 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   `/download/`. `base_url` is normalised where it is set and where it is used.
 - **Tracker**: announcing to a server that has a torrent but no registry
   answered `404 tracker disabled`; the registry is now created on demand.
+- **Browser uploads**: an uploaded file was written to
+  `~/local-file-sharer/` (or `~` when no *Downloads* folder existed) instead of
+  the folder being shared, so the person who invited the upload never saw it.
+  `share.py` now passes the shared folder as `upload_dir`, and a traversal in
+  `?name=` is covered by a test.
 - **Web downloader**: the "16 connections" button awaited each `Range` request
   in a `for` loop, so it was 16 *sequential* requests wearing a parallel label.
   They now go out together via `Promise.all`, verified against a live server

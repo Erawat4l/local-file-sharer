@@ -247,6 +247,12 @@ status** — and folders are analysed as you select them.
 
 All modes support the PIN gate, expiry and (optionally) uploads back to you.
 
+With `--upload`, the browser gets a drop zone: anything dropped there is written
+**into the folder you shared**, under its plain filename (path separators are
+stripped, and an existing name is suffixed rather than overwritten). The listing
+you can see was built when the share started, so refresh it — or look in the
+folder — to see what arrived. `start doctor` reports whether uploads are on.
+
 Each of those four paths runs against a real server on a real socket in
 `tests/test_e2e.py` — the login `POST` and its cookie, `/api/manifest`, a
 byte-identical download, `206` on `Range`, the player page, the tracker's

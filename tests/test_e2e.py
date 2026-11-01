@@ -312,3 +312,82 @@ def test_downloader_js_fires_its_ranges_concurrently():
         "a bare await before Promise.all serialises the ranges"
     )
     assert "await fetch(file.url, { headers: { Range" in after_parallel
+
+
+# ── uploads ─────────────────────────────────────────────────────────────────
+def test_upload_lands_in_the_shared_folder(tmp_path, free_port):
+    """A file pushed back must be where the sender can find it, not in ~."""
+    from local_file_sharer.share import upload_folder
+
+    root = tmp_path / "Photos"
+    root.mkdir()
+    (root / "existing.jpg").write_bytes(b"x" * 10)
+    manifest = Manifest.build([root])
+    target = upload_folder(manifest)
+    assert target == root
+
+    server = ShareServer(manifest, host="127.0.0.1", port=free_port, allow_upload=True, upload_dir=target)
+    server.start()
+    assert server.wait_until_ready(timeout=5)
+    try:
+        payload = b"pushed from the browser\n" * 50
+        request = urllib.request.Request(
+            f"http://127.0.0.1:{server.port}/api/upload?name=sent-back.txt",
+            data=payload,
+            method="POST",
+            headers={"Content-Type": "application/octet-stream"},
+        )
+        with urllib.request.urlopen(request, timeout=10) as response:
+            body = json.loads(response.read())
+        assert body["ok"] is True
+        saved = root / "sent-back.txt"
+        assert saved.is_file(), "upload must land in the shared folder"
+        assert saved.read_bytes() == payload
+        assert Path(body["path"]).parent.resolve() == root.resolve()
+    finally:
+        server.stop()
+
+
+def test_upload_folder_is_the_parent_of_a_single_file(tmp_path):
+    from local_file_sharer.share import upload_folder
+
+    target = tmp_path / "one.jpg"
+    target.write_bytes(b"x")
+    assert upload_folder(Manifest.build([target])) == tmp_path
+
+
+def test_uploads_are_rejected_when_disabled(server):
+    request = urllib.request.Request(
+        f"http://127.0.0.1:{server.port}/api/upload?name=nope.txt",
+        data=b"nope",
+        method="POST",
+        headers={"Content-Type": "application/octet-stream"},
+    )
+    with pytest.raises(urllib.error.HTTPError) as excinfo:
+        urllib.request.urlopen(request, timeout=5)
+    assert excinfo.value.code == 403
+
+
+def test_upload_rejects_path_traversal(tmp_path, free_port):
+    """`?name=../../.ssh/authorized_keys` must not escape the folder."""
+    root = tmp_path / "shared"
+    root.mkdir()
+    manifest = Manifest.build([root])
+    server = ShareServer(manifest, host="127.0.0.1", port=free_port, allow_upload=True, upload_dir=root)
+    server.start()
+    assert server.wait_until_ready(timeout=5)
+    try:
+        evil = urllib.parse.quote("../../escaped.txt", safe="")
+        request = urllib.request.Request(
+            f"http://127.0.0.1:{server.port}/api/upload?name={evil}",
+            data=b"payload",
+            method="POST",
+            headers={"Content-Type": "application/octet-stream"},
+        )
+        with urllib.request.urlopen(request, timeout=10) as response:
+            json.loads(response.read())
+        assert not (tmp_path.parent / "escaped.txt").exists()
+        assert not (tmp_path / "escaped.txt").exists()
+        assert list(root.glob("*.txt")), "the file should be stored under its bare name"
+    finally:
+        server.stop()

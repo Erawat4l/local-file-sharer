@@ -126,6 +126,18 @@ def prepare_manifest(paths: Sequence[Path], *, mode: str, expire_minutes: int, t
     return manifest
 
 
+def upload_folder(manifest: Manifest) -> Path:
+    """Where to put files received from the browser.
+
+    The parent of the first shared item: if you shared ``~/Photos``, an upload
+    arrives in ``~/Photos`` itself when the share is a folder, and beside the
+    file when a single file was shared.
+    """
+    first = manifest.items[0]
+    path = Path(first.path)
+    return path if path.is_dir() else path.parent
+
+
 def build_torrent_for(
     manifest: Manifest, *, base_url: str, tracker_url: str, piece_length: int = 0
 ) -> TorrentBuild:
@@ -175,6 +187,10 @@ class ShareRunner:
             port=port,
             pin=self.request.pin or self.config.share.pin,
             allow_upload=self.request.allow_upload or self.config.share.allow_upload,
+            # Uploads go next to the thing being shared, so the sender can find
+            # them; without this they landed in ~/local-file-sharer and were
+            # invisible to the person who had just invited the upload.
+            upload_dir=upload_folder(manifest),
             theme=self.config.theme,
             on_download=self._on_download,
         )
