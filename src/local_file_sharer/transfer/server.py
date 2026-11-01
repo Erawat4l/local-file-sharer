@@ -171,7 +171,8 @@ class ShareServer:
         return self._server is not None
 
     def set_base_url(self, url: str) -> None:
-        self.context.base_url = url
+        """Set the public origin; a trailing slash would double up in every URL."""
+        self.context.base_url = url.rstrip("/")
 
     def track(self, name: str) -> None:
         if self.on_download:

@@ -195,7 +195,7 @@ class ShareRunner:
 
         self.server.start()
         base_url = f"http://{lan}:{self.server.port}"
-        self.server.set_base_url(base_url + "/")
+        self.server.set_base_url(base_url)
         self.server.context.peer_name = platforms.hostname()
         if self.request.mode == "torrent":
             self.torrent = build_torrent_for(

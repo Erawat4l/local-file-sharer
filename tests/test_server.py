@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import http.cookiejar
 import io
 import json
 import urllib.error
+import urllib.parse
 import urllib.request
 import zipfile
 from pathlib import Path
@@ -370,3 +372,123 @@ def test_head_request_matches_get(server):
         assert response.status == 200
         assert int(response.headers["Content-Length"]) == entry["bytes"]
         assert response.read() == b""
+
+
+def test_one_wrong_pin_does_not_lock_the_right_one(share_tree, free_port):
+    """A mistyped PIN must not make the correct PIN look broken."""
+    from local_file_sharer.transfer.http_handler import _FAILED_ATTEMPTS, _LOCKED_UNTIL
+
+    _FAILED_ATTEMPTS.clear()
+    _LOCKED_UNTIL.clear()
+    manifest = Manifest.build([share_tree / "hello.txt"])
+    server = ShareServer(manifest, host="127.0.0.1", port=free_port, pin="4242")
+    server.start()
+    try:
+        assert server.wait_until_ready(timeout=5)
+        with pytest.raises(urllib.error.HTTPError) as excinfo:
+            get(server, "/?pin=0001")
+        assert excinfo.value.code == 401
+        body = excinfo.value.read()
+        assert b"Wrong PIN" in body
+        assert b"Too many attempts" not in body
+
+        # ...and the very next attempt with the right PIN succeeds, immediately.
+        assert b"hello.txt" in get(server, "/?pin=4242").read()
+    finally:
+        for mapping in (_FAILED_ATTEMPTS, _LOCKED_UNTIL):
+            mapping.clear()
+        server.stop()
+
+
+def test_lockout_page_explains_the_wait_even_for_a_correct_pin(share_tree, free_port):
+    """During a lockout the page must say so — never a bare 'wrong PIN'."""
+    from local_file_sharer.transfer.http_handler import _FAILED_ATTEMPTS, _LOCKED_UNTIL, FREE_PIN_ATTEMPTS
+
+    _FAILED_ATTEMPTS.clear()
+    _LOCKED_UNTIL.clear()
+    manifest = Manifest.build([share_tree / "hello.txt"])
+    server = ShareServer(manifest, host="127.0.0.1", port=free_port, pin="4242")
+    server.start()
+    try:
+        assert server.wait_until_ready(timeout=5)
+        for _ in range(FREE_PIN_ATTEMPTS):
+            with pytest.raises(urllib.error.HTTPError):
+                get(server, "/?pin=0001")
+
+        with pytest.raises(urllib.error.HTTPError) as excinfo:
+            get(server, "/?pin=4242")
+        assert excinfo.value.code == 429
+        body = excinfo.value.read()
+        assert b"Too many attempts" in body
+        # It must not claim the PIN was wrong when nobody submitted one.
+        assert b"Wrong PIN" not in body
+    finally:
+        for mapping in (_FAILED_ATTEMPTS, _LOCKED_UNTIL):
+            mapping.clear()
+        server.stop()
+
+
+def test_login_form_post_sets_the_cookie_on_the_redirect(share_tree, free_port):
+    """The browser posts the PIN, gets a 302 to '/', and must already be logged in."""
+    from local_file_sharer.transfer.http_handler import _FAILED_ATTEMPTS, _LOCKED_UNTIL
+
+    _FAILED_ATTEMPTS.clear()
+    _LOCKED_UNTIL.clear()
+    manifest = Manifest.build([share_tree / "hello.txt"])
+    server = ShareServer(manifest, host="127.0.0.1", port=free_port, pin="4242")
+    server.start()
+    try:
+        assert server.wait_until_ready(timeout=5)
+        body = urllib.parse.urlencode({"pin": "4242"}).encode()
+        request = urllib.request.Request(
+            f"http://127.0.0.1:{server.port}/",
+            data=body,
+            method="POST",
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+        )
+        # A redirect that is followed and still asks for the PIN is the bug. A
+        # browser keeps the cookie automatically, so the opener needs a jar.
+        jar = http.cookiejar.CookieJar()
+        opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
+        with opener.open(request, timeout=5) as response:
+            assert response.status == 200
+            assert b"hello.txt" in response.read()
+        assert [c.name for c in jar if c.name == "lfs_auth"] == ["lfs_auth"]
+    finally:
+        for mapping in (_FAILED_ATTEMPTS, _LOCKED_UNTIL):
+            mapping.clear()
+        server.stop()
+
+
+def test_cookie_survives_a_manual_redirect_hop(share_tree, free_port):
+    """Same thing without urllib's redirect handling, so the header itself is checked."""
+    from local_file_sharer.transfer.http_handler import _FAILED_ATTEMPTS, _LOCKED_UNTIL
+
+    _FAILED_ATTEMPTS.clear()
+    _LOCKED_UNTIL.clear()
+    manifest = Manifest.build([share_tree / "hello.txt"])
+    server = ShareServer(manifest, host="127.0.0.1", port=free_port, pin="4242")
+    server.start()
+    try:
+        assert server.wait_until_ready(timeout=5)
+        body = urllib.parse.urlencode({"pin": "4242"}).encode()
+        request = urllib.request.Request(
+            f"http://127.0.0.1:{server.port}/",
+            data=body,
+            method="POST",
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+        )
+        opener = urllib.request.build_opener(_NoRedirect)
+        with pytest.raises(urllib.error.HTTPError) as excinfo:
+            opener.open(request, timeout=5)
+        assert excinfo.value.code in (302, 303)
+        assert "lfs_auth=" in (excinfo.value.headers.get("Set-Cookie") or "")
+    finally:
+        for mapping in (_FAILED_ATTEMPTS, _LOCKED_UNTIL):
+            mapping.clear()
+        server.stop()
+
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, *args, **kwargs):  # noqa: ANN002, ANN003, D102
+        return None

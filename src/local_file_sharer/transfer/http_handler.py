@@ -65,6 +65,9 @@ class ShareContext:
 
     manifest: Manifest
     tracker: TransferTracker
+    #: Public origin of the share, e.g. ``http://192.168.1.42:8080`` — never with
+    #: a trailing slash, because every caller concatenates ``/path`` onto it and
+    #: a stray slash produced ``http://host:port//download/abc`` in the manifest.
     base_url: str = ""
     pin: str = ""
     allow_upload: bool = False
@@ -97,9 +100,16 @@ class ShareContext:
 
     # ── brute-force protection ──────────────────────────────────────────────
     def note_failure(self, client: str) -> None:
+        """Count a wrong PIN; only lock out after :data:`FREE_PIN_ATTEMPTS`."""
         with _ATTEMPT_LOCK:
-            _FAILED_ATTEMPTS[client] = _FAILED_ATTEMPTS.get(client, 0) + 1
-            _LOCKED_UNTIL[client] = time.time() + min(60.0, 2.0 * _FAILED_ATTEMPTS[client])
+            attempts = _FAILED_ATTEMPTS.get(client, 0) + 1
+            _FAILED_ATTEMPTS[client] = attempts
+            if attempts < FREE_PIN_ATTEMPTS:
+                # A typo must never block the right PIN: the next attempt is free.
+                _LOCKED_UNTIL.pop(client, None)
+                return
+            over = attempts - FREE_PIN_ATTEMPTS + 1
+            _LOCKED_UNTIL[client] = time.time() + min(MAX_PIN_LOCKOUT, 2.0 * over)
 
     def note_success(self, client: str) -> None:
         with _ATTEMPT_LOCK:
@@ -117,6 +127,11 @@ _EPHEMERAL_TOKENS: dict[str, float] = {}
 #: Per-client failed PIN attempts → exponential-ish lockouts (in-process only).
 _FAILED_ATTEMPTS: dict[str, int] = {}
 _LOCKED_UNTIL: dict[str, float] = {}
+#: Wrong PINs allowed before the client has to wait. One typo is not an attack,
+#: and locking out the fifth person to mistype their own PIN is user-hostile.
+FREE_PIN_ATTEMPTS = 5
+#: Longest any client is made to wait, in seconds.
+MAX_PIN_LOCKOUT = 60.0
 _ATTEMPT_LOCK = threading.Lock()
 
 
@@ -237,6 +252,12 @@ class ShareRequestHandler(BaseHTTPRequestHandler):
         self.send_header("Location", location)
         for key, value in NO_CACHE_HEADERS.items():
             self.send_header(key, value)
+        # A redirect after a successful login must carry the cookie, or the
+        # browser lands on the page it was going to and is challenged again.
+        pending = getattr(self, "_pending_cookie", None)
+        if pending:
+            self.send_header(*pending)
+            self._pending_cookie = None
         self.send_header("Content-Length", "0")
         self.end_headers()
 
@@ -367,8 +388,10 @@ class ShareRequestHandler(BaseHTTPRequestHandler):
         client = self.client_ip()
         wait = self.ctx.locked_for(client)
         if wait > 0:
+            # Before this check the page just said "Wrong PIN", so a correct PIN
+            # looked broken for as long as the lockout lasted.
             self.send_html(
-                self._login_page(wrong=True, wait=wait),
+                self._login_page(wrong=bool(self._submitted_pin(query)), wait=wait),
                 status=HTTPStatus.TOO_MANY_REQUESTS,
             )
             return False
@@ -417,6 +440,16 @@ class ShareRequestHandler(BaseHTTPRequestHandler):
         """``("Set-Cookie", …)`` for the current PIN, sent with the page."""
         token = issue_token(self.ctx.pin)
         return "Set-Cookie", f"{self.ctx.cookie_name}={token}; Path=/; HttpOnly; SameSite=Lax"
+
+    def _submitted_pin(self, query: dict[str, list[str]]) -> str:
+        """The PIN from the query string or a POST body, without consuming POSTs."""
+        provided = (query.get("pin") or [""])[0]
+        if provided or self.command != "POST":
+            return provided
+        length = int(self.headers.get("Content-Length") or 0)
+        body = self.rfile.read(length) if length else b""
+        fields = urllib.parse.parse_qs(body.decode("utf-8", "replace"))
+        return (fields.get("pin") or [""])[0]
 
     def _login_page(self, *, wrong: bool = False, wait: float = 0.0) -> str:
         template = (self.ctx.assets or {}).get("login.html", LOGIN_FALLBACK)

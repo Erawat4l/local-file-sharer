@@ -117,6 +117,7 @@ class ShareItem:
         return human_size(self.total_bytes)
 
     def as_dict(self, base_url: str = "") -> dict:
+        base_url = base_url.rstrip("/")
         return {
             "id": self.item_id,
             "name": self.name,
@@ -166,6 +167,7 @@ class FileEntry:
         return quote(self.rel)
 
     def as_dict(self, base_url: str = "") -> dict:
+        base_url = base_url.rstrip("/")
         return {
             "id": self.file_id,
             "name": self.name,
@@ -290,6 +292,7 @@ class Manifest:
 
     # ── serialisation ───────────────────────────────────────────────────────
     def as_dict(self, base_url: str = "") -> dict:
+        base_url = base_url.rstrip("/")
         return {
             "title": self.title,
             "mode": self.mode,
