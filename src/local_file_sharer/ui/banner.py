@@ -101,12 +101,12 @@ def banner_renderable(
     """Just the logo + subtitle (used by `lfs banner` and the header)."""
     parts: list[RenderableType] = [logo(theme, offset=offset), Text(""), subtitle(theme, offset=offset)]
     if badge:
+        # monochrome chips: the platform names differ, the styling does not
         chip = Text()
-        chip.append(" TERMUX ", style="bold black on bright_yellow")
-        chip.append(" ")
-        chip.append(" LINUX ", style="bold black on bright_white")
-        chip.append(" ")
-        chip.append(" WINDOWS ", style="bold black on bright_blue")
+        for platform in ("TERMUX", "LINUX", "WINDOWS"):
+            chip.append(" ")
+            chip.append(f" {platform} ", style="bold black on bright_white")
+            chip.append(" ")
         chip.append("  ")
         chip.append("rich + qrcode", style=theme.muted)
         parts.extend([Text(""), chip])

@@ -534,7 +534,7 @@ def run_picker(
                 console().print(HELP_PICKER)
                 console().input(Text(" press Enter to go back ", style="lfs.faint"))
             elif key == "t":
-                state.flash("theme changes apply on restart — try `lfs theme neon`", "info")
+                state.flash("theme changes apply on restart — try `lfs theme mono`", "info")
             elif key == "s":
                 if not state.selected:
                     state.flash("pick something first (Space / a / numbers)", "warning")

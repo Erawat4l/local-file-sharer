@@ -226,30 +226,30 @@ def shortcut_message(text: str) -> Text:
 # ── static help texts ───────────────────────────────────────────────────────
 HELP_PICKER = """[bold]File picker keys[/]
 
-  [cyan]↑ ↓ / j k[/]      move the cursor
-  [cyan]PgUp / PgDn[/]    jump a page
-  [cyan]Enter[/]          open a folder (or add the highlighted file)
-  [cyan]Space[/]          toggle the highlighted row
-  [cyan]6,7,8 / 6-8[/]    select by number, then Enter
-  [cyan]a[/]  /  [cyan]c[/]      select all / clear
-  [cyan]s[/]              start sharing the selection
-  [cyan]/[/]              fuzzy search this folder
-  [cyan]f[/]              favourite / unfavourite this folder
-  [cyan]d[/]              list drives     [cyan]h[/] home     [cyan]b[/] up a level
-  [cyan]?[/]              this help       [cyan]q[/] quit
+  [bold]↑ ↓ / j k[/]      move the cursor
+  [bold]PgUp / PgDn[/]    jump a page
+  [bold]Enter[/]          open a folder (or add the highlighted file)
+  [bold]Space[/]          toggle the highlighted row
+  [bold]6,7,8 / 6-8[/]    select by number, then Enter
+  [bold]a[/]  /  [bold]c[/]      select all / clear
+  [bold]s[/]              start sharing the selection
+  [bold]/[/]              fuzzy search this folder
+  [bold]f[/]              favourite / unfavourite this folder
+  [bold]d[/]              list drives     [bold]h[/] home     [bold]b[/] up a level
+  [bold]?[/]              this help       [bold]q[/] quit
 """
 
 HELP_MAIN = (
     """[bold]LOCAL FILE SHARER[/]
 
-  [cyan]start[/]                 open the interactive menu
-  [cyan]lfs <path>[/]          share a file or folder right away
-  [cyan]lfs --mode stream[/]   open the media player for the selection
-  [cyan]lfs doctor[/]          check tools, firewall and network
-  [cyan]lfs config show[/]     print the effective configuration
-  [cyan]lfs theme neon[/]      switch theme (dark / light / neon)
-  [cyan]lfs completions bash[/] print a shell completion script
-  [cyan]lfs --update[/]        self-update from GitHub
+  [bold]lfs[/]                 open the interactive menu
+  [bold]lfs <path>[/]          share a file or folder right away
+  [bold]lfs --mode stream[/]   open the media player for the selection
+  [bold]lfs doctor[/]          check tools, firewall and network
+  [bold]lfs config show[/]     print the effective configuration
+  [bold]lfs theme mono[/]      switch theme (dark / light / mono)
+  [bold]lfs completions bash[/] print a shell completion script
+  [bold]lfs --update[/]        self-update from GitHub
 
 See the README for the full reference: """
     + REPO_URL

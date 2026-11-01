@@ -109,7 +109,7 @@ scrollback, and a live dashboard with speed, ETA, progress, devices and total se
 | **Networks** | LAN/Wi-Fi IP first (QR + one-liners), public IP, Tailscale auto-detect (`serve`/`funnel`), Cloudflare Tunnel with a slow-speed warning |
 | **Speed** | `os.sendfile` → `socket.sendfile` fallback, 4 MiB buffers, `Range` support, 16-connection parallel downloader |
 | **Web UIs** | download station, file browser, media player — all offline-capable, browser caching disabled |
-| **CLI polish** | animated gradient banner, three themes (**dark / light / neon**), live transfer dashboard that redraws in place |
+| **CLI polish** | animated banner, three monochrome themes (**dark / light / mono**), live transfer dashboard that redraws in place |
 | **Convenience** | fuzzy picker, recent files, favourite folders, one-key clipboard copy of links and one-liners |
 | **Safety** | optional PIN/password, auto-expiring links, upload toggle, gitignored per-machine secrets |
 | **Settings** | `~/.config/local-file-sharer/config.toml` (`%APPDATA%` on Windows) with env overrides |
@@ -314,7 +314,7 @@ re-prints the QR, `q` stops the share.
 (`%APPDATA%\local-file-sharer\config.toml` on Windows):
 
 ```toml
-theme = "dark"                  # dark | light | neon
+theme = "dark"                  # dark | light | mono
 accent = "cyan"                 # any colour name or #RRGGBB
 animate_banner = true
 icons = true
@@ -378,13 +378,13 @@ start [paths ...] [options]          share now (no paths → interactive menu)
   --upload                   --open             --no-qr        --no-copy
   --tailscale | --no-tailscale                --funnel
   --cloudflare | --no-cloudflare
-  --theme {dark,light,neon}  --no-anim          --icons | --no-icons
+  --theme {dark,light,mono}  --no-anim          --icons | --no-icons
   --interface IFACE          --no-dashboard     --json        --debug
 
 lfs menu                       open the menu explicitly
 lfs doctor [--json] [--fast]   diagnostics
 lfs config  show|init|path|get|set|reset
-lfs theme   dark|light|neon|next|list [--preview]
+lfs theme   dark|light|mono|next|list [--preview]
 lfs completions fish|bash|powershell|zsh
 lfs banner  [--loop]           preview the animated banner
 lfs version | help

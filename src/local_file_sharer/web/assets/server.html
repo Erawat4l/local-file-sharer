@@ -28,7 +28,7 @@
   <section class="card" style="margin-bottom:22px">
     <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end">
       <div style="flex:1;min-width:240px">
-        <h1 style="margin:0 0 6px;font-size:26px;letter-spacing:-0.02em">Browse <span class="grad" style="background:linear-gradient(100deg,var(--accent),var(--accent-2));-webkit-background-clip:text;background-clip:text;color:transparent">folder</span></h1>
+        <h1 style="margin:0 0 6px;font-size:26px;letter-spacing:-0.02em">Browse <span class="grad">folder</span></h1>
         <p class="muted" style="margin:0;font-size:13.5px">
           Every file is served with HTTP Range support — resume, seek and parallelise freely.
         </p>
@@ -87,7 +87,7 @@
     const cb = document.createElement('input');
     cb.type = 'checkbox';
     cb.className = 'pick';
-    cb.style.cssText = 'accent-color:#22d3ee;width:16px;height:16px;margin-right:2px';
+    cb.style.cssText = 'accent-color:#f5f5f5;width:16px;height:16px;margin-right:2px';
     cb.addEventListener('click', (e) => e.stopPropagation());
     cb.addEventListener('change', () => {
       if (cb.checked) selected.add(row.href); else selected.delete(row.href);

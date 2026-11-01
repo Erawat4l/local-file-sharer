@@ -723,7 +723,7 @@ class ShareRequestHandler(BaseHTTPRequestHandler):
         svg_icon = (
             '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">'
             '<rect width="64" height="64" rx="14" fill="#0b1220"/>'
-            '<path d="M20 34h24M32 20v28" stroke="#22d3ee" stroke-width="6" stroke-linecap="round"/>'
+            '<path d="M20 34h24M32 20v28" stroke="#ffffff" stroke-width="6" stroke-linecap="round"/>'
             "</svg>"
         )
         payload = svg_icon.encode("utf-8")
@@ -1337,7 +1337,7 @@ LOGIN_FALLBACK = """<!doctype html><html><head><meta charset="utf-8"><title>PIN 
 <style>body{font-family:system-ui;background:#0b1220;color:#e2e8f0;display:grid;place-items:center;height:100vh}
 form{background:#111a2b;padding:2rem;border-radius:16px;display:grid;gap:1rem;min-width:280px}
 input{padding:.7rem;border-radius:8px;border:1px solid #24314a;background:#0b1220;color:#fff}
-button{padding:.7rem 1rem;border-radius:8px;border:0;background:#22d3ee;color:#04121a;font-weight:600}</style>
+button{padding:.7rem 1rem;border-radius:8px;border:0;background:#fff;color:#000;font-weight:600}</style>
 </head><body><form method="post"><h1>{{brand}}</h1><p>Enter the PIN to continue</p>
 <input name="pin" type="password" autofocus inputmode="numeric"><p class="{{hidden}}">{{error}}</p>
 <button type="submit">Unlock</button></form></body></html>"""

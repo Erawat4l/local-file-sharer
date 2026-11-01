@@ -8,30 +8,34 @@
 <title>{{file_name}} · {{brand}} player</title>
 <link rel="icon" href="/favicon.ico">
 <style>
-  /* Self-contained player styling: full-bleed, cinema dark, cyan accents. */
+  /* Self-contained player styling: full-bleed, cinema dark, monochrome. */
   :root{
-    --bg:#04060b; --panel:#0b1120; --line:rgba(148,163,184,.16);
-    --text:#e8eefc; --dim:#93a3c0; --faint:#5b6b86;
-    --accent:#22d3ee; --accent-2:#a78bfa; --danger:#fb7185;
+    --bg:#000; --panel:#0a0a0a; --line:#232323;
+    --text:#f5f5f5; --dim:#a3a3a3; --faint:#6b6b6b;
+    --accent:#fff; --accent-2:#fff; --danger:#fff;
     --mono:"JetBrains Mono","SF Mono",ui-monospace,monospace;
     color-scheme:dark;
   }
   *{box-sizing:border-box}
   html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
     font-family:"Inter","Segoe UI",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
-  body{background-image:
-      radial-gradient(900px 520px at 15% -10%, rgba(34,211,238,.16), transparent 60%),
-      radial-gradient(760px 480px at 88% 6%, rgba(167,139,250,.16), transparent 60%);
-    background-attachment:fixed}
-  .shell{display:grid;grid-template-columns:minmax(0,1fr) 330px;height:100vh;gap:0}
-  @media (max-width:980px){.shell{grid-template-columns:1fr;height:auto}}
+  body{background:var(--bg)}
+  /* 100dvh follows mobile browser chrome instead of hiding behind it; the
+     grid may still grow past the viewport, so the page is allowed to scroll. */
+  .shell{display:grid;grid-template-columns:minmax(0,1fr) 330px;
+    grid-template-rows:100dvh;gap:0}
+  html{height:auto;min-height:100%}
+  body{min-height:100dvh;overflow-y:auto;overflow-x:hidden}
+  @media (max-width:980px){
+    .shell{grid-template-columns:1fr;grid-template-rows:auto}
+    .stage{min-height:100dvh}
+  }
 
   /* ── stage ── */
   .stage{position:relative;display:flex;flex-direction:column;min-width:0;padding:18px 22px 0}
   .topline{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px}
   .logo{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;font-family:var(--mono);font-size:13px;
-    background:linear-gradient(135deg, rgba(34,211,238,.22), rgba(167,139,250,.22));
-    border:1px solid rgba(34,211,238,.4);box-shadow:0 0 24px -8px rgba(34,211,238,.7);color:#c8f7ff}
+    background:#111;border:1px solid var(--line);color:var(--text)}
   .title{font-weight:650;font-size:15px;letter-spacing:-.01em;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .badge{font-family:var(--mono);font-size:11px;padding:4px 9px;border-radius:999px;border:1px solid var(--line);color:var(--dim)}
   .spacer{flex:1}
@@ -40,12 +44,25 @@
     background:#000;border:1px solid var(--line);box-shadow:0 30px 80px -40px rgba(0,0,0,.95)}
   video,audio{width:100%;height:100%;display:block;background:#000}
   video{object-fit:contain}
+
+  /* A fullscreen element is sized by the browser, so drop the padding, the
+     rounded card and the forced 100dvh row that make it look boxed in. A
+     :fullscreen element cannot use its own background to cover the page, so
+     the backdrop is painted on ::backdrop. */
+  .stage:fullscreen{padding:0;background:#000;display:flex;flex-direction:column}
+  .stage:fullscreen::backdrop{background:#000}
+  .stage:fullscreen .topline{padding:12px 18px;margin:0;background:linear-gradient(#000,#0000)}
+  .stage:fullscreen .video-wrap{flex:1;min-height:0;border:0;border-radius:0;box-shadow:none}
+  .stage:fullscreen .controls{padding-bottom:max(10px, env(safe-area-inset-bottom))}
+  .stage:fullscreen .hints{display:none}
+  video:fullscreen{width:100vw;height:100vh;object-fit:contain;background:#000}
+  video::backdrop{background:#000}
   .stage-audio .video-wrap{display:grid;place-items:center;background:
-      radial-gradient(circle at 50% 40%, rgba(34,211,238,.18), transparent 62%), #060a12}
+      #0a0a0a}
   .stage-audio video{display:none}
   .artwork{text-align:center;padding:28px}
   .artwork .disc{width:180px;height:180px;margin:0 auto 18px;border-radius:50%;
-    background:conic-gradient(from 0deg, #0f172a, #1e293b, #0f172a, #22d3ee22, #0f172a);
+    background:conic-gradient(from 0deg, #0a0a0a, #1c1c1c, #0a0a0a, #2a2a2a, #0a0a0a);
     border:1px solid var(--line);display:grid;place-items:center;font-size:54px;
     animation:spin 9s linear infinite paused}
   .playing .artwork .disc{animation-play-state:running}
@@ -55,25 +72,24 @@
 
   /* custom controls */
   .controls{margin-top:14px;padding:14px 16px;border-radius:16px;border:1px solid var(--line);
-    background:rgba(11,17,32,.78);backdrop-filter:blur(16px);display:grid;gap:10px}
+    background:rgba(10,10,10,.82);backdrop-filter:blur(16px);display:grid;gap:10px}
   .seekrow{display:flex;align-items:center;gap:12px}
   .t{font-family:var(--mono);font-size:11.5px;color:var(--dim);min-width:52px;text-align:center}
   input[type=range]{-webkit-appearance:none;appearance:none;flex:1;height:22px;background:transparent;cursor:pointer}
   input[type=range]::-webkit-slider-runnable-track{height:6px;border-radius:999px;
-    background:linear-gradient(90deg,var(--accent) var(--p,0%), rgba(148,163,184,.20) var(--p,0%))}
+    background:linear-gradient(90deg,var(--accent) var(--p,0%), rgba(255,255,255,.20) var(--p,0%))}
   input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;border-radius:50%;
-    background:#fff;margin-top:-4px;box-shadow:0 0 0 4px rgba(34,211,238,.28)}
-  input[type=range]::-moz-range-track{height:6px;border-radius:999px;background:rgba(148,163,184,.2)}
+    background:#fff;margin-top:-4px;box-shadow:0 0 0 4px rgba(255,255,255,.22)}
+  input[type=range]::-moz-range-track{height:6px;border-radius:999px;background:rgba(255,255,255,.2)}
   input[type=range]::-moz-range-progress{height:6px;border-radius:999px;background:var(--accent)}
   input[type=range]::-moz-range-thumb{width:14px;height:14px;border:0;border-radius:50%;background:#fff}
 
   .buttons{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-  button{font-family:inherit;color:var(--text);background:rgba(148,163,184,.08);
+  button{font-family:inherit;color:var(--text);background:#141414;
     border:1px solid var(--line);border-radius:11px;padding:9px 13px;font-size:13px;cursor:pointer;
     display:inline-flex;align-items:center;gap:7px;transition:background .14s ease,transform .14s ease}
-  button:hover{background:rgba(148,163,184,.16);transform:translateY(-1px)}
-  button.primary{background:linear-gradient(135deg,#67e8f9,#22d3ee 55%,#38bdf8);color:#04121a;
-    border:0;font-weight:650;box-shadow:0 14px 30px -16px rgba(34,211,238,.9)}
+  button:hover{background:#232323;transform:translateY(-1px)}
+  button.primary{background:#f5f5f5;color:#000;border:0;font-weight:650}
   button.icon{font-size:15px;padding:9px 11px}
   .volume{display:flex;align-items:center;gap:8px;min-width:120px}
   .volume input{width:90px}
@@ -81,10 +97,10 @@
   .understage{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:14px 2px 20px;color:var(--faint);font-size:12.5px}
   .understage a{color:var(--accent);text-decoration:none}
   kbd{font-family:var(--mono);font-size:11px;padding:2px 6px;border-radius:6px;
-    border:1px solid var(--line);background:rgba(148,163,184,.1);color:var(--dim)}
+    border:1px solid var(--line);background:#1a1a1a;color:var(--dim)}
 
   /* ── playlist ── */
-  aside{border-left:1px solid var(--line);background:rgba(8,13,24,.72);backdrop-filter:blur(18px);
+  aside{border-left:1px solid var(--line);background:rgba(6,6,6,.78);backdrop-filter:blur(18px);
     padding:18px 16px;overflow:auto}
   aside h3{margin:0 0 12px;font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:var(--faint)}
   .playlist{list-style:none;margin:0;padding:0;display:grid;gap:6px}
@@ -92,9 +108,9 @@
     border-radius:10px;border:1px solid transparent;font-size:13px}
   .playlist li a{color:var(--text);text-decoration:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .playlist li span{font-family:var(--mono);font-size:11px;color:var(--faint);flex:0 0 auto}
-  .playlist li:hover{background:rgba(148,163,184,.09)}
-  .playlist li.active{background:rgba(34,211,238,.12);border-color:rgba(34,211,238,.4)}
-  .playlist li.active a{color:#a5f3fc}
+  .playlist li:hover{background:#141414}
+  .playlist li.active{background:#161616;border-color:#3a3a3a}
+  .playlist li.active a{color:var(--text)}
   .stats{margin-top:18px;padding-top:16px;border-top:1px solid var(--line);display:grid;gap:10px}
   .stats .row{display:flex;justify-content:space-between;font-size:12.5px;color:var(--dim)}
   .stats .row b{font-family:var(--mono);color:var(--text);font-weight:500}
@@ -249,9 +265,34 @@
     rateIdx = (rateIdx + 1) % rates.length; v.playbackRate = rates[rateIdx];
     e.currentTarget.textContent = rates[rateIdx] + '×';
   });
-  document.getElementById('full').addEventListener('click', () => {
-    if (document.fullscreenElement) document.exitFullscreen();
-    else (stage.requestFullscreen ? stage.requestFullscreen() : v.webkitEnterFullscreen?.());
+  // Fullscreen the stage (video + controls), not just the video, so the seek
+  // bar and volume stay reachable. iOS Safari has no element fullscreen for
+  // anything but <video>, so fall back to its native player.
+  const goFullscreen = async () => {
+    if (document.fullscreenElement || document.webkitFullscreenElement) {
+      await (document.exitFullscreen?.() ?? document.webkitExitFullscreen?.());
+      return;
+    }
+    try {
+      if (stage.requestFullscreen) await stage.requestFullscreen();
+      else if (stage.webkitRequestFullscreen) stage.webkitRequestFullscreen();
+      else if (v.webkitEnterFullscreen) v.webkitEnterFullscreen();
+      else toast('Fullscreen is not available in this browser');
+    } catch (err) {
+      // some browsers refuse a request made from a keyboard shortcut or a
+      // stale gesture; retrying from the tap is the only fix, so say so.
+      try { v.webkitEnterFullscreen?.(); } catch (e) { toast('Fullscreen was blocked'); }
+    }
+  };
+  document.getElementById('full').addEventListener('click', goFullscreen);
+  // double-click the picture to toggle, like every desktop player
+  v.addEventListener('dblclick', goFullscreen);
+  document.addEventListener('fullscreenchange', () => {
+    const on = Boolean(document.fullscreenElement);
+    stage.classList.toggle('is-fullscreen', on);
+    document.getElementById('full').textContent = on ? '⤢ Exit' : '⤢ Full';
+    // keep the video sized after the layout flips
+    requestAnimationFrame(() => v.dispatchEvent(new Event('resize')));
   });
   document.getElementById('pip').addEventListener('click', async () => {
     try { await v.requestPictureInPicture(); } catch (e) { toast('Picture-in-picture unavailable'); }
@@ -262,7 +303,7 @@
     if (e.code === 'Space') { e.preventDefault(); v.paused ? v.play() : v.pause(); }
     if (e.code === 'ArrowRight') v.currentTime = Math.min(v.duration || 1e9, v.currentTime + 10);
     if (e.code === 'ArrowLeft') v.currentTime = Math.max(0, v.currentTime - 10);
-    if (e.key === 'f') stage.requestFullscreen?.();
+    if (e.key === 'f') goFullscreen();
     if (e.key === 'm') { v.muted = !v.muted; }
   });
 

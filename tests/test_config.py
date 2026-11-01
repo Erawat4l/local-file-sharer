@@ -45,7 +45,7 @@ def test_init_and_reload():
 
 def test_dump_round_trip(tmp_path: Path):
     cfg = Config()
-    cfg.theme = "neon"
+    cfg.theme = "mono"
     cfg.network.port = 9999
     cfg.share.pin = "1234"
     cfg.share.one_liners = ["curl", "aria2c"]
@@ -53,7 +53,7 @@ def test_dump_round_trip(tmp_path: Path):
     target = tmp_path / "config.toml"
     target.write_text(text)
     loaded = load_config(path=target, respect_env=False)
-    assert loaded.theme == "neon"
+    assert loaded.theme == "mono"
     assert loaded.network.port == 9999
     assert loaded.share.pin == "1234"
     assert loaded.share.one_liners == ["curl", "aria2c"]
@@ -96,10 +96,10 @@ def test_bad_toml_is_friendly(tmp_path: Path):
 
 def test_env_overrides(monkeypatch):
     monkeypatch.setenv("LOCAL_FILE_SHARER_NETWORK__PORT", "9300")
-    monkeypatch.setenv("LOCAL_FILE_SHARER_THEME", "neon")
+    monkeypatch.setenv("LOCAL_FILE_SHARER_THEME", "mono")
     cfg = load_config()
     assert cfg.network.port == 9300
-    assert cfg.theme == "neon"
+    assert cfg.theme == "mono"
 
 
 def test_unknown_keys_are_ignored(tmp_path: Path):
@@ -193,7 +193,7 @@ def test_missing_toml_parser_degrades_gracefully(tmp_path, monkeypatch):
     assert config_mod._read_toml(absent) == {}  # noqa: SLF001
 
     present = tmp_path / "present.toml"
-    present.write_text('theme = "neon"\n', encoding="utf-8")
+    present.write_text('theme = "mono"\n', encoding="utf-8")
     with pytest.raises(ConfigError) as excinfo:
         config_mod._read_toml(present)  # noqa: SLF001
     assert any("tomli" in hint for hint in excinfo.value.hints)

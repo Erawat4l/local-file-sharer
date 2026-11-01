@@ -35,7 +35,7 @@ def render(renderable, width: int = 100) -> str:
 
 
 def test_themes_exist():
-    assert set(THEME_NAMES) == {"dark", "light", "neon"}
+    assert set(THEME_NAMES) == {"dark", "light", "mono"}
     for name in THEME_NAMES:
         theme = build_theme(name, "cyan")
         assert theme.name == name
@@ -45,8 +45,8 @@ def test_themes_exist():
 
 def test_cycle_theme():
     assert cycle_theme("dark") == "light"
-    assert cycle_theme("light") == "neon"
-    assert cycle_theme("neon") == "dark"
+    assert cycle_theme("light") == "mono"
+    assert cycle_theme("mono") == "dark"
     assert cycle_theme("bogus") == "light"
 
 
@@ -74,7 +74,7 @@ def test_gradient_helpers():
 
 
 def test_theme_gradient_text_has_every_char():
-    theme = build_theme("neon", "cyan")
+    theme = build_theme("mono", "white")
     text = theme.gradient("local-file-sharer")
     assert text.plain == "local-file-sharer"
 
@@ -280,7 +280,7 @@ def test_live_console_status_online():
 def test_theme_preview_renders():
     from local_file_sharer.ui.components import theme_preview
 
-    assert "theme" in render(theme_preview(build_theme("neon", "lime")))
+    assert "theme" in render(theme_preview(build_theme("mono", "white")))
 
 
 def test_qr_matrix_is_a_structurally_valid_symbol():
@@ -363,6 +363,17 @@ def test_commands_wrap_on_argument_boundaries(width):
     assert all(line.rstrip().endswith("\\") for line in lines[:-1])
     rebuilt = " ".join(line.strip().removesuffix("\\").strip() for line in lines)
     assert rebuilt == command
+
+
+def test_wrap_command_keeps_a_flag_with_its_value():
+    """``-C -`` must not split, or the pasted command loses its argument."""
+    from local_file_sharer.ui.console import wrap_command
+
+    lines = wrap_command("curl -L --fail -C - -O http://192.168.1.42:8080/", width=34)
+    joined = " ".join(line.strip().rstrip("\\") for line in lines)
+    assert "-C -" in joined
+    assert not any(line.strip() == "-" for line in lines)
+    assert all(len(line) <= 34 for line in lines)
 
 
 def test_wrap_command_leaves_a_short_command_alone():

@@ -28,7 +28,7 @@ def test_split_argv_detects_subcommands():
     assert split_argv(["doctor"])[0] == "doctor"
     assert split_argv(["config", "show"])[0] == "config"
     assert split_argv(["/tmp/file.txt"])[0] is None
-    assert split_argv(["--port", "9000", "theme", "neon"])[0] == "theme"
+    assert split_argv(["--port", "9000", "theme", "mono"])[0] == "theme"
     assert split_argv([])[0] is None
 
 
@@ -63,17 +63,17 @@ def test_config_invalid_key_is_friendly(capsys):
 
 
 def test_theme_command(capsys):
-    assert main(["theme", "neon"]) == 0
+    assert main(["theme", "mono"]) == 0
     out = capsys.readouterr().out
-    assert "neon" in out
+    assert "mono" in out
     assert main(["config", "get", "theme"]) == 0
-    assert "neon" in capsys.readouterr().out
+    assert "mono" in capsys.readouterr().out
 
 
 def test_theme_list(capsys):
     assert main(["theme"]) == 0
     out = capsys.readouterr().out
-    assert "dark" in out and "light" in out and "neon" in out
+    assert "dark" in out and "light" in out and "mono" in out
 
 
 def test_completions(capsys):

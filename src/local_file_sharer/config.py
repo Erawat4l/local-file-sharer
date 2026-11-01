@@ -36,7 +36,7 @@ CONFIG_FILENAME = "config.toml"
 SECRETS_FILENAME = "config.local.toml"
 ENV_PREFIX = "LOCAL_FILE_SHARER_"
 
-THEMES = ("dark", "light", "neon")
+THEMES = ("dark", "light", "mono")
 
 DEFAULT_CONFIG_TEMPLATE = """\
 # ─────────────────────────────────────────────────────────────────────────────
@@ -45,7 +45,7 @@ DEFAULT_CONFIG_TEMPLATE = """\
 #  Everything here is optional — delete the file to restore defaults.
 # ─────────────────────────────────────────────────────────────────────────────
 
-theme = "dark"                  # dark | light | neon
+theme = "dark"                  # dark | light | mono
 accent = "cyan"                 # any rich colour name or #RRGGBB
 animate_banner = true           # animated gradient banner on start
 icons = true                    # inline emoji icons in the file picker

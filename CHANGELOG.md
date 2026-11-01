@@ -7,7 +7,30 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Changed
+
+- **Monochrome UI**: the neon cyan/violet palette is gone from both faces of
+  the app. The terminal now ships **dark**, **light** and **mono** themes —
+  greys for structure, white (or black) for the accent — and the `neon` theme
+  is retired; an existing `theme = "neon"` config falls back to `dark`. The web
+  pages and the media player use the same black/white palette, with contrast
+  instead of hue.
+- **The download page lists folders, not their contents**: a share used to
+  flatten into one card per file, so a folder of 400 photos became 400 cards.
+  Sub-folders are now one card each (file count + size) with their own zip
+  button, and only files sitting in the share root are listed individually.
+- **Per-folder download**: `/folder/<name>` streams a zip of one folder, rooted
+  at its own contents, so downloading "Photos" no longer pulls the whole share.
+
 ### Fixed
+
+- **Scrolling**: the player forced `height: 100vh` on a grid and the page set
+  `min-height: 100%` on `html`, which pinned the document and made long pages
+  unscrollable on a phone. The document now owns the scroll (and uses `100dvh`).
+- **Fullscreen**: fullscreen put the *stage* in a box still sized by the 100vh
+  grid row and still sharing the page with the 330px sidebar. Fullscreen now
+  drops the padding, border and fixed row, paints a black `::backdrop`, keeps
+  the controls reachable, and falls back to native video fullscreen on iOS.
 
 - **PIN gate**: one mistyped PIN used to lock the client out for two seconds, so
   the *correct* PIN came back as `429` while the page still said "Wrong PIN".

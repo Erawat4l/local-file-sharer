@@ -77,8 +77,8 @@ def test_state_last_dir_and_theme(tmp_path: Path):
     assert state.last_dir is None
     state.remember_dir(tmp_path)
     assert State.load(tmp_path / "s.json").last_dir == tmp_path
-    state.theme = "neon"
-    assert State.load(tmp_path / "s.json").theme == "neon"
+    state.theme = "mono"
+    assert State.load(tmp_path / "s.json").theme == "mono"
 
 
 # ── picker rendering ────────────────────────────────────────────────────────

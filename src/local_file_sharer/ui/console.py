@@ -200,16 +200,42 @@ def wrap_command(command: str, *, indent: str = "   ", width: int | None = None)
     separate lines — text that looks like a command but is not one. Break on
     spaces only, and mark the continuation with a backslash so it stays clear
     that the command continues.
+
+    A flag that takes a value keeps it: ``-C -`` is one unit, so a wrap never
+    leaves the value stranded on the next line where copy-paste would break it.
     """
     limit = max(20, (width or screen_width()) - len(indent) - 3)
     words = command.split(" ")
+    units: list[str] = []
+    index = 0
+    while index < len(words):
+        word = words[index]
+        # a short flag is followed by its value: -C -, -o file.txt, -x16 is one
+        takes_value = (
+            word.startswith("-")
+            and not word.startswith("--")
+            and "=" not in word
+            and len(word) == 2
+            and index + 1 < len(words)
+            and not words[index + 1].startswith("-")
+        )
+        pair = f"{word} {words[index + 1]}" if takes_value else ""
+        # only glue them when the pair itself fits; `-O <40-char url>` never
+        # will on a phone, and an unbreakable unit just overflows the panel
+        if takes_value and len(pair) <= limit:
+            units.append(pair)
+            index += 2
+        else:
+            units.append(word)
+            index += 1
+
     lines: list[str] = []
     current = ""
-    for word in words:
-        candidate = f"{current} {word}".strip()
+    for unit in units:
+        candidate = f"{current} {unit}".strip()
         if current and len(candidate) > limit:
             lines.append(current + " \\")
-            current = word
+            current = unit
         else:
             current = candidate
     if current:

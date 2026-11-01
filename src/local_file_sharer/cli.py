@@ -7,7 +7,7 @@ lfs --mode stream        pick media and open the player
 lfs --mode torrent       build a .torrent + magnet with a built-in tracker
 lfs doctor               diagnostics
 lfs config show|init|…
-lfs theme dark|light|neon
+lfs theme dark|light|mono
 lfs completions fish|bash|powershell
 lfs --update             self-update from GitHub
 ```
@@ -90,7 +90,7 @@ def add_common_flags(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--no-qr", action="store_true", help="do not print the QR code")
     parser.add_argument("--no-copy", action="store_true", help="do not copy links to the clipboard")
     parser.add_argument("--no-dashboard", action="store_true", help="plain log instead of the live dashboard")
-    parser.add_argument("--theme", choices=("dark", "light", "neon"), default=None, help="colour theme")
+    parser.add_argument("--theme", choices=("dark", "light", "mono"), default=None, help="colour theme")
     parser.add_argument("--no-anim", action="store_true", help="static banner (no shimmer)")
     parser.add_argument(
         "--icons", dest="icons", action="store_true", default=None, help="emoji icons in the picker"
@@ -113,7 +113,7 @@ def build_parser() -> argparse.ArgumentParser:
             "  lfs <path> [...]        share files/folders right away\n"
             "  lfs doctor              check dependencies, firewall and network\n"
             "  lfs config show         print the effective configuration\n"
-            "  lfs theme neon          switch theme (dark / light / neon)\n"
+            "  lfs theme mono          switch theme (dark / light / mono)\n"
             "  lfs completions fish    print a shell completion script\n"
             "  lfs --update            self-update from GitHub\n"
             f"\nmore: {REPO_URL}"
@@ -163,7 +163,7 @@ def build_command_parsers() -> dict[str, argparse.ArgumentParser]:
     theme = argparse.ArgumentParser(
         prog="lfs theme", parents=[common], description="switch or preview the colour theme"
     )
-    theme.add_argument("name", nargs="?", choices=("dark", "light", "neon", "list", "next"), default=None)
+    theme.add_argument("name", nargs="?", choices=("dark", "light", "mono", "list", "next"), default=None)
     theme.add_argument("--preview", action="store_true", help="show a colour preview")
     parsers["theme"] = theme
 
@@ -196,7 +196,7 @@ _VALUE_OPTIONS = {"-p", "--port", "-m", "--mode", "--theme", "--expire", "--inte
 def split_argv(argv: list[str]) -> tuple[str | None, list[str]]:
     """Return ``(subcommand, remaining)`` when a bare word names a subcommand.
 
-    ``lfs --port 9000 theme neon`` → ``("theme", ["--port", "9000", "neon"])``.
+    ``lfs --port 9000 theme mono`` → ``("theme", ["--port", "9000", "mono"])``.
     Anything that looks like a path stops the scan, so
     ``lfs ./doctor`` still shares a file called *doctor*.
     """

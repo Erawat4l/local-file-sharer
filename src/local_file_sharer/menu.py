@@ -39,7 +39,7 @@ ACTIONS = [
     ("f", "Favourites", "favorites", "⭐", "jump to a favourite folder"),
     ("c", "Config", "config", "⚙️", "edit settings, theme and PIN"),
     ("d", "Doctor", "doctor", "🩺", "check dependencies, firewall and network"),
-    ("t", "Theme", "theme", "🎨", "switch dark / light / neon"),
+    ("t", "Theme", "theme", "◐", "switch dark / light / mono"),
     ("u", "Update", "update", "⬆️", "check GitHub for a new release"),
     ("?", "Help", "help", "?", "keys, one-liners and troubleshooting"),
     ("q", "Quit", "quit", "⏏️", "leave the menu"),
@@ -304,9 +304,9 @@ def _theme_menu(ctx: MenuContext) -> None:
 
     theme = current_theme()
     con = console()
-    con.print(Text(" 1) dark   2) light   3) neon", style=theme.secondary))
+    con.print(Text(" 1) dark   2) light   3) mono", style=theme.secondary))
     choice = Prompt.ask(Text(" theme", style=theme.accent), default="", console=con).strip()
-    mapping = {"1": "dark", "2": "light", "3": "neon", "d": "dark", "l": "light", "n": "neon"}
+    mapping = {"1": "dark", "2": "light", "3": "mono", "d": "dark", "l": "light", "m": "mono"}
     name = mapping.get(choice)
     if name:
         switch_theme(name, ctx.config, ctx.state)

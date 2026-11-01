@@ -1,4 +1,10 @@
-"""Themes: a consistent accent colour system for dark, light and neon terminals.
+"""Themes: dark, light and mono.
+
+The palette is greyscale on purpose. A file sharer is read on a phone over
+sshd, in Termux, in a bright room and a dark one; colour there is noise that
+competes with the one thing that must stand out — the link. So every role is a
+level of grey, and the accent is white (dark) or black (light), which gives
+maximum contrast instead of maximum hue.
 
 A :class:`Theme` is a flat set of named styles (``primary``, ``accent``,
 ``muted`` …) so widgets never hard-code colours. Gradients are produced from a
@@ -15,7 +21,7 @@ from dataclasses import dataclass, field
 from rich.style import Style
 from rich.text import Text
 
-THEME_NAMES = ("dark", "light", "neon")
+THEME_NAMES = ("dark", "light", "mono")
 
 RGB = tuple[int, int, int]
 
@@ -159,105 +165,119 @@ class Theme:
         return block
 
 
-def _build_dark(accent: str) -> Theme:
-    rich_name, rgb = resolve_accent(accent)
-    stops = (rgb, lerp(rgb, (140, 120, 255), 0.55), (125, 211, 252))
+def _greys(bright: bool) -> dict[str, str]:
+    """Grey levels for a dark (light text) or light (dark text) terminal."""
+    return {
+        "primary": "bold bright_white" if bright else "bold black",
+        "secondary": "grey93" if bright else "grey15",
+        "muted": "grey58" if bright else "grey30",
+        "faint": "grey35" if bright else "grey50",
+        "border": "grey37" if bright else "grey50",
+        "border_soft": "grey27" if bright else "grey66",
+        "panel": "on grey7" if bright else "on grey88",
+        "surface": "on grey11" if bright else "on grey93",
+        "selection": "bold bright_white on grey23" if bright else "bold black on grey78",
+        "key": "bold bright_black on grey30" if bright else "bold white on grey42",
+    }
+
+
+def _build_dark(accent: str = "white") -> Theme:
+    """Dark terminal: white is the accent, greys carry the structure."""
+    g = _greys(bright=True)
     return Theme(
         name="dark",
-        accent_name=accent,
-        accent=rich_name,
-        accent_rgb=rgb,
-        primary="bold bright_white",
-        secondary="grey93",
-        muted="grey58",
-        faint="grey35",
-        success="bold spring_green3",
-        warning="bold orange1",
-        danger="bold red1",
-        info=rich_name,
-        border="grey37",
-        border_soft="grey27",
-        panel="on grey7",
-        surface="on grey11",
-        highlight=f"bold black on {rich_name}",
-        selection="bold bright_white on grey23",
-        key="bold bright_black on grey30",
-        link=f"underline {rich_name}",
-        gradient_stops=stops,
-        logo_stops=(rgb, lerp(rgb, (255, 255, 255), 0.35), stops[1]),
+        accent_name="white",
+        accent="bold bright_white",
+        accent_rgb=(255, 255, 255),
+        primary=g["primary"],
+        secondary=g["secondary"],
+        muted=g["muted"],
+        faint=g["faint"],
+        # status stays readable without a hue: weight and brightness, not colour
+        success="bold bright_white",
+        warning="bold grey93",
+        danger="bold bright_white reverse",
+        info="bright_white",
+        border=g["border"],
+        border_soft=g["border_soft"],
+        panel=g["panel"],
+        surface=g["surface"],
+        highlight="bold black on bright_white",
+        selection=g["selection"],
+        key=g["key"],
+        link="underline bright_white",
+        gradient_stops=((255, 255, 255), (176, 176, 176), (255, 255, 255)),
+        logo_stops=((255, 255, 255), (144, 144, 144), (255, 255, 255)),
     )
 
 
-def _build_light(accent: str) -> Theme:
-    rich_name, rgb = resolve_accent(accent)
-    dark_rgb = tuple(max(0, int(c * 0.55)) for c in rgb)  # type: ignore[assignment]
-    stops = (dark_rgb, (30, 64, 175), (88, 28, 135))  # type: ignore[arg-type]
+def _build_light(accent: str = "black") -> Theme:
+    """Light terminal: black is the accent, greys carry the structure."""
+    g = _greys(bright=False)
     return Theme(
         name="light",
-        accent_name=accent,
-        accent=rich_name,
-        accent_rgb=rgb,
-        primary="bold black",
-        secondary="grey15",
-        muted="grey30",
-        faint="grey50",
-        success="bold green4",
-        warning="bold dark_orange3",
-        danger="bold red3",
-        info=rich_name,
-        border="grey50",
-        border_soft="grey66",
-        panel="on grey88",
-        surface="on grey93",
-        highlight=f"bold white on {rich_name}",
-        selection="bold black on grey78",
-        key="bold white on grey42",
-        link=f"underline {rich_name}",
-        gradient_stops=stops,
-        logo_stops=(dark_rgb, (12, 74, 110), (88, 28, 135)),
+        accent_name="black",
+        accent="bold black",
+        accent_rgb=(0, 0, 0),
+        primary=g["primary"],
+        secondary=g["secondary"],
+        muted=g["muted"],
+        faint=g["faint"],
+        success="bold black",
+        warning="bold grey15",
+        danger="bold black reverse",
+        info="black",
+        border=g["border"],
+        border_soft=g["border_soft"],
+        panel=g["panel"],
+        surface=g["surface"],
+        highlight="bold white on black",
+        selection=g["selection"],
+        key=g["key"],
+        link="underline black",
+        gradient_stops=((0, 0, 0), (110, 110, 110), (0, 0, 0)),
+        logo_stops=((0, 0, 0), (90, 90, 90), (0, 0, 0)),
     )
 
 
-def _build_neon(accent: str) -> Theme:
-    _, rgb = resolve_accent(accent)
-    neon_pink: RGB = (255, 42, 194)
-    neon_cyan: RGB = (0, 246, 255)
-    neon_lime: RGB = (170, 255, 0)
-    stops = (neon_cyan, neon_pink, neon_lime)
-    if accent.lower() not in ("cyan", ""):
-        stops = (rgb, neon_pink, neon_cyan)
+def _build_mono(accent: str = "white") -> Theme:
+    """Monochrome: no grey filler at all — pure black and white.
+
+    Only for terminals that render bold/reverse well; the structure comes from
+    borders and spacing, and nothing is dimmed into unreadability.
+    """
     return Theme(
-        name="neon",
-        accent_name=accent,
-        accent=f"#{rgb[0]:02x}{rgb[1]:02x}{rgb[2]:02x}",
-        accent_rgb=rgb,
+        name="mono",
+        accent_name="white",
+        accent="bold bright_white",
+        accent_rgb=(255, 255, 255),
         primary="bold bright_white",
         secondary="bright_white",
-        muted="medium_purple2",
-        faint="grey42",
-        success="bold spring_green1",
-        warning="bold yellow1",
-        danger="bold bright_red",
-        info=f"bold #{rgb[0]:02x}{rgb[1]:02x}{rgb[2]:02x}",
-        border="medium_purple3",
-        border_soft="grey27",
-        panel="on grey3",
-        surface="on grey11",
+        muted="white",
+        faint="grey70",
+        success="bold bright_white",
+        warning="bright_white",
+        danger="bold bright_white reverse",
+        info="bright_white",
+        border="white",
+        border_soft="grey42",
+        panel="",
+        surface="",
         highlight="bold black on bright_white",
-        selection="bold bright_white on dark_magenta",
-        key="bold bright_black on medium_purple3",
-        link=f"underline #{neon_cyan[0]:02x}{neon_cyan[1]:02x}{neon_cyan[2]:02x}",
-        gradient_stops=stops,
-        logo_stops=(neon_cyan, neon_pink, neon_lime),
+        selection="reverse",
+        key="bold reverse",
+        link="underline bright_white",
+        gradient_stops=((255, 255, 255), (255, 255, 255)),
+        logo_stops=((255, 255, 255), (255, 255, 255)),
     )
 
 
-_BUILDERS = {"dark": _build_dark, "light": _build_light, "neon": _build_neon}
+_BUILDERS = {"dark": _build_dark, "light": _build_light, "mono": _build_mono}
 
 
-def build_theme(name: str = "dark", accent: str = "cyan") -> Theme:
+def build_theme(name: str = "dark", accent: str = "white") -> Theme:
     builder = _BUILDERS.get((name or "dark").lower(), _build_dark)
-    return builder(accent or "cyan")
+    return builder(accent or "white")
 
 
 def cycle_theme(current: str) -> str:
@@ -296,7 +316,7 @@ def load_theme(cfg, state=None) -> Theme:  # noqa: ANN001 - avoids circular impo
     name = (getattr(cfg, "theme", "") or "").strip() or (getattr(state, "theme", "") if state else "")
     if not name:
         name = default_theme_name()
-    accent = getattr(cfg, "accent", "cyan")
+    accent = getattr(cfg, "accent", "white")
     return build_theme(name, accent)
 
 

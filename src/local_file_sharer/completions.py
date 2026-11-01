@@ -12,7 +12,7 @@ from . import APP_NAME
 SUBCOMMANDS = {
     "doctor": "check dependencies, firewall and network",
     "config": "show / init / get / set / edit the configuration",
-    "theme": "switch between dark, light and neon",
+    "theme": "switch between dark, light and mono",
     "completions": "print a shell completion script",
     "banner": "preview the animated banner",
     "menu": "open the interactive menu (default)",
@@ -37,7 +37,7 @@ FLAGS = [
     (None, "--open", "open the share in your browser"),
     (None, "--no-qr", "do not print the QR code"),
     (None, "--no-copy", "do not copy links to the clipboard"),
-    (None, "--theme", "dark | light | neon"),
+    (None, "--theme", "dark | light | mono"),
     (None, "--no-anim", "disable the animated banner"),
     (None, "--icons", "emoji icons in the picker"),
     (None, "--no-icons", "plain names in the picker"),
@@ -79,11 +79,11 @@ _{func}() {{
 
     case "$prev" in
         --mode|-m)  COMPREPLY=( $(compgen -W "download serve stream torrent" -- "$cur") ); return 0 ;;
-        --theme)    COMPREPLY=( $(compgen -W "dark light neon" -- "$cur") ); return 0 ;;
+        --theme)    COMPREPLY=( $(compgen -W "dark light mono" -- "$cur") ); return 0 ;;
         --port|-p)  COMPREPLY=(); return 0 ;;
         config)     COMPREPLY=( $(compgen -W "show init get set edit path reset" -- "$cur") ); return 0 ;;
         completions|completion) COMPREPLY=( $(compgen -W "fish bash powershell zsh" -- "$cur") ); return 0 ;;
-        theme)      COMPREPLY=( $(compgen -W "dark light neon list" -- "$cur") ); return 0 ;;
+        theme)      COMPREPLY=( $(compgen -W "dark light mono list" -- "$cur") ); return 0 ;;
     esac
 
     if [[ "$cur" == -* ]]; then
@@ -111,7 +111,7 @@ POWERSHELL = """\
 
 $script:LfsSubcommands = @({ps_subcommands})
 $script:LfsFlags = @({ps_flags})
-$script:LfsThemeValues = @('dark', 'light', 'neon')
+$script:LfsThemeValues = @('dark', 'light', 'mono')
 $script:LfsModes = @('download', 'serve', 'stream', 'torrent')
 
 Register-ArgumentCompleter -Native -CommandName @('start', 'local-file-sharer') -ScriptBlock {{
