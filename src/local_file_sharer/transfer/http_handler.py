@@ -371,6 +371,8 @@ class ShareRequestHandler(BaseHTTPRequestHandler):
                 self.handle_download(path[len("/download/") :].strip("/"))
             elif path.startswith("/zip/"):
                 self.serve_zip(item_id=path[len("/zip/") :].strip("/"))
+            elif path.startswith("/folder/"):
+                self.serve_folder_zip(path[len("/folder/") :].strip("/"))
             elif path.startswith("/raw/"):
                 self.serve_rel(path[len("/raw/") :])
             elif path == "/api/stats":
@@ -547,19 +549,10 @@ class ShareRequestHandler(BaseHTTPRequestHandler):
         if not template:
             self.send_error_page(HTTPStatus.INTERNAL_SERVER_ERROR, "UI assets are missing")
             return
-        files = self.ctx.manifest.iter_files()
-        cards = []
-        for entry in files:
-            cards.append(
-                f'<article class="card file" data-id="{entry.file_id}">'
-                f'<div class="card-icon">{_icon_for(entry)}</div>'
-                f'<div class="card-main"><h3 title="{html.escape(entry.rel)}">{html.escape(entry.rel.split("/")[-1])}</h3>'
-                f"<p>{entry.size_text} · {html.escape(kind_of(entry.path))}</p></div>"
-                f'<div class="card-actions">'
-                f'<a class="btn btn-ghost" href="/f/{entry.file_id}" download>Download</a>'
-                f'<a class="btn btn-ghost" href="/s/{entry.file_id}">Stream</a>'
-                f"</div></article>"
-            )
+        # Folder-first: a share of ~/Photos should show "Photos", not 400 JPEGs.
+        # Cards are grouped by the top-level name under the shared root, so each
+        # folder gets one entry with its own download button (a folder zip).
+        cards = _entry_cards(self.ctx.manifest)
         torrent = self.ctx.torrent
         torrent_links = ""
         if torrent is not None:
@@ -1077,6 +1070,35 @@ class ShareRequestHandler(BaseHTTPRequestHandler):
             track(entry.rel)
         self.redirect(f"/f/{file_id}")
 
+    def serve_folder_zip(self, rel: str) -> None:
+        """Download one folder inside a share as its own zip.
+
+        A share of ``~/Pictures`` is a single manifest item, so ``/zip/<id>``
+        returns the *whole* share. Clicking "Photos" on the page must not
+        download the 400 other files, so the folder is addressed by its path
+        relative to the shared root and zipped on its own.
+        """
+        wanted = urllib.parse.unquote(rel).strip("/")
+        if not wanted:
+            self.send_error_page(HTTPStatus.NOT_FOUND, "No folder named")
+            return
+        prefix = f"{wanted}/"
+        members = []
+        for f in self.ctx.manifest.iter_files():
+            inner = f.rel.split("/", 1)[-1] if "/" in f.rel else f.rel
+            if inner.startswith(prefix):
+                members.append((f, inner))
+        if not members:
+            self.send_error_page(HTTPStatus.NOT_FOUND, "That folder is not empty or not in this share")
+            return
+        # strip the folder's own name so the zip opens straight onto its contents
+        items = [
+            ZipItem(arcname=inner[len(prefix) :] or f.name, path=f.path, size=f.size, mtime=f.mtime)
+            for f, inner in members
+        ]
+        name = f"{wanted.split('/')[-1]}.zip"
+        self._send_zip_stream(ZipStream(items, compression=1), name)
+
     def serve_zip(self, *, all_files: bool = False, item_id: str | None = None) -> None:
         if all_files:
             items = [
@@ -1094,11 +1116,13 @@ class ShareRequestHandler(BaseHTTPRequestHandler):
         if not items:
             self.send_error_page(HTTPStatus.NOT_FOUND, "Nothing to zip here")
             return
-        stream = ZipStream(items, compression=1)
+        self._send_zip_stream(ZipStream(items, compression=1), name)
+
+    def _send_zip_stream(self, stream: ZipStream, name: str) -> None:
         size = stream.total_size
         device = self.ctx.tracker.register_request(self.client_ip(), self.user_agent(), path=name)
         self.ctx.tracker.start_file(f"zip:{name}", name, size)
-        etag = f'"zip-{len(items)}-{size}"'
+        etag = f'"zip-{len(stream.items)}-{size}"'
         range_header = self.headers.get("Range")
         try:
             ranges = parse_range(range_header, size) if range_header else []
@@ -1236,6 +1260,67 @@ def _content_disposition(filename: str, *, inline: bool = False) -> str:
     kind = "inline" if inline else "attachment"
     ascii_name = re.sub(r"[^\x20-\x7e]", "_", filename).replace('"', "'")
     return f"{kind}; filename=\"{ascii_name}\"; filename*=UTF-8''{quoted}"
+
+
+def _top_level_group(entry: FileEntry) -> str:
+    """The sub-folder of the share a file sits in, or ``""`` for the root.
+
+    ``rel`` is the path inside the share and keeps the shared folder's name
+    (``Photos/2024/a.jpg``), so a file one level down is a loose file of the
+    share (``Photos/b.jpg``) while anything deeper belongs to the sub-folder
+    named by the second segment (``2024``).
+    """
+    parts = entry.rel.split("/")
+    return parts[1] if len(parts) > 2 else ""
+
+
+def _entry_cards(manifest) -> list[str]:  # noqa: ANN001 - Manifest, imported lazily
+    """One card per sub-folder of the share, then one card per file in it.
+
+    A share is usually one folder full of sub-folders, so its sub-folders are
+    what the page shows: each is a single card with a file count and a zip
+    button. Files sitting directly in the shared folder are listed one by one.
+    """
+    loose: list[FileEntry] = []
+    groups: dict[str, list[FileEntry]] = {}
+    for entry in manifest.iter_files():
+        group = _top_level_group(entry)
+        if group:
+            groups.setdefault(group, []).append(entry)
+        else:
+            loose.append(entry)
+
+    cards: list[str] = []
+    for name in sorted(groups, key=str.lower):
+        members = groups[name]
+        total = sum(entry.size for entry in members)
+        count = len(members)
+        label = f"{count} file{'' if count == 1 else 's'}"
+        cards.append(
+            f'<article class="card folder" data-kind="folder" data-name="{html.escape(name.lower())}">'
+            f'<div class="card-icon">📁</div>'
+            f'<div class="card-main"><h3 title="{html.escape(name)}">{html.escape(name)}</h3>'
+            f"<p>{label} · {human_size(total)}</p></div>"
+            f'<div class="card-actions">'
+            f'<a class="btn" href="/folder/{urllib.parse.quote(name)}" download>Download zip</a>'
+            f"</div></article>"
+        )
+    for entry in sorted(loose, key=lambda e: e.rel.lower()):
+        # the shared folder's own name is noise on every card; the rest is not
+        label = entry.rel.split("/", 1)[-1] if "/" in entry.rel else entry.name
+        cards.append(
+            f'<article class="card file" data-kind="file" data-id="{entry.file_id}" '
+            f'data-name="{html.escape(label.lower())}">'
+            f'<div class="card-icon">{_icon_for(entry)}</div>'
+            f'<div class="card-main"><h3 title="{html.escape(label)}">'
+            f"{html.escape(label)}</h3>"
+            f"<p>{entry.size_text} · {html.escape(kind_of(entry.path))}</p></div>"
+            f'<div class="card-actions">'
+            f'<a class="btn btn-ghost" href="/f/{entry.file_id}" download>Download</a>'
+            f'<a class="btn btn-ghost" href="/s/{entry.file_id}">Stream</a>'
+            f"</div></article>"
+        )
+    return cards
 
 
 def _icon_for(entry: FileEntry) -> str:

@@ -46,13 +46,53 @@ def test_health_and_disabled_caching(server):
     assert response.headers["Pragma"] == "no-cache"
 
 
-def test_index_page_lists_every_file(server):
+def test_index_page_shows_subfolders_as_folders(server):
+    """A shared folder's sub-folders are cards; their contents are not listed."""
     body = get(server, "/").read().decode()
-    assert body.count('class="card file"') == 5
-    assert "hello.txt" in body
-    assert "Download" in body
-    # the 16-connection button is present
-    assert "16 connections" in body
+    # photos/2024/ is the only sub-folder of the share
+    assert body.count('class="card folder"') == 1
+    assert 'href="/folder/2024"' in body
+    assert "1 file" in body
+    # files one level down are listed; files inside a sub-folder never are
+    assert "one.jpg" in body
+    assert "three.txt" not in body
+    # the shared folder's own name is not repeated on each card
+    assert "photos/one.jpg" not in body
+
+
+def test_a_share_of_many_folders_lists_each_one(share_tree, free_port):
+    """Sharing a parent folder lists its sub-folders, not every file inside."""
+    manifest = Manifest.build([share_tree])
+    srv = ShareServer(manifest, host="127.0.0.1", port=free_port)
+    srv.start()
+    try:
+        assert srv.wait_until_ready(timeout=5)
+        body = get(srv, "/").read().decode()
+    finally:
+        srv.stop()
+    assert 'href="/folder/photos"' in body
+    assert 'href="/folder/empty"' not in body  # nothing to download
+    assert body.count('class="card folder"') == 1
+    assert body.count('class="card file"') == 3  # hello.txt, data.bin, clip.mp4
+    for hidden in ("one.jpg", "two.png", "three.txt"):
+        assert hidden not in body
+
+
+def test_folder_zip_downloads_only_that_folder(server):
+    """Clicking a folder downloads that folder, not the whole share."""
+    response = get(server, "/folder/2024")
+    assert response.headers["Content-Type"] == "application/zip"
+    archive = zipfile.ZipFile(io.BytesIO(response.read()))
+    assert archive.testzip() is None
+    # rooted inside the folder, so it opens straight onto its contents
+    assert archive.namelist() == ["three.txt"]
+
+
+def test_folder_zip_rejects_unknown_and_empty(server):
+    for path, wanted in [("/folder/nope", 404), ("/folder/empty", 404), ("/folder/", 404)]:
+        with pytest.raises(urllib.error.HTTPError) as caught:
+            get(server, path)
+        assert caught.value.code == wanted
 
 
 def test_manifest_api(server):
