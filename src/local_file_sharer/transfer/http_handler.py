@@ -271,10 +271,14 @@ class ShareRequestHandler(BaseHTTPRequestHandler):
         body = body.replace("{{hint}}", html.escape(hint)).replace("{{brand}}", APP_NAME)
         self.send_text(status, body, content_type="text/html; charset=utf-8")
 
-    def send_html(self, body: str, *, status: int = 200) -> None:
+    def send_html(self, body: str, *, status: int = 200, retry_after: float | None = None) -> None:
         payload = body.encode("utf-8")
         self.send_response(status)
         self.send_common_headers(content_type="text/html; charset=utf-8", length=len(payload))
+        if retry_after is not None:
+            # RFC 6585: a 429 should say how long to wait. Browsers and scripts
+            # both use this, and without it the page is the only clue.
+            self.send_header("Retry-After", str(max(1, math.ceil(retry_after))))
         pending = getattr(self, "_pending_cookie", None)
         if pending:
             self.send_header(*pending)
@@ -429,6 +433,7 @@ class ShareRequestHandler(BaseHTTPRequestHandler):
             self.send_html(
                 self._login_page(wrong=bool(self._submitted_pin(query)), wait=wait),
                 status=HTTPStatus.TOO_MANY_REQUESTS,
+                retry_after=wait,
             )
             return False
         header_pin = self.headers.get("X-LFS-PIN", "")

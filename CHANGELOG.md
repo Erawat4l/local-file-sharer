@@ -21,6 +21,8 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   `/download/`. `base_url` is normalised where it is set and where it is used.
 - **Tracker**: announcing to a server that has a torrent but no registry
   answered `404 tracker disabled`; the registry is now created on demand.
+- **429 responses** now carry `Retry-After` (RFC 6585), so a script can wait
+  the right amount instead of retrying blind.
 - **PIN lockout bypass**: `client_ip()` trusted `X-Forwarded-For` from anyone,
   and the lockout is keyed on that value — so a LAN client could send a
   different fake address with every request and guess the PIN forever. The

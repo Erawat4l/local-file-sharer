@@ -404,6 +404,9 @@ def test_lockout_page_explains_the_wait_even_for_a_correct_pin(share_tree, free_
         with pytest.raises(urllib.error.HTTPError) as excinfo:
             get(server, "/?pin=4242")
         assert excinfo.value.code == 429
+        # RFC 6585: say how long to wait, so a script (or a person) need not guess.
+        assert excinfo.value.headers["Retry-After"].isdigit()
+        assert int(excinfo.value.headers["Retry-After"]) >= 1
         body = excinfo.value.read()
         assert b"Too many attempts" in body
         # It must not claim the PIN was wrong when nobody submitted one.
