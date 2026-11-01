@@ -23,6 +23,7 @@ import base64
 import hashlib
 import hmac
 import html
+import ipaddress
 import json
 import math
 import mimetypes
@@ -33,7 +34,7 @@ import threading
 import time
 import urllib.parse
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from http import HTTPStatus
 from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler
@@ -84,6 +85,12 @@ class ShareContext:
     tracker_registry: object | None = None  # TrackerRegistry for /announce
     torrent_stats: object | None = None  # SeedStats for the dashboard
 
+    #: Per-share lockout state. Keeping this on the context rather than at
+    #: module level means one share's attackers cannot lock the user out of a
+    #: different share started later in the same process.
+    _attempts: dict[str, int] = field(default_factory=dict, repr=False)
+    _locked_until: dict[str, float] = field(default_factory=dict, repr=False)
+
     def __post_init__(self) -> None:
         if not self.started_at:
             self.started_at = time.time()
@@ -103,37 +110,41 @@ class ShareContext:
     def note_failure(self, client: str) -> None:
         """Count a wrong PIN; only lock out after :data:`FREE_PIN_ATTEMPTS`."""
         with _ATTEMPT_LOCK:
-            attempts = _FAILED_ATTEMPTS.get(client, 0) + 1
-            _FAILED_ATTEMPTS[client] = attempts
+            attempts = self._attempts.get(client, 0) + 1
+            self._attempts[client] = attempts
             if attempts < FREE_PIN_ATTEMPTS:
                 # A typo must never block the right PIN: the next attempt is free.
-                _LOCKED_UNTIL.pop(client, None)
+                self._locked_until.pop(client, None)
                 return
             over = attempts - FREE_PIN_ATTEMPTS + 1
-            _LOCKED_UNTIL[client] = time.time() + min(MAX_PIN_LOCKOUT, 2.0 * over)
+            self._locked_until[client] = time.time() + min(MAX_PIN_LOCKOUT, 2.0 * over)
 
     def note_success(self, client: str) -> None:
         with _ATTEMPT_LOCK:
-            _FAILED_ATTEMPTS.pop(client, None)
-            _LOCKED_UNTIL.pop(client, None)
+            self._attempts.pop(client, None)
+            self._locked_until.pop(client, None)
 
     def locked_for(self, client: str) -> float:
         """Seconds the client must still wait after too many wrong PINs."""
         with _ATTEMPT_LOCK:
-            until = _LOCKED_UNTIL.get(client, 0.0)
+            until = self._locked_until.get(client, 0.0)
         return max(0.0, until - time.time())
 
 
 _EPHEMERAL_TOKENS: dict[str, float] = {}
-#: Per-client failed PIN attempts → exponential-ish lockouts (in-process only).
-_FAILED_ATTEMPTS: dict[str, int] = {}
-_LOCKED_UNTIL: dict[str, float] = {}
 #: Wrong PINs allowed before the client has to wait. One typo is not an attack,
 #: and locking out the fifth person to mistype their own PIN is user-hostile.
 FREE_PIN_ATTEMPTS = 5
 #: Longest any client is made to wait, in seconds.
 MAX_PIN_LOCKOUT = 60.0
 _ATTEMPT_LOCK = threading.Lock()
+
+
+def _is_loopback(address: str) -> bool:
+    try:
+        return ipaddress.ip_address(address).is_loopback
+    except ValueError:
+        return False
 
 
 def _etag_for(stat: os.stat_result, path: Path) -> str:
@@ -200,10 +211,18 @@ class ShareRequestHandler(BaseHTTPRequestHandler):
         return self.context
 
     def client_ip(self) -> str:
+        """The address used for the PIN lockout, so it must not be client-chosen.
+
+        ``X-Forwarded-For`` is only meaningful when a reverse proxy sets it. A
+        remote client sending it directly could hand us a fresh address per
+        request and guess the PIN forever, so the header is honoured only when
+        the connection itself comes from loopback (i.e. a proxy on this machine).
+        """
+        peer = self.client_address[0] if self.client_address else "?"
         forwarded = self.headers.get("X-Forwarded-For", "")
-        if forwarded:
+        if forwarded and _is_loopback(peer):
             return forwarded.split(",")[0].strip()
-        return self.client_address[0] if self.client_address else "?"
+        return peer
 
     def user_agent(self) -> str:
         return self.headers.get("User-Agent", "")

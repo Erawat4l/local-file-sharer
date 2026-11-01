@@ -17,7 +17,6 @@ from pathlib import Path
 
 import pytest
 
-from local_file_sharer.transfer import http_handler
 from local_file_sharer.transfer.manifest import Manifest
 from local_file_sharer.transfer.server import ShareServer
 
@@ -32,15 +31,6 @@ def tree(tmp_path: Path) -> Path:
     # 5860 * 256 = 1_500_160; slice it so the size is exactly BIG.
     (root / "photo.jpg").write_bytes((bytes(range(256)) * (BIG // 256 + 1))[:BIG])
     return root
-
-
-@pytest.fixture(autouse=True)
-def _clean_throttle():
-    http_handler._FAILED_ATTEMPTS.clear()
-    http_handler._LOCKED_UNTIL.clear()
-    yield
-    http_handler._FAILED_ATTEMPTS.clear()
-    http_handler._LOCKED_UNTIL.clear()
 
 
 @pytest.fixture

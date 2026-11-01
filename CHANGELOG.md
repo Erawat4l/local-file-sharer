@@ -21,6 +21,14 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   `/download/`. `base_url` is normalised where it is set and where it is used.
 - **Tracker**: announcing to a server that has a torrent but no registry
   answered `404 tracker disabled`; the registry is now created on demand.
+- **PIN lockout bypass**: `client_ip()` trusted `X-Forwarded-For` from anyone,
+  and the lockout is keyed on that value — so a LAN client could send a
+  different fake address with every request and guess the PIN forever. The
+  header is now honoured only when the connection itself comes from loopback
+  (i.e. a reverse proxy on the same machine).
+- **PIN lockout leaked between shares**: the attempt counters were module-level,
+  so failing five times on one share locked the same client out of a *different*
+  share started later in the same process. They live on the share now.
 - **Tracker**: `event=stopped` was ignored, so a client that quit kept being
   handed to other peers for the full three-minute peer timeout, and the swarm
   counts stayed inflated. A stop now removes the peer immediately.

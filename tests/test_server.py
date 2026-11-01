@@ -274,10 +274,6 @@ def test_stream_mode_redirects_to_player(share_tree, free_port):
 
 def test_pin_brute_force_is_throttled(share_tree, free_port):
     """Wrong PINs must not be free: after a few failures the client is locked out."""
-    from local_file_sharer.transfer.http_handler import _FAILED_ATTEMPTS, _LOCKED_UNTIL
-
-    _FAILED_ATTEMPTS.clear()
-    _LOCKED_UNTIL.clear()
     manifest = Manifest.build([share_tree / "hello.txt"])
     server = ShareServer(manifest, host="127.0.0.1", port=free_port, pin="4242")
     server.start()
@@ -291,13 +287,11 @@ def test_pin_brute_force_is_throttled(share_tree, free_port):
         assert excinfo.value.code == 429
         assert b"Too many attempts" in excinfo.value.read()
         context = server.context
-        client = next(iter(_LOCKED_UNTIL))
+        client = next(iter(context._locked_until))
         context.note_success(client)
         assert context.locked_for(client) == 0
         assert b"hello.txt" in get(server, "/?pin=4242").read()
     finally:
-        for mapping in (_FAILED_ATTEMPTS, _LOCKED_UNTIL):
-            mapping.clear()
         server.stop()
 
 
@@ -376,10 +370,6 @@ def test_head_request_matches_get(server):
 
 def test_one_wrong_pin_does_not_lock_the_right_one(share_tree, free_port):
     """A mistyped PIN must not make the correct PIN look broken."""
-    from local_file_sharer.transfer.http_handler import _FAILED_ATTEMPTS, _LOCKED_UNTIL
-
-    _FAILED_ATTEMPTS.clear()
-    _LOCKED_UNTIL.clear()
     manifest = Manifest.build([share_tree / "hello.txt"])
     server = ShareServer(manifest, host="127.0.0.1", port=free_port, pin="4242")
     server.start()
@@ -395,17 +385,13 @@ def test_one_wrong_pin_does_not_lock_the_right_one(share_tree, free_port):
         # ...and the very next attempt with the right PIN succeeds, immediately.
         assert b"hello.txt" in get(server, "/?pin=4242").read()
     finally:
-        for mapping in (_FAILED_ATTEMPTS, _LOCKED_UNTIL):
-            mapping.clear()
         server.stop()
 
 
 def test_lockout_page_explains_the_wait_even_for_a_correct_pin(share_tree, free_port):
     """During a lockout the page must say so — never a bare 'wrong PIN'."""
-    from local_file_sharer.transfer.http_handler import _FAILED_ATTEMPTS, _LOCKED_UNTIL, FREE_PIN_ATTEMPTS
+    from local_file_sharer.transfer.http_handler import FREE_PIN_ATTEMPTS
 
-    _FAILED_ATTEMPTS.clear()
-    _LOCKED_UNTIL.clear()
     manifest = Manifest.build([share_tree / "hello.txt"])
     server = ShareServer(manifest, host="127.0.0.1", port=free_port, pin="4242")
     server.start()
@@ -423,17 +409,11 @@ def test_lockout_page_explains_the_wait_even_for_a_correct_pin(share_tree, free_
         # It must not claim the PIN was wrong when nobody submitted one.
         assert b"Wrong PIN" not in body
     finally:
-        for mapping in (_FAILED_ATTEMPTS, _LOCKED_UNTIL):
-            mapping.clear()
         server.stop()
 
 
 def test_login_form_post_sets_the_cookie_on_the_redirect(share_tree, free_port):
     """The browser posts the PIN, gets a 302 to '/', and must already be logged in."""
-    from local_file_sharer.transfer.http_handler import _FAILED_ATTEMPTS, _LOCKED_UNTIL
-
-    _FAILED_ATTEMPTS.clear()
-    _LOCKED_UNTIL.clear()
     manifest = Manifest.build([share_tree / "hello.txt"])
     server = ShareServer(manifest, host="127.0.0.1", port=free_port, pin="4242")
     server.start()
@@ -455,17 +435,11 @@ def test_login_form_post_sets_the_cookie_on_the_redirect(share_tree, free_port):
             assert b"hello.txt" in response.read()
         assert [c.name for c in jar if c.name == "lfs_auth"] == ["lfs_auth"]
     finally:
-        for mapping in (_FAILED_ATTEMPTS, _LOCKED_UNTIL):
-            mapping.clear()
         server.stop()
 
 
 def test_cookie_survives_a_manual_redirect_hop(share_tree, free_port):
     """Same thing without urllib's redirect handling, so the header itself is checked."""
-    from local_file_sharer.transfer.http_handler import _FAILED_ATTEMPTS, _LOCKED_UNTIL
-
-    _FAILED_ATTEMPTS.clear()
-    _LOCKED_UNTIL.clear()
     manifest = Manifest.build([share_tree / "hello.txt"])
     server = ShareServer(manifest, host="127.0.0.1", port=free_port, pin="4242")
     server.start()
@@ -484,11 +458,66 @@ def test_cookie_survives_a_manual_redirect_hop(share_tree, free_port):
         assert excinfo.value.code in (302, 303)
         assert "lfs_auth=" in (excinfo.value.headers.get("Set-Cookie") or "")
     finally:
-        for mapping in (_FAILED_ATTEMPTS, _LOCKED_UNTIL):
-            mapping.clear()
         server.stop()
 
 
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, *args, **kwargs):  # noqa: ANN002, ANN003, D102
         return None
+
+
+def test_client_ip_only_trusts_x_forwarded_for_from_loopback():
+    """A client must not be able to pick its own lockout identity.
+
+    `X-Forwarded-For` is only meaningful when a proxy sets it. A LAN client
+    sending it directly used to hand the server a fresh address per request and
+    so reset its PIN budget forever.
+    """
+    from local_file_sharer.transfer.http_handler import ShareRequestHandler, _is_loopback
+
+    assert _is_loopback("127.0.0.1") is True
+    assert _is_loopback("::1") is True
+    assert _is_loopback("192.168.1.42") is False
+    assert _is_loopback("garbage") is False
+
+    def ip_of(peer: str, forwarded: str) -> str:
+        fake = object.__new__(ShareRequestHandler)
+        fake.client_address = (peer, 50000)
+        fake.headers = {"X-Forwarded-For": forwarded} if forwarded else {}
+        return ShareRequestHandler.client_ip(fake)
+
+    # A remote client claiming to be someone else is not believed.
+    assert ip_of("192.168.1.42", "10.9.9.9") == "192.168.1.42"
+    # A real local proxy is believed, because that is the only way it can work.
+    assert ip_of("127.0.0.1", "203.0.113.7, 10.0.0.1") == "203.0.113.7"
+    # No header at all: always the peer address.
+    assert ip_of("192.168.1.42", "") == "192.168.1.42"
+
+
+def test_two_shares_in_one_process_do_not_share_a_lockout(share_tree, free_port):
+    """Attacking one share must not lock the user out of the next one."""
+    first = ShareServer(
+        Manifest.build([share_tree / "hello.txt"]), host="127.0.0.1", port=free_port, pin="4242"
+    )
+    first.start()
+    try:
+        assert first.wait_until_ready(timeout=5)
+        for _ in range(6):
+            with pytest.raises(urllib.error.HTTPError):
+                get(first, "/?pin=0000")
+        with pytest.raises(urllib.error.HTTPError) as excinfo:
+            get(first, "/?pin=4242")
+        assert excinfo.value.code == 429
+    finally:
+        first.stop()
+
+    second = ShareServer(
+        Manifest.build([share_tree / "hello.txt"]), host="127.0.0.1", port=free_port + 1, pin="9999"
+    )
+    second.start()
+    try:
+        assert second.wait_until_ready(timeout=5)
+        assert second.context.locked_for("127.0.0.1") == 0
+        assert b"hello.txt" in get(second, "/?pin=9999").read()
+    finally:
+        second.stop()
