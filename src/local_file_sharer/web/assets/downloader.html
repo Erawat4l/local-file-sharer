@@ -153,16 +153,19 @@
         if (start > end) break;
         parts.push({ start, end });
       }
-      const blob = new Blob(new Array(parts.length));
-      for (const [i, p] of parts.entries()) {
+      // Fire every range at once: `await` inside the loop would serialise the
+      // 16 connections into one, which defeats the whole point.
+      const blob = new Array(parts.length);
+      let done = 0;
+      await Promise.all(parts.map(async (p, i) => {
         const r = await fetch(file.url, { headers: { Range: `bytes=${p.start}-${p.end}` }, cache: 'no-store' });
-        const buf = await r.arrayBuffer();
-        blob[i] = buf;
-        const pct = ((i + 1) / parts.length) * 100;
-        $('progress-bar').style.width = pct.toFixed(1) + '%';
-        $('progress-text').textContent = `${file.name} · part ${i + 1}/${parts.length}`;
-      }
-      const url = URL.createObjectURL(blob);
+        if (!r.ok && r.status !== 206) throw new Error('range failed: ' + r.status);
+        blob[i] = await r.arrayBuffer();
+        done += 1;
+        $('progress-bar').style.width = (done / parts.length * 100).toFixed(1) + '%';
+        $('progress-text').textContent = `${file.name} · part ${done}/${parts.length}`;
+      }));
+      const url = URL.createObjectURL(new Blob(blob));
       const a = document.createElement('a');
       a.href = url; a.download = file.name; document.body.appendChild(a); a.click(); a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 30000);

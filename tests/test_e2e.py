@@ -268,3 +268,47 @@ def test_tracker_is_created_if_a_torrent_is_served_without_one(server, tree):
     assert payload.startswith(b"d"), payload[:40]
     assert b"interval" in payload
     assert server.context.tracker_registry is not None
+
+
+def test_parallel_range_download_reassembles(server, tree):
+    """The web UI's 16-connection button: many ranges, reassembled in order."""
+    entry = next(f for f in manifest_of(server)["files"] if f["name"] == "photo.jpg")
+    url = f"http://127.0.0.1:{server.port}/download/{entry['id']}"
+    total = entry["bytes"]
+
+    parts = []
+    chunk = -(-total // 16)  # ceil, same as the JS
+    for index in range(16):
+        start = index * chunk
+        stop = min(total - 1, start + chunk - 1)
+        if start > stop:
+            break
+        request = urllib.request.Request(url, headers={"Range": f"bytes={start}-{stop}"})
+        with urllib.request.urlopen(request, timeout=10) as response:
+            assert response.status == 206
+            assert response.headers["Content-Range"] == f"bytes {start}-{stop}/{total}"
+            parts.append(response.read())
+
+    joined = b"".join(parts)
+    assert len(joined) == total
+    assert hashlib.sha256(joined).hexdigest() == hashlib.sha256((tree / "photo.jpg").read_bytes()).hexdigest()
+
+
+def test_downloader_js_fires_its_ranges_concurrently():
+    """A refactor that puts `await` back inside the loop silently serialises it."""
+    source = Path(__file__).resolve().parents[1] / "src/local_file_sharer/web/assets/downloader.html"
+    if not source.is_file():
+        pytest.skip("web assets not present")
+    script = source.read_text(encoding="utf-8")
+
+    function = script[script.index("async function downloadParallel") :]
+    function = function[: function.index("$('download-all')")]
+
+    assert "Promise.all(parts.map(" in function, "ranges must be requested concurrently"
+    # The fetch belongs *inside* the Promise.all callback. A `for … of` loop
+    # with a bare `await` is exactly what used to serialise the 16 requests.
+    before_parallel, _, after_parallel = function.partition("Promise.all(parts.map(")
+    assert "await fetch(file.url, { headers: { Range" not in before_parallel, (
+        "a bare await before Promise.all serialises the ranges"
+    )
+    assert "await fetch(file.url, { headers: { Range" in after_parallel

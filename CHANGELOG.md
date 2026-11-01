@@ -21,6 +21,10 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   `/download/`. `base_url` is normalised where it is set and where it is used.
 - **Tracker**: announcing to a server that has a torrent but no registry
   answered `404 tracker disabled`; the registry is now created on demand.
+- **Web downloader**: the "16 connections" button awaited each `Range` request
+  in a `for` loop, so it was 16 *sequential* requests wearing a parallel label.
+  They now go out together via `Promise.all`, verified against a live server
+  (16 in flight, byte-identical reassembly).
 - **Python 3.9/3.10**: `config.py` imported `tomllib` unconditionally, so the
   package raised `ModuleNotFoundError` at import time on every version the wheel
   claims to support. It now falls back to `tomli` (a marker-guarded dependency),
