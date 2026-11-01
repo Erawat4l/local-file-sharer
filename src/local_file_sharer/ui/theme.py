@@ -301,6 +301,6 @@ def load_theme(cfg, state=None) -> Theme:  # noqa: ANN001 - avoids circular impo
 
 
 def preview_styles(theme: Theme) -> Iterable[tuple[str, str]]:
-    """Small palette listing used by ``start theme --list``."""
+    """Small palette listing used by ``lfs theme --list``."""
     for role in ("primary", "secondary", "muted", "accent", "success", "warning", "danger", "info"):
         yield role, theme.style(role)

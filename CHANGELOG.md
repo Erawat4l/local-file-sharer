@@ -53,7 +53,7 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   ~/.config/local-file-sharer/config.toml" — but nothing had been written, so the
   file was the one place the problem was *not*. A bad argument now says so and
   points at `config show`; a genuinely broken file still points at the file.
-- **`start … --json` now keeps stdout clean**: the banner and the "share ready"
+- **`lfs … --json` now keeps stdout clean**: the banner and the "share ready"
   panel went to stdout alongside the final JSON object, so `--json | jq` failed
   on the first box-drawing character. Human output moves to stderr in JSON mode;
   stdout is exactly one object. Non-JSON output is unchanged.
@@ -157,7 +157,7 @@ The first stable release: one command, four share modes, a real transfer engine.
 ### Added
 
 **Sharing**
-- `start` — one command that opens the interactive menu, or shares the paths you
+- `lfs` — one command that opens the interactive menu, or shares the paths you
   pass on the command line.
 - Four modes: **download** (forced + resumable, folders auto-zipped), **serve**
   (web file browser), **stream** (media player with seeking) and **torrent**
@@ -186,13 +186,13 @@ The first stable release: one command, four share modes, a real transfer engine.
 - Animated gradient banner with three themes (**dark**, **light**, **neon**).
 - Live transfer dashboard: speed, ETA, per-file progress, connected devices,
   total sent — redrawn in place, never clearing the screen.
-- `start doctor` — dependencies, tools, sendfile, buffers, LAN/public IP,
+- `lfs doctor` — dependencies, tools, sendfile, buffers, LAN/public IP,
   firewall, tunnels, config, clipboard, with friendly fixes instead of
   tracebacks. `--json` for CI.
-- `start config show|init|path|get|set|reset` (TOML, env overrides,
+- `lfs config show|init|path|get|set|reset` (TOML, env overrides,
   `config.local.toml` for secrets).
-- `start theme`, `start completions fish|bash|powershell|zsh`, `start banner`,
-  `start --update`, `start version/help`.
+- `lfs theme`, `lfs completions fish|bash|powershell|zsh`, `lfs banner`,
+  `lfs --update`, `lfs version/help`.
 
 **Network**
 - LAN/Wi-Fi address detection with interface *kinds*, preferring Wi-Fi over
@@ -206,9 +206,9 @@ The first stable release: one command, four share modes, a real transfer engine.
   system; cache disabled (`no-store`), no CDN, works fully offline.
 
 **Packaging & docs**
-- `pip`/`pipx` install with a `start` console script (`local-file-sharer` alias).
+- `pip`/`pipx` install with a `lfs` console script (`local-file-sharer` alias).
 - `install.sh` (Termux/Linux/macOS) and `install.ps1` (Windows) with fish
-  integration, plus `shell/windows/share.cmd` because `start` is a shell built-in.
+  integration, plus `shell/windows/share.cmd` because `lfs` is a shell built-in.
 - GitHub Actions: ruff, pytest on Linux/Windows across Python 3.9–3.13, and
   tagged releases that attach a standalone Windows `.exe`.
 - README with screenshots, feature table and troubleshooting; CONTRIBUTING,

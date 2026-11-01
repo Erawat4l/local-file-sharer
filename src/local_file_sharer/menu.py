@@ -1,4 +1,4 @@
-"""The interactive main menu — what ``start`` shows on a bare terminal.
+"""The interactive main menu — what ``lfs`` shows on a bare terminal.
 
 A single screen: header with network status, the mode selector, quick actions
 for recent files and favourite folders, and shortcuts for theme/doctor/config.
@@ -134,7 +134,7 @@ def render_menu(ctx: MenuContext) -> Group:
     blocks.append(Text(""))
     blocks.append(
         Text(
-            " pick a mode, then choose files · `start <path>` skips the menu · `start doctor` checks your setup",
+            " pick a mode, then choose files · `lfs <path>` skips the menu · `lfs doctor` checks your setup",
             style=theme.faint,
         )
     )
@@ -331,7 +331,7 @@ def run_menu(*, config: Config, state: State, animate: bool = True, initial_mode
     if state.first_run():
         con.print(
             Text(
-                " first run! try `start doctor` to check your setup, or press 1 to pick files.",
+                " first run! try `lfs doctor` to check your setup, or press 1 to pick files.",
                 style=theme.info,
             )
         )

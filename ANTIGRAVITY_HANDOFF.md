@@ -8,7 +8,7 @@ has shell access to this Termux device.
 ## MISSION
 
 Take over a real, working Python project on this machine: resolve a command-name
-collision so that `start` runs **this** project, verify the install, then continue
+collision so that `lfs` runs **this** project, verify the install, then continue
 development on a git branch.
 
 Work on **Termux (Android)**, Python **3.14**, repo already installed once via pip.
@@ -26,7 +26,7 @@ done and tested; this task is environment repair plus a verified dev setup.
   became silent NUL bytes"*
 - **Package name:** `local-file-sharer` · **version** `1.0.0` ·
   **requires-python** `>=3.9` (correct as of HEAD)
-- **Console script:** `start = local_file_sharer.cli:main`
+- **Console script:** `lfs = local_file_sharer.cli:main`
 - **Module entry point:** `python -m local_file_sharer` (works, and is
   collision-proof)
 - **Core dependencies:** `rich>=13.7`, `qrcode>=7.4`, `tomli` on Python < 3.11
@@ -34,7 +34,7 @@ done and tested; this task is environment repair plus a verified dev setup.
 - **Dev extra:** `.[dev]` → `pytest`, `pytest-cov`, `ruff`
 
 ### What the app is
-A LAN file sharer. `start <path>` serves files from that path over HTTP with a
+A LAN file sharer. `lfs <path>` serves files from that path over HTTP with a
 browser UI: resumable downloads, `Range`/multi-range, folder-as-streaming-ZIP,
 optional PIN gate with brute-force lockout, optional browser uploads back to the
 host, expiry, a media player mode, a folder browser mode, and a torrent mode with
@@ -47,22 +47,22 @@ a built-in HTTP tracker + webseed. QR code is rendered server-side.
 `pip install` **succeeded**. The pip log resolved the git branch to commit
 `244b037` and printed `Successfully installed local-file-sharer-1.0.0`.
 
-But running `start` launched a **different program** — a third-party banner
+But running `lfs` launched a **different program** — a third-party banner
 reading *"⚡ ANTIGRAVITY HIGH-SPEED TERMUX FILE SHARER"* with a file picker rooted
 at `/sdcard/Download`.
 
-So: **`start` is shadowed.** Another function/script/package already owns that
+So: **`lfs` is shadowed.** Another function/script/package already owns that
 name, and it wins on `PATH` (or is a shell function/alias, which beats `PATH`
-entirely). Our installed `start` script exists but is not what runs.
+entirely). Our installed `lfs` script exists but is not what runs.
 
 ### Whatever you do, note these facts before changing anything
-1. The thing currently called `start` is **not** part of this repo. Do **not**
+1. The thing currently called `lfs` is **not** part of this repo. Do **not**
    delete files belonging to it until you have recorded exactly what it is.
 2. `python -m local_file_sharer` already works and is not affected by the
    collision. Every setup problem is solvable without breaking that:
    it must keep working after you finish.
 3. `shell/fish/start.fish` in the repo is **a fish shell function that also
-   defines `start`**. If the user's fish config sources it, that is a second
+   defines `lfs`**. If the user's fish config sources it, that is a second
    collision source, and it will shadow the console script.
    Check for it explicitly.
 
@@ -105,8 +105,8 @@ PY
 ```
 
 **Report to me:** which of these is true —
-(a) a shell function/alias named `start`,
-(b) a second executable named `start` earlier on `PATH`,
+(a) a shell function/alias named `lfs`,
+(b) a second executable named `lfs` earlier on `PATH`,
 (c) both,
 (d) something else (paste `type start`).
 Also say whether the shadowing program is a separate pip package
@@ -136,24 +136,24 @@ cd ~/local-file-sharer            # wherever you clone it, see step 3
 python -m pip install --user -e ".[dev]"
 ```
 
-Result: `lfs /sdcard/Download` runs this project, while leaving whatever `start`
+Result: `lfs /sdcard/Download` runs this project, while leaving whatever `lfs`
 currently is untouched. **Verify it with step 4 before doing anything else.**
 
-> Update the docs when you do this: `README.md` mentions `start …` in ~47 places
-> and `shell/` contains completions. Add `lfs` alongside; do not rip out `start`,
-> because on Linux/Windows `start` is the documented name.
+> Update the docs when you do this: `README.md` mentions `lfs …` in ~47 places
+> and `shell/` contains completions. Add `lfs` alongside; do not rip out `lfs`,
+> because on Linux/Windows `lfs` is the documented name.
 
-### Second choice: reclaim `start`, but only if the owner is identified
-If step 1 shows the shadowing `start` came from an **Antigravity package or a
+### Second choice: reclaim `lfs`, but only if the owner is identified
+If step 1 shows the shadowing `lfs` came from an **Antigravity package or a
 stray script that the user says is expendable**, remove *only* that, then confirm
-`start` resolves to the console script from `sysconfig.get_path('scripts')`.
+`lfs` resolves to the console script from `sysconfig.get_path('scripts')`.
 
 Do **not** blindly `rm` anything on `PATH` before the diagnosis in step 1, and do
 not `pip uninstall` a package you have not identified.
 
 ### Never do this
 - Do not uninstall/rename `local-file-sharer` — it is the working project.
-- Do not copy a script over an existing `start` binary that you have not
+- Do not copy a script over an existing `lfs` binary that you have not
   identified.
 - Do not modify `PATH` in a way that hides other tools.
 
@@ -255,7 +255,7 @@ project to make a test pass — the suite is known-green at HEAD `244b037`.
 ## DELIVERABLES FROM THIS TASK
 
 Report back with:
-1. The origin of the shadowing `start` (step 1 output).
+1. The origin of the shadowing `lfs` (step 1 output).
 2. Which fix you applied and the exact files you changed.
 3. Output of all four verifications from step 4.
 4. The final command the user should type to share a folder.

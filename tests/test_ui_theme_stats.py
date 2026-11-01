@@ -6,7 +6,8 @@ import io
 import time
 
 import pytest
-from rich.console import Console
+from rich.console import Console, Group
+from rich.text import Text
 
 from local_file_sharer.errors import ConfigError, PickerError, ShareError
 from local_file_sharer.fmt import strip_ansi
@@ -93,7 +94,7 @@ def test_banner_wordmark_shape():
 def test_banner_does_not_crash_without_tty():
     out = render(banner.banner_renderable(build_theme("dark")))
     assert "LFS" in out or "█" in out
-    assert "local-file-sharer" in out
+    assert "LOCAL FILE SHARER" in out
 
 
 def test_banner_static_and_animate_are_safe(capsys):
@@ -327,3 +328,44 @@ def test_qr_svg_is_well_formed_and_escapes_its_input():
     root = ET.fromstring(svg)  # raises if the markup is broken
     assert root.tag.endswith("svg")
     assert "<script>" not in svg, "the payload must be encoded as modules, never emitted as markup"
+
+
+# ── narrow terminals (a phone is not a desktop) ──────────────────────────────
+@pytest.mark.parametrize("columns", [20, 28, 38, 41, 46, 80])
+def test_panels_fit_a_narrow_terminal(monkeypatch, columns):
+    """A Termux session is ~40 columns; shrink-wrapped panels wrapped mid-word."""
+    from local_file_sharer.ui import console as console_mod
+
+    monkeypatch.setattr(console_mod, "screen_width", lambda default=100: columns)
+    body = [("mode", "⬇️ Download"), ("files", "1 file · 1 folder")]
+    buffer = io.StringIO()
+    Console(file=buffer, width=columns, force_terminal=False, no_color=True).print(
+        console_mod.panel(Group(*[Text(f"{k:>8}  {v}") for k, v in body]), title="share ready")
+    )
+    for line in buffer.getvalue().splitlines():
+        assert len(line) <= columns, f"{len(line)} cols in a {columns}-col terminal: {line!r}"
+
+
+@pytest.mark.parametrize("width", [24, 34, 41, 60])
+def test_commands_wrap_on_argument_boundaries(width):
+    """Never split a flag: a line starting `- -O` is not the command it appears to be."""
+    from local_file_sharer.ui.console import wrap_command
+
+    command = "curl -L --fail --progress-bar -C - -O http://192.168.1.42:8080/download/all.zip"
+    lines = wrap_command(command, width=width)
+    assert len(lines) > 1, "this command cannot fit, so it must wrap"
+    for line in lines:
+        # A single argument longer than the width (the URL) cannot be split on a
+        # space; everything else must fit. Rich soft-wraps the URL itself.
+        word_max = max(len(word) for word in command.split(" ")) + 3
+        assert len(line) <= max(width, word_max), f"{line!r} is {len(line)} cols, limit {width}"
+    # Continuation lines are marked, and joining them back restores the command.
+    assert all(line.rstrip().endswith("\\") for line in lines[:-1])
+    rebuilt = " ".join(line.strip().removesuffix("\\").strip() for line in lines)
+    assert rebuilt == command
+
+
+def test_wrap_command_leaves_a_short_command_alone():
+    from local_file_sharer.ui.console import wrap_command
+
+    assert wrap_command("lfs doctor", width=80) == ["   lfs doctor"]

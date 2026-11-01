@@ -6,7 +6,7 @@
 
 **Share files between your devices at maximum speed — straight from your terminal.**
 
-One command (`start`), an interactive menu, a QR code, and a real HTTP engine that
+One command (`lfs`), an interactive menu, a QR code, and a real HTTP engine that
 saturates your Wi-Fi. Works on **Termux/Android**, **Linux**, **macOS** and **Windows**.
 
 [![Python](https://img.shields.io/badge/python-3.9%2B-3776ab?logo=python&logoColor=white)](https://www.python.org/)
@@ -78,7 +78,7 @@ on a 2-vCPU container, so they measure the engine, not the network):
 | Wire format | every response carries `Accept-Ranges: bytes`, `Content-Length` and a stable `ETag` |
 
 On real Wi-Fi the link is the limit, not the code: the engine keeps a 4 MiB
-in-flight window per connection and `start doctor` reports whether the zero-copy
+in-flight window per connection and `lfs doctor` reports whether the zero-copy
 path is active on your machine.
 
 ---
@@ -113,8 +113,8 @@ scrollback, and a live dashboard with speed, ETA, progress, devices and total se
 | **Convenience** | fuzzy picker, recent files, favourite folders, one-key clipboard copy of links and one-liners |
 | **Safety** | optional PIN/password, auto-expiring links, upload toggle, gitignored per-machine secrets |
 | **Settings** | `~/.config/local-file-sharer/config.toml` (`%APPDATA%` on Windows) with env overrides |
-| **Maintenance** | `start doctor`, `start --update`, friendly errors with fixes instead of tracebacks |
-| **Shells** | completions for **fish**, **bash**, **PowerShell** and **zsh**; `start` function for fish incl. Windows |
+| **Maintenance** | `lfs doctor`, `lfs --update`, friendly errors with fixes instead of tracebacks |
+| **Shells** | completions for **fish**, **bash**, **PowerShell** and **zsh**; `lfs` function for fish incl. Windows |
 
 ---
 
@@ -164,7 +164,7 @@ The PowerShell installer:
 2. installs with `pipx` (preferred) or `pip --user`,
 3. wires the **fish** function at `%APPDATA%\fish\functions\start.fish`,
 4. installs **`share.cmd`** as the fallback for `cmd.exe`/PowerShell, where
-   `start` is a built-in and cannot be replaced,
+   `lfs` is a built-in and cannot be replaced,
 5. registers PowerShell tab completion.
 
 ```text
@@ -174,7 +174,7 @@ PowerShell:  share   or   local-file-sharer
 ```
 
 There is also a **standalone `local-file-sharer.exe`** attached to every tagged
-release — no Python required. `start --update` swaps it for you when running the
+release — no Python required. `lfs --update` swaps it for you when running the
 frozen build.
 
 ### From source
@@ -184,7 +184,7 @@ git clone https://github.com/Erawat4l/local-file-sharer.git
 cd local-file-sharer
 python3 -m venv .venv && . .venv/bin/activate
 pip install -e ".[dev]"
-start --help
+lfs --help
 ```
 
 ---
@@ -195,11 +195,11 @@ start --help
 start                          # interactive menu
 start ~/Movies                 # share a folder in download mode
 start film.mkv episode.mp4     # share several files
-start --mode stream ~/Videos   # pick media, open the player
-start --mode torrent ~/Photos  # .torrent + magnet + tracker + webseed
-start doctor                   # check tools, firewall, network
-start config show              # effective configuration
-start --update                 # self-update from GitHub
+lfs --mode stream ~/Videos   # pick media, open the player
+lfs --mode torrent ~/Photos  # .torrent + magnet + tracker + webseed
+lfs doctor                   # check tools, firewall, network
+lfs config show              # effective configuration
+lfs --update                 # self-update from GitHub
 ```
 
 <div align="center"><img src="docs/assets/cli-menu.png" width="100%" alt="interactive menu"></div>
@@ -240,10 +240,10 @@ status** — and folders are analysed as you select them.
 
 | Mode | Command | What the other device gets |
 |---|---|---|
-| **Download** | `start --mode download <paths>` | One landing page with every file, a "download all" button using 16 parallel range requests, and a resumable `.zip` for folders |
-| **Serve** | `start --mode serve <folder>` | A web file browser (search, multi-select, breadcrumbs, download folder as zip) |
-| **Stream** | `start --mode stream <media>` | A media player page with seeking, playback speed, playlist and keyboard control |
-| **Torrent** | `start --mode torrent <paths>` | A real `.torrent` + `magnet:` link, a **built-in HTTP tracker** and an **HTTP webseed** so pieces come straight from this machine |
+| **Download** | `lfs --mode download <paths>` | One landing page with every file, a "download all" button using 16 parallel range requests, and a resumable `.zip` for folders |
+| **Serve** | `lfs --mode serve <folder>` | A web file browser (search, multi-select, breadcrumbs, download folder as zip) |
+| **Stream** | `lfs --mode stream <media>` | A media player page with seeking, playback speed, playlist and keyboard control |
+| **Torrent** | `lfs --mode torrent <paths>` | A real `.torrent` + `magnet:` link, a **built-in HTTP tracker** and an **HTTP webseed** so pieces come straight from this machine |
 
 All modes support the PIN gate, expiry and (optionally) uploads back to you.
 
@@ -251,7 +251,7 @@ With `--upload`, the browser gets a drop zone: anything dropped there is written
 **into the folder you shared**, under its plain filename (path separators are
 stripped, and an existing name is suffixed rather than overwritten). The listing
 you can see was built when the share started, so refresh it — or look in the
-folder — to see what arrived. `start doctor` reports whether uploads are on.
+folder — to see what arrived. `lfs doctor` reports whether uploads are on.
 
 Each of those four paths runs against a real server on a real socket in
 `tests/test_e2e.py` — the login `POST` and its cookie, `/api/manifest`, a
@@ -268,7 +268,7 @@ has been run against the tracker yet (see the roadmap).
 
 ## Network outputs
 
-`start` publishes, in order of usefulness:
+`lfs` publishes, in order of usefulness:
 
 1. **Direct LAN/Wi-Fi** — the primary link, the QR code and every one-liner.
    Detected without third-party packages: Wi-Fi interfaces win over Ethernet,
@@ -280,16 +280,16 @@ has been run against the tracker yet (see the roadmap).
    with an explicit **slow-speed warning** (1–8 MB/s, relayed through the edge).
 
 ```bash
-start --tailscale            # yes to Tailscale, no question asked
-start --no-tailscale --cloudflare
-start --funnel --expire 30   # public via tailscale funnel, expires in 30 min
+lfs --tailscale            # yes to Tailscale, no question asked
+lfs --no-tailscale --cloudflare
+lfs --funnel --expire 30   # public via tailscale funnel, expires in 30 min
 ```
 
 ---
 
 ## One-liners for every device
 
-`start` prints and copies these automatically (clipboard support: `pbcopy`,
+`lfs` prints and copies these automatically (clipboard support: `pbcopy`,
 `wl-copy`, `xclip`, `xsel`, `termux-clipboard-set`, `clip.exe`):
 
 ```bash
@@ -310,7 +310,7 @@ re-prints the QR, `q` stops the share.
 
 ## Configuration
 
-`start config init` writes `~/.config/local-file-sharer/config.toml`
+`lfs config init` writes `~/.config/local-file-sharer/config.toml`
 (`%APPDATA%\local-file-sharer\config.toml` on Windows):
 
 ```toml
@@ -357,10 +357,10 @@ Layered, in increasing priority:
 (`LOCAL_FILE_SHARER_NETWORK__PORT=9000`) → 5. CLI flags.
 
 ```bash
-start config show | init | path | reset
-start config get network.port
-start config set network.port 9000
-start config set share.pin 1234
+lfs config show | init | path | reset
+lfs config get network.port
+lfs config set network.port 9000
+lfs config set share.pin 1234
 ```
 
 > **Never commit secrets.** `config.local.toml`, `.env*`, keys and runtime state
@@ -381,14 +381,14 @@ start [paths ...] [options]          share now (no paths → interactive menu)
   --theme {dark,light,neon}  --no-anim          --icons | --no-icons
   --interface IFACE          --no-dashboard     --json        --debug
 
-start menu                       open the menu explicitly
-start doctor [--json] [--fast]   diagnostics
-start config  show|init|path|get|set|reset
-start theme   dark|light|neon|next|list [--preview]
-start completions fish|bash|powershell|zsh
-start banner  [--loop]           preview the animated banner
-start version | help
-start --update | --check-update
+lfs menu                       open the menu explicitly
+lfs doctor [--json] [--fast]   diagnostics
+lfs config  show|init|path|get|set|reset
+lfs theme   dark|light|neon|next|list [--preview]
+lfs completions fish|bash|powershell|zsh
+lfs banner  [--loop]           preview the animated banner
+lfs version | help
+lfs --update | --check-update
 ```
 
 ---
@@ -396,7 +396,7 @@ start --update | --check-update
 ## Diagnostics
 
 ```text
-$ start doctor
+$ lfs doctor
  LFS  doctor                                     local-file-sharer 1.0.0 · Ubuntu 24.04
 
     RUNTIME
@@ -416,7 +416,7 @@ $ start doctor
  health 100%  ·  0 blocking issue(s), 0 warning(s)
 ```
 
-`start doctor` checks Python and dependencies, optional tools (`tailscale`,
+`lfs doctor` checks Python and dependencies, optional tools (`tailscale`,
 `cloudflared`, `aria2c`, `zip`, `curl`, `wget`, `ffmpeg`), the zero-copy path,
 socket buffers, disk space, LAN addresses, the public IP, the bind port,
 firewall commands for your OS, Tailscale/Cloudflare readiness, your config
@@ -427,17 +427,17 @@ files and the clipboard. `--json` gives machine-readable output for CI.
 ## Shell integration & completions
 
 ```bash
-start completions fish        > ~/.config/fish/completions/start.fish
-start completions bash        > ~/.local/share/bash-completion/completions/start
-start completions powershell  # dot-source from $PROFILE (install.ps1 does it)
-start completions zsh         > ~/.zfunc/_start
+lfs completions fish        > ~/.config/fish/completions/start.fish
+lfs completions bash        > ~/.local/share/bash-completion/completions/start
+lfs completions powershell  # dot-source from $PROFILE (install.ps1 does it)
+lfs completions zsh         > ~/.zfunc/_start
 ```
 
 `install.sh` also drops [`shell/fish/start.fish`](shell/fish/start.fish) into
-`~/.config/fish/functions/`, so typing `start` always means *local-file-sharer*
+`~/.config/fish/functions/`, so typing `lfs` always means *local-file-sharer*
 in fish, with `share` and `lfs` as aliases.
 
-On Windows, `start` stays a built-in in `cmd.exe` and PowerShell — that is why
+On Windows, `lfs` stays a built-in in `cmd.exe` and PowerShell — that is why
 [`shell/windows/share.cmd`](shell/windows/share.cmd) exists as the fallback and
 why the fish function is installed separately.
 
@@ -469,7 +469,7 @@ why the fish function is installed separately.
 <summary><b>The other device cannot connect</b></summary>
 
 1. Are both devices on the **same Wi-Fi**? (Guest networks and AP isolation block it.)
-2. Run `start doctor` and check the *bind port* row.
+2. Run `lfs doctor` and check the *bind port* row.
 3. Open the port in your firewall:
 
 ```bash
@@ -497,9 +497,9 @@ Use direct Wi-Fi for LAN transfers, or Tailscale for a VPN link instead.
 </details>
 
 <details>
-<summary><b>`start` opens a new window on Windows</b></summary>
+<summary><b>`lfs` opens a new window on Windows</b></summary>
 
-`start` is a `cmd.exe`/PowerShell built-in. In fish, the installed function
+`lfs` is a `cmd.exe`/PowerShell built-in. In fish, the installed function
 takes precedence. In cmd/PowerShell use `share` (installed by `install.ps1`), or
 call `local-file-sharer` directly.
 </details>
@@ -514,7 +514,7 @@ lossless — download the file and play it locally. `ffmpeg` converts on the hos
 <details>
 <summary><b>Port already in use</b></summary>
 
-`start --port 9000`, or `start config set network.port 9000`. `start` will
+`lfs --port 9000`, or `lfs config set network.port 9000`. `lfs` will
 auto-increment from the configured port when it is busy.
 </details>
 
@@ -522,7 +522,7 @@ auto-increment from the configured port when it is busy.
 <summary><b>Anything else</b></summary>
 
 Run it again with `--debug` for a traceback, or
-[open an issue](../../issues/new/choose) with the `start doctor --json` output.
+[open an issue](../../issues/new/choose) with the `lfs doctor --json` output.
 </details>
 
 ---
@@ -549,7 +549,7 @@ Vote with a 👍 on an issue, or open a PR — see [CONTRIBUTING.md](CONTRIBUTIN
 ```text
 local-file-sharer/
 ├── src/local_file_sharer/
-│   ├── cli.py               argparse + dispatch (the `start` command)
+│   ├── cli.py               argparse + dispatch (the `lfs` command)
 │   ├── menu.py              interactive main menu
 │   ├── picker.py            file picker model (listing, fuzzy, selection)
 │   ├── share.py             orchestrator: pick → prepare → publish → wait
@@ -558,7 +558,7 @@ local-file-sharer/
 │   ├── platforms.py         OS matrix: sendfile, drives, tools, clipboard
 │   ├── network.py           LAN/public IP, Tailscale, Cloudflare, firewall
 │   ├── doctor.py            diagnostics
-│   ├── updater.py           `start --update` from GitHub releases
+│   ├── updater.py           `lfs --update` from GitHub releases
 │   ├── completions.py       fish/bash/PowerShell/zsh scripts
 │   ├── qr.py                terminal + SVG + PNG QR rendering
 │   ├── transfer/

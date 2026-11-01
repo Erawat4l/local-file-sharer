@@ -60,8 +60,8 @@ _human_to_stderr = False
 def human_output_to_stderr(enabled: bool = True) -> None:
     """Send panels, banners and progress to stderr, keeping stdout clean.
 
-    ``start --json`` prints one JSON object on stdout; without this the banner
-    and the "share ready" panel land there too, and `start … --json | jq` fails
+    ``lfs --json`` prints one JSON object on stdout; without this the banner
+    and the "share ready" panel land there too, and `lfs … --json | jq` fails
     on the first box-drawing character.
     """
     global _console, _human_to_stderr
@@ -114,13 +114,28 @@ def current_theme() -> Theme:
     return _theme or Theme()
 
 
+#: Below this, box-drawing layouts stop being readable; prose is used instead.
+NARROW_WIDTH = 46
+
+
 def screen_width(default: int = 100) -> int:
-    """Usable terminal width, clamped to something sane for narrow phones."""
+    """The real terminal width, never a pretend one.
+
+    This used to floor at 40, which is wrong on a phone: a 41-column Termux
+    session got panels laid out for 40 columns plus their border and padding,
+    so every line wrapped mid-word and the layout looked shattered.
+    """
     try:
         width = console().width
     except Exception:  # noqa: BLE001 - never fail on size probing
         width = default
-    return max(40, min(width, 200))
+    if not width or width < 10:  # detached from a terminal
+        width = default
+    return min(width, 200)
+
+
+def is_narrow() -> bool:
+    return screen_width() < NARROW_WIDTH
 
 
 def screen_height(default: int = 30) -> int:
@@ -158,7 +173,14 @@ def danger(text: str) -> Text:
 
 
 def panel(body, *, title: str | Text | None = None, border: str | None = None, theme: Theme | None = None):
+    """A bordered panel that fits the terminal instead of sizing to its content.
+
+    ``expand=False`` made every panel shrink-wrap, which is what pushed long
+    one-liner commands past the right edge on a phone. A width of at most the
+    screen minus the two border columns keeps the box inside the window.
+    """
     theme = theme or current_theme()
+    width = max(20, screen_width() - 1)
     return Panel(
         body,
         title=title,
@@ -166,7 +188,33 @@ def panel(body, *, title: str | Text | None = None, border: str | None = None, t
         title_align="left",
         padding=(0, 1),
         expand=False,
+        width=width,
     )
+
+
+def wrap_command(command: str, *, indent: str = "   ", width: int | None = None) -> list[str]:
+    """Split a shell command for display without breaking arguments mid-token.
+
+    A phone-width panel cannot hold ``curl -L --fail --progress-bar -C - -O
+    http://…`` on one line, and hard-wrapping it produced ``-C`` / ``- -O`` on
+    separate lines — text that looks like a command but is not one. Break on
+    spaces only, and mark the continuation with a backslash so it stays clear
+    that the command continues.
+    """
+    limit = max(20, (width or screen_width()) - len(indent) - 3)
+    words = command.split(" ")
+    lines: list[str] = []
+    current = ""
+    for word in words:
+        candidate = f"{current} {word}".strip()
+        if current and len(candidate) > limit:
+            lines.append(current + " \\")
+            current = word
+        else:
+            current = candidate
+    if current:
+        lines.append(current)
+    return [indent + line for line in lines]
 
 
 def print_line(text: str | Text = "", **kwargs) -> None:

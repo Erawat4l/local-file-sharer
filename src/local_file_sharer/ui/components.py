@@ -240,16 +240,16 @@ HELP_PICKER = """[bold]File picker keys[/]
 """
 
 HELP_MAIN = (
-    """[bold]local-file-sharer[/]
+    """[bold]LOCAL FILE SHARER[/]
 
   [cyan]start[/]                 open the interactive menu
-  [cyan]start <path>[/]          share a file or folder right away
-  [cyan]start --mode stream[/]   open the media player for the selection
-  [cyan]start doctor[/]          check tools, firewall and network
-  [cyan]start config show[/]     print the effective configuration
-  [cyan]start theme neon[/]      switch theme (dark / light / neon)
-  [cyan]start completions bash[/] print a shell completion script
-  [cyan]start --update[/]        self-update from GitHub
+  [cyan]lfs <path>[/]          share a file or folder right away
+  [cyan]lfs --mode stream[/]   open the media player for the selection
+  [cyan]lfs doctor[/]          check tools, firewall and network
+  [cyan]lfs config show[/]     print the effective configuration
+  [cyan]lfs theme neon[/]      switch theme (dark / light / neon)
+  [cyan]lfs completions bash[/] print a shell completion script
+  [cyan]lfs --update[/]        self-update from GitHub
 
 See the README for the full reference: """
     + REPO_URL

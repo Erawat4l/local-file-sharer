@@ -51,7 +51,7 @@ from .transfer.torrent import (
 )
 from .ui import banner
 from .ui.components import error_panel, info_panel, mode_badge
-from .ui.console import console, current_theme, panel, screen_width
+from .ui.console import console, current_theme, panel, screen_width, wrap_command
 from .ui.dashboard import Dashboard, DashboardOptions, render_summary
 
 MODES = ("download", "serve", "stream", "torrent")
@@ -106,7 +106,7 @@ def prepare_manifest(paths: Sequence[Path], *, mode: str, expire_minutes: int, t
             hints=[
                 "Pick at least one file or folder",
                 "Paths are case-sensitive on Linux/Termux",
-                "Use `start /sdcard/Download` to share a folder directly",
+                "Use `lfs /sdcard/Download` to share a folder directly",
             ],
         )
     expires_at = time.time() + expire_minutes * 60 if expire_minutes > 0 else None
@@ -227,7 +227,7 @@ class ShareRunner:
                 f"The server started on port {self.server.port} but is not answering",
                 hints=[
                     "Another program may be intercepting the port — pass `--port 9000`",
-                    "Run `start doctor` to check the firewall and local connectivity",
+                    "Run `lfs doctor` to check the firewall and local connectivity",
                 ],
             )
 
@@ -464,8 +464,10 @@ class ShareRunner:
         rows: list[Text] = []
         for command in commands:
             rows.append(Text(f" {command.label}", style=theme.muted))
-            for line in command.command.splitlines():
-                rows.append(Text(f"   {line}", style=theme.secondary))
+            for raw in command.command.splitlines():
+                # Wrap on argument boundaries so a copied line never splits a flag.
+                for line in wrap_command(raw):
+                    rows.append(Text(line, style=theme.secondary))
         con.print(panel(Group(*rows), title="copy-paste one-liners (LAN)", border=theme.border))
 
     def _show_torrent(self, torrent: TorrentBuild) -> None:

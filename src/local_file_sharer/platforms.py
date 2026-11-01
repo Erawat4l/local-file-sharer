@@ -585,7 +585,7 @@ TOOL_INSTALL_HINTS: dict[str, dict[str, str]] = {
     "zip": {
         "termux": "pkg install zip unzip",
         "linux": "sudo apt install zip unzip",
-        "windows": "built in (Compress-Archive) or run `start doctor`",
+        "windows": "built in (Compress-Archive) or run `lfs doctor`",
     },
     "curl": {
         "termux": "pkg install curl",

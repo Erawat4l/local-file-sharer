@@ -137,7 +137,7 @@ class ShareServer:
                 hints=[
                     "Another program is using that port — pass `--port 9000`",
                     "Windows: allow Python through Defender Firewall when prompted",
-                    "Try `start doctor` to see which ports are free",
+                    "Try `lfs doctor` to see which ports are free",
                 ],
                 detail=str(last_error) if last_error else None,
             )

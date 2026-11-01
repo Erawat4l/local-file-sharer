@@ -350,7 +350,7 @@ class ShareRequestHandler(BaseHTTPRequestHandler):
                 self.send_error_page(
                     HTTPStatus.GONE,
                     "This share link has expired",
-                    hint="Ask the sender for a fresh link — start again with `start`.",
+                    hint="Ask the sender for a fresh link — start again with `lfs`.",
                 )
                 return
             if not self._check_auth(path, query):

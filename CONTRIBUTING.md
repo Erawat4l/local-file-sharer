@@ -34,7 +34,7 @@ pytest -q                       # full suite, no network needed (~10 s)
 pytest -q --cov=local_file_sharer
 ruff check src tests
 ruff format src tests
-start --help                    # the CLI you just installed
+lfs --help                    # the CLI you just installed
 ```
 
 ---
@@ -44,7 +44,7 @@ start --help                    # the CLI you just installed
 - **Good first issues** are labelled
   [`good first issue`](../../labels/good%20first%20issue).
 - **Bugs**: please include the exact command, your OS/terminal, the
-  `start doctor --json` output and (if it crashed) `--debug` traceback.
+  `lfs doctor --json` output and (if it crashed) `--debug` traceback.
 - **Features**: open an issue first so we can agree on the scope. The roadmap in
   the README lists things we already intend to build.
 
@@ -54,7 +54,7 @@ start --help                    # the CLI you just installed
 
 ```text
 src/local_file_sharer/
-├── cli.py            argument parsing + dispatch (entry point for `start`)
+├── cli.py            argument parsing + dispatch (entry point for `lfs`)
 ├── menu.py           the interactive menu
 ├── picker.py         picker model: listing, fuzzy matching, selection, sizes
 ├── share.py          orchestration: prepare → start server → publish → wait
@@ -63,7 +63,7 @@ src/local_file_sharer/
 ├── platforms.py      per-OS behaviour (sendfile, drives, tools, clipboard)
 ├── network.py        LAN/public IP, Tailscale, Cloudflare, firewall hints
 ├── doctor.py         diagnostics + renderable report
-├── updater.py        `start --update` from GitHub releases
+├── updater.py        `lfs --update` from GitHub releases
 ├── completions.py    fish / bash / PowerShell / zsh scripts
 ├── qr.py             terminal, SVG and PNG QR output
 ├── transfer/         manifest, HTTP handler, server, zipstream, torrent, stats

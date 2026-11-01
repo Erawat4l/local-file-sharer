@@ -1,15 +1,15 @@
-"""Command line entry point: the ``start`` command.
+"""Command line entry point: the ``lfs`` command.
 
 ```
 start                      interactive menu
-start <path> [...]         share files/folders right away
-start --mode stream        pick media and open the player
-start --mode torrent       build a .torrent + magnet with a built-in tracker
-start doctor               diagnostics
-start config show|init|…
-start theme dark|light|neon
-start completions fish|bash|powershell
-start --update             self-update from GitHub
+lfs <path> [...]         share files/folders right away
+lfs --mode stream        pick media and open the player
+lfs --mode torrent       build a .torrent + magnet with a built-in tracker
+lfs doctor               diagnostics
+lfs config show|init|…
+lfs theme dark|light|neon
+lfs completions fish|bash|powershell
+lfs --update             self-update from GitHub
 ```
 
 Design rules
@@ -105,17 +105,17 @@ def add_common_flags(parser: argparse.ArgumentParser) -> None:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="start",
+        prog="lfs",
         description=f"{APP_NAME} — {APP_TAGLINE}",
         epilog=(
             "commands:\n"
-            "  start                     open the interactive menu\n"
-            "  start <path> [...]        share files/folders right away\n"
-            "  start doctor              check dependencies, firewall and network\n"
-            "  start config show         print the effective configuration\n"
-            "  start theme neon          switch theme (dark / light / neon)\n"
-            "  start completions fish    print a shell completion script\n"
-            "  start --update            self-update from GitHub\n"
+            "  lfs                     open the interactive menu\n"
+            "  lfs <path> [...]        share files/folders right away\n"
+            "  lfs doctor              check dependencies, firewall and network\n"
+            "  lfs config show         print the effective configuration\n"
+            "  lfs theme neon          switch theme (dark / light / neon)\n"
+            "  lfs completions fish    print a shell completion script\n"
+            "  lfs --update            self-update from GitHub\n"
             f"\nmore: {REPO_URL}"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -135,17 +135,17 @@ def build_command_parsers() -> dict[str, argparse.ArgumentParser]:
     add_common_flags(common)
 
     parsers["menu"] = argparse.ArgumentParser(
-        prog="start menu", parents=[common], description="open the interactive menu"
+        prog="lfs menu", parents=[common], description="open the interactive menu"
     )
 
     doctor = argparse.ArgumentParser(
-        prog="start doctor", parents=[common], description="check dependencies, firewall and network"
+        prog="lfs doctor", parents=[common], description="check dependencies, firewall and network"
     )
     doctor.add_argument("--fast", action="store_true", help="skip tool and network probes")
     parsers["doctor"] = doctor
 
     config = argparse.ArgumentParser(
-        prog="start config", parents=[common], description="manage the configuration file"
+        prog="lfs config", parents=[common], description="manage the configuration file"
     )
     config_sub = config.add_subparsers(dest="config_action", metavar="action")
     config_sub.add_parser("show", help="print the effective configuration")
@@ -161,30 +161,30 @@ def build_command_parsers() -> dict[str, argparse.ArgumentParser]:
     parsers["config"] = config
 
     theme = argparse.ArgumentParser(
-        prog="start theme", parents=[common], description="switch or preview the colour theme"
+        prog="lfs theme", parents=[common], description="switch or preview the colour theme"
     )
     theme.add_argument("name", nargs="?", choices=("dark", "light", "neon", "list", "next"), default=None)
     theme.add_argument("--preview", action="store_true", help="show a colour preview")
     parsers["theme"] = theme
 
     completions = argparse.ArgumentParser(
-        prog="start completions", parents=[common], description="print a shell completion script"
+        prog="lfs completions", parents=[common], description="print a shell completion script"
     )
     completions.add_argument("shell", nargs="?", choices=_SHELLS, default=None)
     parsers["completions"] = completions
     parsers["completion"] = completions
 
     banner = argparse.ArgumentParser(
-        prog="start banner", parents=[common], description="preview the animated banner"
+        prog="lfs banner", parents=[common], description="preview the animated banner"
     )
     banner.add_argument("--loop", action="store_true", help="loop until Ctrl+C")
     parsers["banner"] = banner
 
     parsers["version"] = argparse.ArgumentParser(
-        prog="start version", parents=[common], description="print the version"
+        prog="lfs version", parents=[common], description="print the version"
     )
     parsers["help"] = argparse.ArgumentParser(
-        prog="start help", parents=[common], description="show the main help"
+        prog="lfs help", parents=[common], description="show the main help"
     )
     return parsers
 
@@ -196,9 +196,9 @@ _VALUE_OPTIONS = {"-p", "--port", "-m", "--mode", "--theme", "--expire", "--inte
 def split_argv(argv: list[str]) -> tuple[str | None, list[str]]:
     """Return ``(subcommand, remaining)`` when a bare word names a subcommand.
 
-    ``start --port 9000 theme neon`` → ``("theme", ["--port", "9000", "neon"])``.
+    ``lfs --port 9000 theme neon`` → ``("theme", ["--port", "9000", "neon"])``.
     Anything that looks like a path stops the scan, so
-    ``start ./doctor`` still shares a file called *doctor*.
+    ``lfs ./doctor`` still shares a file called *doctor*.
     """
     skip_next = False
     for index, token in enumerate(argv):

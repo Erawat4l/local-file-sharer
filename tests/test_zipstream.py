@@ -145,4 +145,4 @@ def test_a_file_deleted_after_the_stream_starts_shows_a_notice(tmp_path):
     payload = archive.read("s/doomed.bin")
     assert len(payload) == 2000, "the advertised size is kept"
     assert payload != bytes(len(payload)), "all-zero content would look like a real file"
-    assert payload.startswith(b"local-file-sharer:"), "say what happened, in the file itself"
+    assert payload.startswith(b"LOCAL FILE SHARER:"), "say what happened, in the file itself"

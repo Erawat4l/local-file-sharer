@@ -16,7 +16,7 @@ Use GitHub's private vulnerability reporting:
 Include:
 
 - what you found and why it matters,
-- the exact version (`start version`) and platform,
+- the exact version (`lfs version`) and platform,
 - reproduction steps or a proof of concept,
 - any mitigation you already know of.
 
@@ -69,9 +69,9 @@ Out of scope:
 ## Hardening checklist for users
 
 ```bash
-start --pin 4821 --expire 30 --no-upload    # untrusted networks
-start --tailscale                           # never expose the port publicly
-start doctor                                # confirm what is listening where
+lfs --pin 4821 --expire 30 --no-upload    # untrusted networks
+lfs --tailscale                           # never expose the port publicly
+lfs doctor                                # confirm what is listening where
 ```
 
 Run the share with the least privileged account that can read the files, and

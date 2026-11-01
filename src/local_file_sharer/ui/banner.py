@@ -18,7 +18,7 @@ from rich.console import Group, RenderableType
 from rich.live import Live
 from rich.text import Text
 
-from .. import APP_TAGLINE, __version__, platforms
+from .. import APP_NAME, APP_TAGLINE, __version__, platforms
 from . import console as console_mod
 from .theme import Theme, gradient_rgb, rgb_to_style
 
@@ -87,7 +87,7 @@ def logo(theme: Theme, *, offset: float = 0.0) -> Text:
 
 
 def subtitle(theme: Theme, *, offset: float = 0.0) -> Text:
-    text = f"local-file-sharer v{__version__}  ·  {APP_TAGLINE}"
+    text = f"{APP_NAME} v{__version__}  ·  {APP_TAGLINE}"
     return gradient_text(text, theme, offset=offset, bold=False)
 
 
@@ -98,7 +98,7 @@ def banner_renderable(
     badge: bool = True,
     width: int | None = None,
 ) -> RenderableType:
-    """Just the logo + subtitle (used by `start banner` and the header)."""
+    """Just the logo + subtitle (used by `lfs banner` and the header)."""
     parts: list[RenderableType] = [logo(theme, offset=offset), Text(""), subtitle(theme, offset=offset)]
     if badge:
         chip = Text()
@@ -192,7 +192,7 @@ def mini_header(theme: Theme, *, mode: str = "", detail: str = "") -> Text:
     """One-line header used above menus so the screen never scrolls away."""
     text = Text()
     text.append(" LFS ", style=f"bold black on {theme.accent}")
-    text.append(" local-file-sharer ", style=theme.muted)
+    text.append(f" {APP_NAME} ", style=theme.muted)
     if mode:
         text.append(f"› {mode} ", style=f"bold {theme.accent}")
     if detail:

@@ -161,7 +161,7 @@ def test_404_page_is_friendly(server):
         get(server, "/nope")
     assert excinfo.value.code == 404
     body = excinfo.value.read().decode()
-    assert "local-file-sharer" in body
+    assert "LOCAL FILE SHARER" in body
 
 
 def test_path_traversal_blocked(server):

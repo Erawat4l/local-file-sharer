@@ -54,12 +54,12 @@ class NetworkError(SharerError):
 
 class ToolMissingError(SharerError):
     title = "Optional tool not found"
-    default_hint = "Run `start doctor` to see what is installed and how to install it."
+    default_hint = "Run `lfs doctor` to see what is installed and how to install it."
 
 
 class ShareError(SharerError):
     title = "Share failed"
-    default_hint = "Try a different port with `--port`, or re-run `start doctor`."
+    default_hint = "Try a different port with `--port`, or re-run `lfs doctor`."
 
 
 class PickerError(SharerError):

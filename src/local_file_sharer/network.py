@@ -9,7 +9,7 @@ Provides the *network outputs* the UI shows, in priority order:
 4. **Cloudflare Tunnel** — quick tunnel generation with a slow-speed warning.
 
 Nothing here raises for a missing tool or an offline machine: the UI degrades
-with hints instead, which keeps ``start doctor`` honest.
+with hints instead, which keeps ``lfs doctor`` honest.
 """
 
 from __future__ import annotations

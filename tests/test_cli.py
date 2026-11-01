@@ -20,8 +20,8 @@ def test_version_command(capsys):
 def test_help_command(capsys):
     assert main(["help"]) == 0
     out = capsys.readouterr().out
-    assert "local-file-sharer" in out
-    assert "start doctor" in out
+    assert "LOCAL FILE SHARER" in out
+    assert "lfs doctor" in out
 
 
 def test_split_argv_detects_subcommands():
@@ -142,7 +142,7 @@ def test_update_check_handles_offline(capsys, monkeypatch):
 
 
 def test_doctor_json_contract(capsys):
-    """`start doctor --json` is what issue reports and CI consume."""
+    """`lfs doctor --json` is what issue reports and CI consume."""
     payload = json.loads(_run_json(["doctor", "--json", "--fast"]))
     assert set(payload) >= {"checks", "health", "healthy", "blocking", "warnings", "fixes"}
     assert isinstance(payload["checks"], list) and payload["checks"]
@@ -168,7 +168,7 @@ def _run_json(argv: list[str]) -> str:
 
 
 def test_json_share_keeps_stdout_machine_readable():
-    """`start … --json | jq` must not choke on the banner.
+    """`lfs … --json | jq` must not choke on the banner.
 
     Human output (banner, "share ready" panel) goes to stderr in JSON mode, so
     stdout is exactly one JSON object.

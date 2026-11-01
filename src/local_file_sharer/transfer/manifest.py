@@ -197,7 +197,7 @@ class Manifest:
         self.items: list[ShareItem] = list(items)
         self.expires_at = expires_at
         self.mode = mode
-        self.title = title or "local-file-sharer"
+        self.title = title or "LOCAL FILE SHARER"
         self.created_at = time.time()
         self.token = secrets.token_urlsafe(9)
         self._files_by_id: dict[str, FileEntry] = {}

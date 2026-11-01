@@ -1,4 +1,4 @@
-"""Theme switching shared by ``start theme`` and the interactive menu."""
+"""Theme switching shared by ``lfs theme`` and the interactive menu."""
 
 from __future__ import annotations
 

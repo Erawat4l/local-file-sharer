@@ -189,7 +189,7 @@ class ZipStream:
         items: Sequence[ZipItem],
         *,
         compression: int = 1,
-        comment: str = "local-file-sharer",
+        comment: str = "LOCAL FILE SHARER",
     ) -> None:
         # Drop entries that are already gone. Padding them with NULs produced an
         # archive whose sizes and CRCs all checked out but whose contents were
@@ -398,7 +398,7 @@ class ZipStream:
 
     # ── streaming ───────────────────────────────────────────────────────────
     def iter_stream(self, start: int = 0, end: int | None = None) -> Iterator[bytes]:
-        """Yield archive bytes from ``start`` (inclusive) to ``end`` (exclusive)."""
+        """Yield archive bytes from ``lfs`` (inclusive) to ``end`` (exclusive)."""
         target_end = self.total_size if end is None else min(end, self.total_size)
         if start >= target_end:
             return
@@ -476,7 +476,7 @@ class ZipStream:
         the worst possible outcome for someone backing up a folder.
         """
         notice = (
-            f"local-file-sharer: {entry.item.arcname} disappeared while this archive was being built.\n"
+            f"LOCAL FILE SHARER: {entry.item.arcname} disappeared while this archive was being built.\n"
         ).encode()
         block = (notice * (256 * 1024 // max(1, len(notice)) + 1))[: 256 * 1024]
         position = entry.data_start + skip

@@ -1,4 +1,4 @@
-"""``start doctor`` — dependency, firewall and network diagnostics.
+"""``lfs doctor`` — dependency, firewall and network diagnostics.
 
 Every check returns a :class:`Check` with a status, a one-line finding and an
 actionable fix. Nothing here raises: a broken environment should produce a
@@ -281,7 +281,7 @@ def check_ports(config: Config) -> list[Check]:
                 "bind port",
                 WARN,
                 f"{port} is in use" + (f" (will use {alt})" if alt else ""),
-                f"`start --port {alt or 9100}` or stop the other program",
+                f"`lfs --port {alt or 9100}` or stop the other program",
                 "network",
             )
         )
@@ -331,7 +331,7 @@ def check_config() -> list[Check]:
                 "config",
                 INFO,
                 "no config file yet (defaults are fine)",
-                f"start config init  →  {target}",
+                f"lfs config init  →  {target}",
                 "config",
             )
         )
@@ -456,7 +456,7 @@ def render_report(report: Report) -> Group:
         )
     )
     if report.failures:
-        blocks.append(Text(" Fix the ✖ rows above and re-run `start doctor`.", style=theme.warning))
+        blocks.append(Text(" Fix the ✖ rows above and re-run `lfs doctor`.", style=theme.warning))
     return Group(*blocks)
 
 
@@ -497,7 +497,7 @@ def export_markdown(report: Report) -> str:
 
 
 def run_doctor(*, as_json: bool = False, fast: bool = False) -> int:
-    """Entry point used by ``start doctor``."""
+    """Entry point used by ``lfs doctor``."""
     cfg = load_config()
     with console().status("running diagnostics…"):
         report = run_checks(config=cfg, skip_tools=fast, skip_network=fast)

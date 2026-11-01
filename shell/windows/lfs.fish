@@ -1,12 +1,12 @@
 # ─────────────────────────────────────────────────────────────────────────────
-#  Windows: fish function `start`
+#  Windows: fish function `lfs`
 #
 #  `install.ps1` drops this at  %APPDATA%\fish\functions\start.fish
-#  It shadows the Windows built-in `start` inside fish only — cmd.exe and
+#  It shadows the Windows built-in `lfs` inside fish only — cmd.exe and
 #  PowerShell keep their built-in, which is why share.cmd exists as a fallback.
 # ─────────────────────────────────────────────────────────────────────────────
 
-function start --description 'local-file-sharer (Windows) — share files, run doctor/config/theme'
+function lfs --description 'local-file-sharer (Windows) — share files, run doctor/config/theme'
     set -l lfs_bin (command -s local-file-sharer)
     set -l lfs_cmd (command -s local-file-sharer.cmd)
     set -l lfs_exe (command -s local-file-sharer.exe)

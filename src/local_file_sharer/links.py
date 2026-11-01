@@ -137,7 +137,7 @@ def parallel_hint(connections: int = 16) -> str:
     )
 
 
-def clipboard_payload(links: dict[str, str], header: str = "local-file-sharer") -> str:
+def clipboard_payload(links: dict[str, str], header: str = "LOCAL FILE SHARER") -> str:
     """A tidy multi-line block for pasting into a chat to your other device."""
     lines = [f"# {header}"]
     for label, url in links.items():

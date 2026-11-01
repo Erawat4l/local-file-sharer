@@ -191,7 +191,7 @@ def main() -> None:
     from local_file_sharer import doctor
 
     report = doctor.run_checks(config=config, skip_network=True)
-    shot(doctor.render_report(report), "cli-doctor", title="start doctor", width=132)
+    shot(doctor.render_report(report), "cli-doctor", title="lfs doctor", width=132)
 
 
 if __name__ == "__main__":

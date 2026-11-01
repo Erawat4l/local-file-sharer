@@ -7,9 +7,9 @@
 #  What it does
 #    1. detects Termux / Linux / macOS and the Python version
 #    2. installs rich + qrcode (and optionally aria2, tailscale, cloudflared)
-#    3. installs the `start` command with pipx (preferred) or pip --user
-#    4. writes the fish function + completions and, on fish, wires `start` up
-#    5. prints next steps (`start doctor`)
+#    3. installs the `lfs` command with pipx (preferred) or pip --user
+#    4. writes the fish function + completions and, on fish, wires `lfs` up
+#    5. prints next steps (`lfs doctor`)
 #
 #  Flags
 #    --dev          install from this checkout in editable mode (needs git)
@@ -167,7 +167,7 @@ case ":$PATH:" in
 esac
 
 if ! command -v start >/dev/null 2>&1 && ! command -v local-file-sharer >/dev/null 2>&1; then
-  warn "the \`start\` command is not on PATH yet — open a new terminal or add:"
+  warn "the \`lfs\` command is not on PATH yet — open a new terminal or add:"
   printf "    export PATH=\"\$HOME/.local/bin:\$PATH\"   # add to ~/.bashrc / ~/.profile\n"
 fi
 
@@ -219,10 +219,10 @@ fi
 # ── summary ─────────────────────────────────────────────────────────────────
 header "done"
 printf "  ${BOLD}start${RESET}                 interactive menu
-  ${BOLD}start <path>${RESET}          share immediately
-  ${BOLD}start doctor${RESET}          check tools, firewall and network
-  ${BOLD}start config show${RESET}     print the configuration
-  ${BOLD}start --update${RESET}        self-update from GitHub
+  ${BOLD}lfs <path>${RESET}          share immediately
+  ${BOLD}lfs doctor${RESET}          check tools, firewall and network
+  ${BOLD}lfs config show${RESET}     print the configuration
+  ${BOLD}lfs --update${RESET}        self-update from GitHub
 
 ${DIM}  config: ~/.config/${APP}/config.toml
   docs:   https://github.com/${REPO_SLUG}#readme${RESET}

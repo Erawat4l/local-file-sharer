@@ -50,7 +50,7 @@ shots = [
 ]
 
 [project.scripts]
-start = "local_file_sharer.cli:main"
+lfs = "local_file_sharer.cli:main"
 local-file-sharer = "local_file_sharer.cli:main"
 
 [project.urls]

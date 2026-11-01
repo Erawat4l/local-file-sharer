@@ -1,4 +1,4 @@
-"""``start --update`` — self-update from GitHub releases.
+"""``lfs --update`` — self-update from GitHub releases.
 
 Strategy, best first:
 
@@ -176,7 +176,7 @@ def download_asset(asset: dict[str, Any], *, timeout: float = 60.0) -> Path:
             if expected and written != expected:
                 raise UpdateError(
                     f"download incomplete ({human_size(written)} of {human_size(expected)})",
-                    hints=["Run `start --update` again"],
+                    hints=["Run `lfs --update` again"],
                 )
     except (urllib.error.URLError, OSError) as exc:
         raise UpdateError(f"could not download {name}: {exc}") from exc
@@ -203,7 +203,7 @@ def run_update(*, check_only: bool = False, yes: bool = False, channel: str = "s
     if release.notes:
         con.print(f"[lfs.faint]{release.notes.splitlines()[0][:160]}[/]")
     if check_only:
-        con.print(f"[lfs.muted]run `start --update` to install · {release.url}[/]")
+        con.print(f"[lfs.muted]run `lfs --update` to install · {release.url}[/]")
         return 0
     kind = detect_installer()
     if kind == "exe":
@@ -238,7 +238,7 @@ def run_update(*, check_only: bool = False, yes: bool = False, channel: str = "s
             hints=[f"Update manually: {' '.join(cmd)}", release.url],
         ) from exc
     if code == 0:
-        con.print("[lfs.success]✔ updated — restart `start` to use the new version[/]")
+        con.print("[lfs.success]✔ updated — restart `lfs` to use the new version[/]")
         return 0
     con.print(f"[lfs.danger]updater exited with code {code}[/]")
     con.print(f"[lfs.muted]manual: {' '.join(cmd)}[/]")
