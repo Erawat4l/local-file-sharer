@@ -88,6 +88,24 @@ def test_folder_zip_downloads_only_that_folder(server):
     assert archive.namelist() == ["three.txt"]
 
 
+def test_a_folder_card_opens_that_folder(server):
+    """/browse/<sub-folder> lists that folder, and nested paths work too."""
+    body = get(server, "/browse/2024").read().decode()
+    assert "three.txt" in body
+    assert "one.jpg" not in body
+    # /d/<id> still serves the whole folder item, not just the sub-folder
+    manifest = json.load(get(server, "/api/manifest"))
+    folder = next(item for item in manifest["items"] if item["kind"] == "folder")
+    full = get(server, "/d/" + folder["id"]).read().decode()
+    assert "one.jpg" in full and "three.txt" in full
+
+
+def test_browse_rejects_an_unknown_folder(server):
+    with pytest.raises(urllib.error.HTTPError) as caught:
+        get(server, "/browse/not-a-real-folder")
+    assert caught.value.code == 404
+
+
 def test_folder_zip_rejects_unknown_and_empty(server):
     for path, wanted in [("/folder/nope", 404), ("/folder/empty", 404), ("/folder/", 404)]:
         with pytest.raises(urllib.error.HTTPError) as caught:

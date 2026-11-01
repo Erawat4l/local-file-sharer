@@ -7,6 +7,12 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Added
+
+- **Media player**: a seek preview shows the time under the cursor before you
+  commit, volume and position are remembered across reloads, tapping the
+  picture toggles playback, and ↑/↓ adjust volume.
+
 ### Changed
 
 - **Monochrome UI**: the neon cyan/violet palette is gone from both faces of
@@ -31,6 +37,14 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   grid row and still sharing the page with the 330px sidebar. Fullscreen now
   drops the padding, border and fixed row, paints a black `::backdrop`, keeps
   the controls reachable, and falls back to native video fullscreen on iOS.
+  The help text and keyboard hints are hidden there, and the controls fade out
+  after 2.2 s of playback (any pointer movement brings them back, cursor too) —
+  verified against a real 30 s 720p clip: the element measured 390×844 on a
+  390×844 viewport, controls stayed reachable and the page stopped scrolling.
+- **Emoji in the UI**: every emoji is gone — the terminal uses single-cell
+  glyphs (a double-width emoji in a phone terminal shifted every row and often
+  rendered as tofu), and the web pages use inline `currentColor` SVG for file
+  kinds, folders, the download arrow and the play/pause glyph.
 
 - **PIN gate**: one mistyped PIN used to lock the client out for two seconds, so
   the *correct* PIN came back as `429` while the page still said "Wrong PIN".

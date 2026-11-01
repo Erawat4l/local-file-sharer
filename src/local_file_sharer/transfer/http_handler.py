@@ -641,24 +641,22 @@ class ShareRequestHandler(BaseHTTPRequestHandler):
 
         The front page shows sub-folders as cards; clicking one has to land on
         its contents. The item id is an implementation detail, so the folder is
-        addressed by name and resolved here.
+        addressed by the path it has inside the share (``/browse/Photos/2024``)
+        and the item that contains it is found here.
         """
         wanted = urllib.parse.unquote(folder).strip("/")
-        item = next(
-            (
-                candidate
-                for candidate in self.ctx.manifest.items
-                if candidate.is_dir and wanted.split("/")[0] in {candidate.name, candidate.item_id}
-            ),
-            None,
-        )
-        if item is None or not item.files:
-            self.send_error_page(HTTPStatus.NOT_FOUND, "That folder is not part of this share")
+        if not wanted:
+            self.redirect("/")
             return
-        # "/browse/Photos/2024" -> item Photos, sub-path 2024
-        head, _, rest = wanted.partition("/")
-        sub = rest if head == item.name else ""
-        self._render_browser(item, sub, query)
+        for item in self.ctx.manifest.items:
+            if not item.is_dir:
+                continue
+            sub = wanted[len(item.name) + 1 :] if wanted.startswith(f"{item.name}/") else wanted
+            if not any(f.rel.startswith(f"{item.name}/{sub}/") for f in item.files):
+                continue
+            self._render_browser(item, sub, query)
+            return
+        self.send_error_page(HTTPStatus.NOT_FOUND, "That folder is not part of this share")
 
     def _render_browser(self, item, sub: str, query: dict[str, list[str]]) -> None:  # noqa: ANN001
         descends = f"{item.name}/{sub}" if sub else item.name

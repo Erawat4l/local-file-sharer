@@ -54,7 +54,14 @@
   .stage:fullscreen .topline{padding:12px 18px;margin:0;background:linear-gradient(#000,#0000)}
   .stage:fullscreen .video-wrap{flex:1;min-height:0;border:0;border-radius:0;box-shadow:none}
   .stage:fullscreen .controls{padding-bottom:max(10px, env(safe-area-inset-bottom))}
-  .stage:fullscreen .hints{display:none}
+  /* fullscreen: keep the picture and the controls, drop the help text */
+  .stage:fullscreen .understage{display:none}
+  /* controls fade away while playing, exactly like a desktop player */
+  .stage.hide-cursor{cursor:none}
+  .stage:fullscreen.is-playing:not(.show-controls) .controls,
+  .stage:fullscreen.is-playing:not(.show-controls) .topline{opacity:0;pointer-events:none}
+  .stage:fullscreen .controls,
+  .stage:fullscreen .topline{transition:opacity .22s ease}
   video:fullscreen{width:100vw;height:100vh;object-fit:contain;background:#000}
   video::backdrop{background:#000}
   .stage-audio .video-wrap{display:grid;place-items:center;background:
@@ -74,6 +81,15 @@
   .controls{margin-top:14px;padding:14px 16px;border-radius:16px;border:1px solid var(--line);
     background:rgba(10,10,10,.82);backdrop-filter:blur(16px);display:grid;gap:10px}
   .seekrow{display:flex;align-items:center;gap:12px}
+  /* the slider stretches, but the tooltip is anchored to it, not the row */
+  .seekwrap{position:relative;flex:1;display:flex;align-items:center}
+  .seekwrap input[type=range]{width:100%}
+  .seek-tip{position:absolute;bottom:26px;left:0;transform:translateX(-50%);
+    padding:4px 8px;border-radius:6px;background:#fff;color:#000;font-family:var(--mono);
+    font-size:11.5px;font-weight:600;white-space:nowrap;pointer-events:none;
+    opacity:0;transition:opacity .12s ease}
+  .seek-tip.show{opacity:1}
+  button svg.i{width:16px;height:16px;fill:currentColor;display:block}
   .t{font-family:var(--mono);font-size:11.5px;color:var(--dim);min-width:52px;text-align:center}
   input[type=range]{-webkit-appearance:none;appearance:none;flex:1;height:22px;background:transparent;cursor:pointer}
   input[type=range]::-webkit-slider-runnable-track{height:6px;border-radius:999px;
@@ -94,7 +110,11 @@
   .volume{display:flex;align-items:center;gap:8px;min-width:120px}
   .volume input{width:90px}
 
-  .understage{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:14px 2px 20px;color:var(--faint);font-size:12.5px}
+  .understage{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:14px 2px 20px;
+    color:var(--faint);font-size:12.5px}
+  @media (max-width:560px){
+    .understage span:last-child{display:none} /* keyboard hints are noise on a phone */
+  }
   .understage a{color:var(--accent);text-decoration:none}
   kbd{font-family:var(--mono);font-size:11px;padding:2px 6px;border-radius:6px;
     border:1px solid var(--line);background:#1a1a1a;color:var(--dim)}
@@ -146,11 +166,14 @@
     <div class="controls">
       <div class="seekrow">
         <span class="t" id="cur">0:00</span>
-        <input id="seek" type="range" min="0" max="1000" value="0" step="1" aria-label="Seek">
+        <div class="seekwrap">
+          <input id="seek" type="range" min="0" max="1000" value="0" step="1" aria-label="Seek">
+          <span class="seek-tip" id="seek-tip">0:00</span>
+        </div>
         <span class="t" id="dur">—</span>
       </div>
       <div class="buttons">
-        <button class="primary" id="play">▶ Play</button>
+        <button class="primary" id="play"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg><span>Play</span></button>
         <button class="icon" id="back10" title="Back 10s" aria-label="Back 10 seconds">-10</button>
         <button class="icon" id="fwd10" title="Forward 10s" aria-label="Forward 10 seconds">+10</button>
         <div class="volume">
@@ -238,14 +261,76 @@
       localStorage.setItem('lfs-pos:' + location.pathname, String(v.currentTime));
     }
   });
-  v.addEventListener('play', () => { playBtn.textContent = '⏸ Pause'; stage.classList.add('playing'); });
-  v.addEventListener('pause', () => { playBtn.textContent = '▶ Play'; stage.classList.remove('playing'); });
+  // swap only the glyph, so the button keeps its size and the label stays text
+  const setGlyph = (el, path) => el.querySelector('svg').firstElementChild.setAttribute('d', path);
+  const PLAY_PATH = 'M8 5v14l11-7z';
+  const PAUSE_PATH = 'M7 5h4v14H7zM13 5h4v14h-4z';
+  v.addEventListener('play', () => {
+    setGlyph(playBtn, PAUSE_PATH);
+    playBtn.querySelector('span').textContent = 'Pause';
+    stage.classList.add('playing');
+  });
+  v.addEventListener('pause', () => {
+    setGlyph(playBtn, PLAY_PATH);
+    playBtn.querySelector('span').textContent = 'Play';
+    stage.classList.remove('playing');
+  });
   v.addEventListener('progress', () => {
     if (!v.buffered.length || !v.duration) return;
     const end = v.buffered.end(v.buffered.length - 1);
     document.getElementById('buffered').textContent = Math.round((end / v.duration) * 100) + '%';
   });
   v.addEventListener('error', () => toast('This codec cannot be previewed — download it instead'));
+
+  // ── seek preview: show the time under the cursor before committing ─────────
+  const seekTip = document.getElementById('seek-tip');
+  const tipFor = (event) => {
+    if (!v.duration) return;
+    const box = seek.getBoundingClientRect();
+    const ratio = Math.min(1, Math.max(0, (event.clientX - box.left) / box.width));
+    seekTip.textContent = clock(ratio * v.duration);
+    seekTip.style.left = (ratio * 100) + '%';
+    seekTip.classList.add('show');
+  };
+  seek.addEventListener('pointermove', tipFor);
+  seek.addEventListener('pointerdown', tipFor);
+  seek.addEventListener('pointerleave', () => seekTip.classList.remove('show'));
+
+  // ── auto-hiding controls while a video plays fullscreen ────────────────────
+  let hideTimer;
+  const revealControls = () => {
+    stage.classList.add('show-controls');
+    stage.classList.remove('hide-cursor');
+    clearTimeout(hideTimer);
+    hideTimer = setTimeout(() => {
+      if (!v.paused && document.fullscreenElement) {
+        stage.classList.remove('show-controls');
+        stage.classList.add('hide-cursor');
+      }
+    }, 2200);
+  };
+  stage.addEventListener('pointermove', revealControls);
+  stage.addEventListener('pointerdown', revealControls);
+  v.addEventListener('play', () => { stage.classList.add('is-playing'); revealControls(); });
+  v.addEventListener('pause', () => {
+    stage.classList.remove('is-playing', 'hide-cursor');
+    stage.classList.add('show-controls');
+    clearTimeout(hideTimer);
+  });
+  document.addEventListener('fullscreenchange', revealControls);
+
+  // ── remember and restore the volume, and the position on every change ──────
+  const savedVol = localStorage.getItem('lfs-vol');
+  if (savedVol !== null) { v.volume = Number(savedVol); document.getElementById('vol').value = v.volume * 100; }
+  v.addEventListener('volumechange', () => localStorage.setItem('lfs-vol', String(v.volume)));
+  window.addEventListener('beforeunload', () => {
+    if (v.duration) localStorage.setItem('lfs-pos:' + location.pathname, String(v.currentTime));
+  });
+  // a resume prompt is friendlier than silently jumping mid-file
+  addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowUp') { v.volume = Math.min(1, v.volume + 0.05); document.getElementById('vol').value = v.volume * 100; }
+    if (e.key === 'ArrowDown') { v.volume = Math.max(0, v.volume - 0.05); document.getElementById('vol').value = v.volume * 100; }
+  });
 
   seek.addEventListener('input', () => {
     const pct = Number(seek.value) / 10;
@@ -287,6 +372,8 @@
   document.getElementById('full').addEventListener('click', goFullscreen);
   // double-click the picture to toggle, like every desktop player
   v.addEventListener('dblclick', goFullscreen);
+  // tap/click the picture to pause, the first thing anyone tries
+  v.addEventListener('click', () => (v.paused ? v.play() : v.pause()));
   document.addEventListener('fullscreenchange', () => {
     const on = Boolean(document.fullscreenElement);
     stage.classList.toggle('is-fullscreen', on);
