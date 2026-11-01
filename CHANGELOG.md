@@ -7,6 +7,33 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Fixed
+
+- **PIN gate**: one mistyped PIN used to lock the client out for two seconds, so
+  the *correct* PIN came back as `429` while the page still said "Wrong PIN".
+  Five attempts are now free (`FREE_PIN_ATTEMPTS`) and the lockout page always
+  says how long to wait, even when a right PIN arrives during the lockout.
+- **Login redirect**: the form posted the PIN, the server answered `302 /`, and
+  the redirect omitted `Set-Cookie` — the browser landed back on the login page
+  in a loop. `redirect()` now carries the pending cookie.
+- **Share URLs**: `/api/manifest` published `http://host:port//download/<id>`
+  because `base_url` was set with a trailing slash and then concatenated with
+  `/download/`. `base_url` is normalised where it is set and where it is used.
+- **Tracker**: announcing to a server that has a torrent but no registry
+  answered `404 tracker disabled`; the registry is now created on demand.
+- **Docs screenshots**: every committed PNG shipped with tofu boxes where emoji
+  belonged (the Twemoji tree was one directory too deep), and `to_svg` failed
+  silently. It now warns per missing glyph, `tools/screenshots/check_assets.py`
+  gates CI, and the picker shot no longer leaks an absolute sandbox path.
+
+### Added
+
+- `tests/test_e2e.py` — every share mode driven over a real socket, including a
+  real BitTorrent `announce` and ranged webseed reads.
+- `tests/test_platforms.py` — the Windows drive mask, clipboard chains,
+  `PATHEXT` lookup and per-OS firewall hints, all without leaving Linux.
+- `tools/check_fish.py`, `tools/screenshots/` (the README image pipeline).
+
 ### Planned
 - WebRTC data channels for NAT-to-NAT transfers
 - Resumable browser uploads

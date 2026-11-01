@@ -682,6 +682,12 @@ class ShareRequestHandler(BaseHTTPRequestHandler):
     def handle_announce(self, query: dict[str, list[str]]) -> None:
         """Minimal BEP-3 HTTP tracker: ``/announce?info_hash=…&peer_id=…``."""
         registry = self.ctx.tracker_registry
+        if registry is None and self.ctx.torrent is not None:
+            # A torrent without a tracker is a dead magnet: create the registry
+            # rather than answer "tracker disabled" to a real client.
+            from local_file_sharer.transfer.torrent import TrackerRegistry  # noqa: PLC0415
+
+            registry = self.ctx.tracker_registry = TrackerRegistry()
         if registry is None:
             self.send_text(HTTPStatus.NOT_FOUND, "tracker disabled")
             return

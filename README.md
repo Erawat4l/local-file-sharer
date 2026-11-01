@@ -247,6 +247,13 @@ status** — and folders are analysed as you select them.
 
 All modes support the PIN gate, expiry and (optionally) uploads back to you.
 
+Each of those four paths runs against a real server on a real socket in
+`tests/test_e2e.py` — the login `POST` and its cookie, `/api/manifest`, a
+byte-identical download, `206` on `Range`, the player page, the tracker's
+bencoded `announce` reply and the webseed's ranged reads. What is *not* proven
+is a swarm: the webseed serves pieces over HTTP, but no second BitTorrent client
+has been run against the tracker yet (see the roadmap).
+
 <div align="center">
 <img src="docs/assets/cli-ready.png" width="100%" alt="share ready — LAN link, QR code and one-liners">
 </div>
@@ -558,7 +565,7 @@ local-file-sharer/
 │   ├── ui/                  theme, banner, picker UI, dashboard
 │   └── web/assets/          downloader / server / player HTML + CSS
 ├── shell/                   fish functions and the Windows share.cmd
-├── tests/                   160+ pytest tests (no network required)
+├── tests/                   300+ pytest tests (loopback only, no internet)
 ├── install.sh · install.ps1
 └── docs/assets/             README images
 ```
@@ -574,7 +581,7 @@ python3 -m venv .venv && . .venv/bin/activate
 pip install -e ".[dev]"
 
 ruff check src tests && ruff format --check src tests
-pytest -q                      # ~160 tests, no network
+pytest -q                      # ~300 tests, loopback sockets only
 pytest --cov=local_file_sharer
 ```
 
