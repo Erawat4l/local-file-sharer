@@ -21,6 +21,12 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   `/download/`. `base_url` is normalised where it is set and where it is used.
 - **Tracker**: announcing to a server that has a torrent but no registry
   answered `404 tracker disabled`; the registry is now created on demand.
+- **QR codes are verified, not just rendered**: the existing tests only checked
+  that the output contained `<svg`. New tests assert the symbol's structure
+  (three finder patterns, separators, alternating timing patterns, the always-dark
+  module) and that hostile `?data=` is encoded as modules instead of emitted as
+  markup. Confirmed out of band with OpenCV: the rendered codes decode back to
+  the exact share URL, including one carrying `#theme=neon&pin=1234`.
 - **Page JS is now executed, not just pattern-matched**: a Node harness
   (`tests/js/downloader_smoke.js`) loads the real `downloader.html` script in a
   DOM shim, presses *#download-all*, and checks every file reassembles

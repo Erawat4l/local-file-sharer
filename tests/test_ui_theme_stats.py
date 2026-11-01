@@ -280,3 +280,50 @@ def test_theme_preview_renders():
     from local_file_sharer.ui.components import theme_preview
 
     assert "theme" in render(theme_preview(build_theme("neon", "lime")))
+
+
+def test_qr_matrix_is_a_structurally_valid_symbol():
+    """Check the layout rules a scanner relies on, cheaply and without a decoder.
+
+    The matrix carries a 2-module quiet zone, so the finder patterns start at
+    (2, 2) rather than (0, 0). Getting that offset wrong makes every pattern
+    check fail even though the code is correct — hence the explicit ``q``.
+    """
+    from local_file_sharer import qr
+
+    url = "http://192.168.1.5:8080/"
+    rows = qr.matrix(url)
+    n = len(rows)
+    q = 2
+    size = n - 2 * q
+    version = (size - 17) // 4
+    assert version >= 1
+    assert all(len(row) == n for row in rows), "the matrix must be square"
+
+    finder = ["1111111", "1000001", "1011101", "1011101", "1011101", "1000001", "1111111"]
+    for ox, oy, name in ((0, 0, "top-left"), (size - 7, 0, "top-right"), (0, size - 7, "bottom-left")):
+        assert all(
+            rows[q + oy + y][q + ox + x] == (finder[y][x] == "1") for y in range(7) for x in range(7)
+        ), f"{name} finder pattern is malformed"
+
+    # Timing patterns alternate between the finders.
+    timing_row = [rows[q + 6][q + x] for x in range(8, size - 8)]
+    timing_col = [rows[q + y][q + 6] for y in range(8, size - 8)]
+    assert all(timing_row[i] != timing_row[i + 1] for i in range(len(timing_row) - 1))
+    assert all(timing_col[i] != timing_col[i + 1] for i in range(len(timing_col) - 1))
+
+    # The single always-dark module.
+    assert rows[q + 4 * version + 9][q + 8] is True
+
+
+def test_qr_svg_is_well_formed_and_escapes_its_input():
+    """The SVG goes into an <img src=data:…>, so it must be valid XML."""
+    import xml.etree.ElementTree as ET
+
+    from local_file_sharer import qr
+
+    hostile = 'http://x/"><script>alert(1)</script>'
+    svg = qr.svg(hostile)
+    root = ET.fromstring(svg)  # raises if the markup is broken
+    assert root.tag.endswith("svg")
+    assert "<script>" not in svg, "the payload must be encoded as modules, never emitted as markup"
