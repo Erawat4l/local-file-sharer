@@ -201,7 +201,9 @@ def test_firewall_hint_posix_offers_ufw(monkeypatch):
 # ── tool discovery ──────────────────────────────────────────────────────────
 def test_find_tool_prefers_path(monkeypatch):
     monkeypatch.setattr(platforms, "WINDOWS", False)
-    monkeypatch.setattr(platforms.shutil, "which", lambda name: "/usr/bin/ffmpeg" if name == "ffmpeg" else None)
+    monkeypatch.setattr(
+        platforms.shutil, "which", lambda name: "/usr/bin/ffmpeg" if name == "ffmpeg" else None
+    )
     assert platforms.find_tool("ffmpeg") == "/usr/bin/ffmpeg"
 
 
@@ -289,7 +291,9 @@ def test_downloads_dir_is_a_path():
 
 def test_primary_local_ip_returns_none_or_dotted_quad(monkeypatch):
     monkeypatch.setattr(platforms.socket, "gethostname", lambda: "box")
-    monkeypatch.setattr(platforms.socket, "gethostbyname_ex", lambda name: (_ for _ in ()).throw(OSError("nope")))
+    monkeypatch.setattr(
+        platforms.socket, "gethostbyname_ex", lambda name: (_ for _ in ()).throw(OSError("nope"))
+    )
     ip = platforms.primary_local_ip()
     assert ip is None or ip.count(".") == 3
 

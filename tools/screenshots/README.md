@@ -66,12 +66,14 @@ PYTHONPATH=src python tools/screenshots/hero.py         # docs/assets/banner.png
 PYTHONPATH=src python tools/screenshots/demo_gif.py     # docs/assets/demo.gif
 ```
 
-`cli_shots.py` and `webgen.py` expect the demo tree used in the pictures:
+`cli_shots.py` and `webgen.py` expect the demo tree used in the pictures. It
+lives under `sdcard/Download/demo` so the picker breadcrumb reads like the
+Termux layout instead of this checkout's absolute path:
 
 ```bash
 python - <<'PY'
 import pathlib
-root = pathlib.Path("tools/screenshots/inputs/demo")
+root = pathlib.Path("tools/screenshots/inputs/sdcard/Download/demo")
 for rel, size in {
     "Aurora-Film-Festival-Keynote-4K.mkv": 3_842_119_680,
     "live-set-2026.flac": 421_003_264,
@@ -88,6 +90,18 @@ for rel, size in {
         handle.truncate(size)          # sparse files: instant, no disk cost
 PY
 ```
+
+## Before you commit a screenshot
+
+```bash
+PYTHONPATH=src python tools/screenshots/check_assets.py
+```
+
+It fails if a README image is missing from `docs/assets/`, if a referenced
+image is untracked, or if any emoji used by the terminal shots has no Twemoji
+SVG — which is how a whole set of screenshots once shipped with tofu boxes
+while `to_svg` printed nothing at all. `to_svg` now warns too, but the checker
+is what CI runs.
 
 ## Conventions in the pictures
 

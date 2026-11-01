@@ -23,7 +23,11 @@ ASSETS = REPO / "docs" / "assets"
 INPUTS = Path(os.environ.get("LFS_SHOT_INPUTS", REPO / "tools" / "screenshots" / "inputs"))
 FONT_DIR = INPUTS / "fonts"
 TWEMOJI_DIR = INPUTS / "twemoji"
-DEMO_DIR = INPUTS / "demo"
+DEMO_DIR = INPUTS / "sdcard"
+#: Where the picker screenshot opens. On a real phone this is the Termux layout
+#: ``/sdcard/Download/demo``; locally it is the same shape under ``inputs/`` so
+#: the breadcrumb does not leak this checkout's absolute path.
+DEMO_PICKER = DEMO_DIR / "Download" / "demo"
 
 
 def font(name: str) -> str:

@@ -14,7 +14,7 @@ from rich.text import Text
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from paths import ASSETS, DEMO_DIR, INPUTS  # noqa: E402
+from paths import ASSETS, DEMO_PICKER, INPUTS  # noqa: E402
 from termsvg import svg_to_png, to_grid, to_svg  # noqa: E402
 
 from local_file_sharer import (  # noqa: E402
@@ -29,7 +29,6 @@ from local_file_sharer.ui.console import panel, set_console, set_theme  # noqa: 
 from local_file_sharer.ui.theme import build_theme  # noqa: E402
 
 ASSETS = ASSETS
-DEMO = DEMO_DIR
 WIDTH = 104
 HEIGHT = 44
 
@@ -95,7 +94,10 @@ def main() -> None:
     shot(menu.render_menu(ctx), "cli-menu", title="start")
 
     # ── 3. picker ───────────────────────────────────────────────────────────
-    picker = picker_ui.PickerState(cwd=DEMO, page_size=12)
+    # Show the demo tree as it would look on a phone. The breadcrumb keeps the
+    # last four path components, so this is only cosmetic — no file named
+    # /sdcard ever has to exist.
+    picker = picker_ui.PickerState(cwd=DEMO_PICKER, page_size=12)
     picker.reload()
     for entry in picker.visible():
         if entry.name in ("Aurora-Film-Festival-Keynote-4K.mkv", "live-set-2026.flac"):
@@ -104,7 +106,7 @@ def main() -> None:
     for index, entry in enumerate(picker.visible()):
         if entry.name == "live-set-2026.flac":
             picker.cursor = index
-    picker.message = "3 files selected · 4.2 GB · ready to share"
+    picker.message = "Space toggles · Enter opens · a selects all"
     shot(picker_ui.render(picker, width=WIDTH - 2, height=40), "cli-picker", title="start — pick files")
 
     # ── 4. dashboard ────────────────────────────────────────────────────────

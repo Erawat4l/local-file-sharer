@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import io
 import re
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -162,6 +163,9 @@ def _is_emoji(char: str) -> bool:
     return not _in_mono(char)
 
 
+_MISSING_EMOJI: set[str] = set()
+
+
 def _twemoji(char: str) -> str | None:
     base = char.rstrip("\ufe0f").replace("\u200d", "-")
     if not base or (base.isascii() and len(base) == 1):
@@ -175,6 +179,15 @@ def _twemoji(char: str) -> str | None:
         code = "-".join(f"{ord(c):x}" for c in base if c not in "\ufe0f")
         path = TWEMOJI / f"{code}.svg"
         if not path.exists():
+            # Recorded once per glyph so a bad TWEMOJI_DIR shows up in the run
+            # output instead of quietly rendering every emoji as a tofu box.
+            if char not in _MISSING_EMOJI:
+                _MISSING_EMOJI.add(char)
+                print(
+                    f"warning: no Twemoji SVG for {char!r} ({code}) in {TWEMOJI} — "
+                    "it will render as a fallback glyph",
+                    file=sys.stderr,
+                )
             return None
     body = path.read_text(encoding="utf-8")
     body = re.sub(r"<\?xml[^>]*\?>", "", body)
