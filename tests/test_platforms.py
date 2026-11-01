@@ -318,3 +318,83 @@ def test_run_quiet_round_trips(monkeypatch):
 
 def test_env_is_sane():
     assert os.sep in ("/", "\\")
+
+
+# ── sendfile: the Windows branch, simulated on Linux ────────────────────────
+class _FakeSocket:
+    """Mimics socket.sendfile: ``offset=None`` continues from ``tell()``."""
+
+    def __init__(self, budget: int | None = None) -> None:
+        self.buf = bytearray()
+        self.budget = budget  # stop after this many bytes, like a dropped peer
+        self.calls = 0
+
+    def sendfile(self, file, offset=None, count=None):  # noqa: ANN001
+        if self.budget is not None and len(self.buf) >= self.budget:
+            return 0
+        if offset is not None:
+            file.seek(offset)
+        self.calls += 1
+        limit = count if self.budget is None else min(count, self.budget - len(self.buf))
+        chunk = file.read(limit)
+        self.buf.extend(chunk)
+        return len(chunk)
+
+
+@pytest.fixture
+def payload_file(tmp_path):
+    data = bytes(range(256)) * 400  # 102 400 bytes
+    path = tmp_path / "payload.bin"
+    path.write_bytes(data)
+    return path, data
+
+
+def test_sendfile_windows_branch_honours_the_offset(payload_file, monkeypatch):
+    """`socket.sendfile(offset=None)` starts at tell(), so the offset must stick."""
+    monkeypatch.setattr(platforms, "HAS_SENDFILE", False)
+    path, data = payload_file
+    sock = _FakeSocket()
+    with open(path, "rb") as handle:
+        sent = platforms.sendfile(sock, handle, 50_000, 1_000)
+    assert sent == 1_000
+    assert bytes(sock.buf) == data[50_000:51_000]
+
+
+def test_sendfile_reports_only_what_the_peer_received(payload_file, monkeypatch):
+    """A mid-transfer disconnect must not be reported as a full send."""
+    monkeypatch.setattr(platforms, "HAS_SENDFILE", False)
+    path, data = payload_file
+    sock = _FakeSocket(budget=2_000)
+    with open(path, "rb") as handle:
+        sent = platforms.sendfile(sock, handle, 0, len(data))
+    assert sent == len(sock.buf) == 2_000
+    assert bytes(sock.buf) == data[:2_000]
+
+
+def test_sendfile_falls_back_to_a_plain_copy(payload_file, monkeypatch):
+    """No sendfile at all: the chunked copy still sends the right slice."""
+    monkeypatch.setattr(platforms, "HAS_SENDFILE", False)
+    path, data = payload_file
+
+    class Writer:
+        def __init__(self):
+            self.buf = bytearray()
+
+        def write(self, chunk):
+            self.buf.extend(chunk)
+
+    out = Writer()
+    with open(path, "rb") as handle:
+        sent = platforms.sendfile(out, handle, 1_000, 5_000)
+    assert sent == 5_000
+    assert bytes(out.buf) == data[1_000:6_000]
+
+
+def test_sendfile_progress_is_called_for_every_chunk(payload_file, monkeypatch):
+    monkeypatch.setattr(platforms, "HAS_SENDFILE", False)
+    path, data = payload_file
+    seen: list[int] = []
+    with open(path, "rb") as handle:
+        platforms.sendfile(_FakeSocket(), handle, 0, len(data), progress=seen.append)
+    assert sum(seen) == len(data)
+    assert all(delta > 0 for delta in seen)

@@ -132,6 +132,7 @@ touches a real OS facility goes through `platforms.py` so it can be faked:
 | clipboard tools | table-driven over `pbcopy`, `wl-copy`, `xclip`, `xsel`, `termux-clipboard-set`, `clip.exe` |
 | tool lookup | `which` misses, extra names, and the Windows `PATHEXT` scan over `PATH` |
 | firewall hints | asserted per OS: `netsh advfirewall`, Termux battery note, `ufw`/`firewall-cmd` |
+| `sendfile` | the Windows `socket.sendfile` branch (offset handling, short writes, disconnect) and the plain-copy fallback, all simulated on Linux |
 | Tailscale / Cloudflare | only the *detection and parsing* is tested; the CLIs are never invoked |
 
 Two things cannot be exercised in this sandbox and rely on CI or a maintainer
@@ -141,6 +142,11 @@ with the hardware:
   check locally; CI runs `fish --no-execute` on the real parser.
 - **`install.ps1`**: CI parses it with the PowerShell AST parser; a full run
   needs a Windows machine.
+- **Python 3.9/3.10**: `tools/check_compat.py` walks the AST for
+  `X | Y` annotations without a future import, `zip(strict=)` and unguarded
+  `tomllib` imports. It is not a substitute for running the version, which is
+  why the matrix runs 3.9 through 3.13 — but it catches the mistake that made
+  the package unimportable on every version below 3.11.
 
 If you change either, say which of the two you actually ran in the PR
 description.
