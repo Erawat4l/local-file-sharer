@@ -55,9 +55,17 @@ def media_tree(tmp_path: Path) -> Path:
 @pytest.fixture
 def server(tree: Path, free_port: int, request: pytest.FixtureRequest):
     """A live server; ``(mode, pin)`` come from ``indirect`` params if given."""
-    mode, pin = getattr(request, "param", ("download", ""))
+    mode, pin, *flags = getattr(request, "param", ("download", ""))
     root = request.getfixturevalue("media_tree") if mode == "stream" else tree
-    srv = ShareServer(Manifest.build([root], mode=mode), host="127.0.0.1", port=free_port, pin=pin)
+    uploads = "upload" in flags
+    srv = ShareServer(
+        Manifest.build([root], mode=mode),
+        host="127.0.0.1",
+        port=free_port,
+        pin=pin,
+        allow_upload=uploads,
+        upload_dir=root if uploads else None,
+    )
     srv.set_base_url(f"http://127.0.0.1:{free_port}")
     srv.start()
     assert srv.wait_until_ready(timeout=5)
@@ -391,3 +399,42 @@ def test_upload_rejects_path_traversal(tmp_path, free_port):
         assert list(root.glob("*.txt")), "the file should be stored under its bare name"
     finally:
         server.stop()
+
+
+@pytest.mark.parametrize("server", [("download", "4271")], indirect=True)
+def test_api_pin_header_works_without_a_cookie(server):
+    """`curl -H "X-LFS-PIN: …"` is how scripts authenticate; it used to 500."""
+    header = {"X-LFS-PIN": "4271"}
+
+    with urllib.request.urlopen(
+        urllib.request.Request(f"http://127.0.0.1:{server.port}/", headers=header), timeout=5
+    ) as response:
+        assert response.status == 200
+        assert b"photo.jpg" in response.read()
+        assert "lfs_auth=" in (response.headers.get("Set-Cookie") or "")
+
+    request = urllib.request.Request(f"http://127.0.0.1:{server.port}/api/manifest", headers=header)
+    manifest = json.loads(urllib.request.urlopen(request, timeout=5).read())
+    assert manifest["files"], "the manifest must be readable with the header alone"
+
+    # A wrong header is still rejected, and does not leak the page.
+    bad = urllib.request.Request(f"http://127.0.0.1:{server.port}/", headers={"X-LFS-PIN": "0000"})
+    with pytest.raises(urllib.error.HTTPError) as excinfo:
+        urllib.request.urlopen(bad, timeout=5)
+    assert excinfo.value.code == 401
+    assert b"photo.jpg" not in excinfo.value.read()
+
+
+@pytest.mark.parametrize("server", [("download", "4271", "upload")], indirect=True)
+def test_upload_with_the_pin_header_on_first_contact(tmp_path, server):
+    """No cookie yet: the header authenticates the upload itself."""
+    request = urllib.request.Request(
+        f"http://127.0.0.1:{server.port}/api/upload?name=first.txt",
+        data=b"first contact\n" * 30,
+        method="POST",
+        headers={"X-LFS-PIN": "4271", "Content-Type": "application/octet-stream"},
+    )
+    with urllib.request.urlopen(request, timeout=10) as response:
+        body = json.loads(response.read())
+    assert body["ok"] is True
+    assert body["bytes"] == len(b"first contact\n" * 30)

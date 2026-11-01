@@ -21,6 +21,9 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   `/download/`. `base_url` is normalised where it is set and where it is used.
 - **Tracker**: announcing to a server that has a torrent but no registry
   answered `404 tracker disabled`; the registry is now created on demand.
+- **API authentication**: `_check_auth` called `self._set_auth_cookie()`, a
+  method that does not exist, so every request authenticated with
+  `X-LFS-PIN` — the way scripts and `curl -H` do it — died with a 500.
 - **Browser uploads**: an uploaded file was written to
   `~/local-file-sharer/` (or `~` when no *Downloads* folder existed) instead of
   the folder being shared, so the person who invited the upload never saw it.

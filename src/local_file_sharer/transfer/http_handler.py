@@ -398,7 +398,9 @@ class ShareRequestHandler(BaseHTTPRequestHandler):
         header_pin = self.headers.get("X-LFS-PIN", "")
         if header_pin and self.ctx.auth_ok(header_pin):
             self.ctx.note_success(client)
-            self._set_auth_cookie()
+            # Scripted clients (curl -H, aria2c) authenticate every request and
+            # have no cookie jar; hand them one anyway so a follow-up GET works.
+            self._pending_cookie = self._auth_cookie_header()
             return True
         provided = (query.get("pin") or [""])[0]
         if provided and self.ctx.auth_ok(provided):
