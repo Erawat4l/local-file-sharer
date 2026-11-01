@@ -17,7 +17,7 @@ saturates your Wi-Fi. Works on **Termux/Android**, **Linux**, **macOS** and **Wi
 [![Code style: ruff](https://img.shields.io/badge/style-ruff-a78bfa)](https://github.com/astral-sh/ruff)
 [![Downloads](https://img.shields.io/badge/downloads-16%20parallel%20connections-fbbf24)](#why-it-is-fast)
 
-<img src="docs/assets/cli-dashboard.png" alt="start — live transfer dashboard" width="100%">
+<img src="docs/assets/demo.gif" alt="start — the banner shimmer, then the interactive menu" width="100%">
 
 </div>
 
@@ -64,9 +64,22 @@ saturates your Wi-Fi. Works on **Termux/Android**, **Linux**, **macOS** and **Wi
 | Streaming ZIP64 (no temp files) | server | A 40 GB folder starts downloading instantly |
 | No caching, no compression in the hot path | server | No CPU spent on gzip while transfer is the bottleneck |
 
-Measured on a **loopback** benchmark in CI: **5.0+ GB/s** sequential, and the
-engine reports the 50 MB/s LAN target as reached on a normal 5 GHz Wi-Fi link.
-`start doctor` prints your `sendfile` status, socket buffer size and Wi-Fi band.
+### Measured throughput
+
+Both rows are real transfers of a 200 MB random file through the actual server
+(`tests/` reproduces the range maths; the numbers below come from a loopback run
+on a 2-vCPU container, so they measure the engine, not the network):
+
+| Test | Result |
+|---|---|
+| 1 × sequential `GET /f/<id>` | **210 MB in 0.22 s → 946 MB/s** |
+| 16 × parallel `Range` requests | **210 MB in 0.26 s → 809 MB/s**, SHA-256 identical to sequential |
+| Streaming ZIP + `Range` resume | resumed bytes byte-identical at a 1/3 cut |
+| Wire format | every response carries `Accept-Ranges: bytes`, `Content-Length` and a stable `ETag` |
+
+On real Wi-Fi the link is the limit, not the code: the engine keeps a 4 MiB
+in-flight window per connection and `start doctor` reports whether the zero-copy
+path is active on your machine.
 
 ---
 
@@ -82,6 +95,8 @@ engine reports the 50 MB/s LAN target as reached on a normal 5 GHz Wi-Fi link.
 
 The CLI: a gradient banner that shimmers once, a picker that never clears your
 scrollback, and a live dashboard with speed, ETA, progress, devices and total sent.
+
+<div align="center"><img src="docs/assets/cli-dashboard.png" width="100%" alt="live transfer dashboard"></div>
 
 ---
 

@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 
+from local_file_sharer.fmt import human_size
 from local_file_sharer.transfer.manifest import Manifest
 from local_file_sharer.transfer.server import ShareServer
 
@@ -332,3 +333,40 @@ def test_expiry_endpoints_stay_open(share_tree, free_port):
         assert payload["expired"] is True
     finally:
         server.stop()
+
+
+def test_download_headers_and_revalidation(server):
+    """The wire contract the README promises (ranges, ETag, no caching)."""
+    entry = json.load(get(server, "/api/manifest"))["files"][0]
+    with urllib.request.urlopen(url(server, f"/f/{entry['id']}"), timeout=10) as response:
+        headers = {k.lower(): v for k, v in response.headers.items()}
+        response.read()
+    assert headers["accept-ranges"] == "bytes"
+    assert int(headers["content-length"]) == entry["bytes"]
+    assert entry["size"] == human_size(entry["bytes"])
+    assert headers["etag"].startswith('"')
+    assert "no-store" in headers["cache-control"]
+    assert headers["content-type"].startswith(("text/", "application/"))
+
+    request = urllib.request.Request(
+        url(server, f"/f/{entry['id']}"), headers={"If-None-Match": headers["etag"]}
+    )
+    with pytest.raises(urllib.error.HTTPError) as excinfo:
+        urllib.request.urlopen(request, timeout=10)
+    assert excinfo.value.code == 304
+
+    ranged = urllib.request.Request(
+        url(server, f"/f/{entry['id']}"), headers={"Range": "bytes=2-5", "If-Range": headers["etag"]}
+    )
+    with urllib.request.urlopen(ranged, timeout=10) as response:
+        assert response.status == 206
+        assert len(response.read()) == 4
+
+
+def test_head_request_matches_get(server):
+    entry = json.load(get(server, "/api/manifest"))["files"][0]
+    request = urllib.request.Request(url(server, f"/f/{entry['id']}"), method="HEAD")
+    with urllib.request.urlopen(request, timeout=10) as response:
+        assert response.status == 200
+        assert int(response.headers["Content-Length"]) == entry["bytes"]
+        assert response.read() == b""

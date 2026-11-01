@@ -78,3 +78,6 @@ desktop.ini
 # ── Docs assets that are generated locally ────────────────────────────────
 docs/_build/
 docs/.vitepress/cache/
+
+# ── Screenshot tool inputs (fonts, Twemoji, demo files) ───────────────────
+tools/screenshots/inputs/
