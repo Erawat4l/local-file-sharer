@@ -26,6 +26,7 @@ import html
 import json
 import math
 import mimetypes
+import os
 import re
 import socket
 import threading
@@ -133,6 +134,22 @@ FREE_PIN_ATTEMPTS = 5
 #: Longest any client is made to wait, in seconds.
 MAX_PIN_LOCKOUT = 60.0
 _ATTEMPT_LOCK = threading.Lock()
+
+
+def _etag_for(stat: os.stat_result, path: Path) -> str:
+    """A strong validator that changes whenever the bytes might have changed.
+
+    ``int(mtime)`` truncates to whole seconds, so rewriting a file twice inside
+    one second produced the same ETag — and a client that resumed with
+    ``If-Range`` then got a 206 and spliced new bytes onto old ones. Include
+    ``st_mtime_ns`` and the inode as well, and keep the path so a different
+    file with identical contents does not share a validator.
+    """
+    inode = getattr(stat, "st_ino", 0)
+    return (
+        f'"{stat.st_mtime_ns}-{stat.st_size}-{inode:x}-'
+        f'{hashlib.sha1(str(path).encode("utf-8", "replace")).hexdigest()[:8]}"'
+    )
 
 
 def issue_token(pin: str, *, ttl: float = 12 * 3600) -> str:
@@ -851,7 +868,7 @@ class ShareRequestHandler(BaseHTTPRequestHandler):
             return
         size = stat.st_size
         mtime = stat.st_mtime
-        etag = f'"{int(mtime)}-{size}-{hashlib.sha1(str(path).encode()).hexdigest()[:8]}"'
+        etag = _etag_for(stat, path)
         content_type = guess_mime(path)
         tracker = self.ctx.tracker
         device = tracker.register_request(self.client_ip(), self.user_agent(), path=download_name)
@@ -879,8 +896,8 @@ class ShareRequestHandler(BaseHTTPRequestHandler):
             self.send_header("Content-Length", "0")
             self.end_headers()
             return
-        if if_range and if_range.strip() != etag and self._if_range_date(if_range, mtime) is False:
-            ranges = []
+        if if_range and not self._if_range_matches(if_range, etag, mtime):
+            ranges = []  # RFC 9110: a failed If-Range means "send the whole thing"
 
         if len(ranges) > 1:
             self._send_multipart(path, ranges, size, content_type, etag, mtime, device, rel)
@@ -974,6 +991,17 @@ class ShareRequestHandler(BaseHTTPRequestHandler):
     def _if_none_match(self, etag: str) -> bool:
         header = self.headers.get("If-None-Match", "")
         return bool(header) and (header.strip() == etag or header.strip() == "*")
+
+    def _if_range_matches(self, header: str, etag: str, mtime: float) -> bool:
+        """RFC 9110 §13.1.5: the range applies only if the validator still matches."""
+        value = header.strip()
+        if not value:
+            return False
+        if value.startswith('"') or value.startswith("W/"):
+            return value == etag
+        matched = self._if_range_date(value, mtime)
+        # A date we cannot parse must not silently enable a resume.
+        return bool(matched)
 
     def _if_range_date(self, header: str, mtime: float) -> bool | None:
         if header.startswith('"') or header.startswith("W/"):

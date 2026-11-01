@@ -438,3 +438,45 @@ def test_upload_with_the_pin_header_on_first_contact(tmp_path, server):
         body = json.loads(response.read())
     assert body["ok"] is True
     assert body["bytes"] == len(b"first contact\n" * 30)
+
+
+# ── validators: a wrong ETag must stop a resume, not corrupt it ─────────────
+def test_etag_changes_when_a_file_is_rewritten_within_the_same_second(server, tree):
+    """`int(mtime)` made a same-second rewrite invisible, so If-Range resumed."""
+    import os
+
+    target = tree / "notes.txt"
+    entry = next(f for f in manifest_of(server)["files"] if f["name"] == "notes.txt")
+    url = f"http://127.0.0.1:{server.port}/download/{entry['id']}"
+
+    before = urllib.request.urlopen(urllib.request.Request(url, method="HEAD"), timeout=5)
+    old_etag = before.headers["ETag"]
+
+    stat = target.stat()
+    target.write_text("different bytes, same length!!\n", encoding="utf-8")
+    os.utime(target, (stat.st_atime, stat.st_mtime))  # same mtime, new bytes
+
+    after = urllib.request.urlopen(urllib.request.Request(url, method="HEAD"), timeout=5)
+    assert after.headers["ETag"] != old_etag
+
+
+@pytest.mark.parametrize(
+    ("if_range", "expect_status"),
+    [
+        ("match", 206),  # current validator: honour the range
+        ('"not-the-etag"', 200),  # stale: RFC 9110 says send the whole file
+        ("garbage", 200),  # unparseable: never enable a resume on a guess
+    ],
+)
+def test_if_range_controls_whether_a_resume_happens(server, if_range, expect_status):
+    entry = next(f for f in manifest_of(server)["files"] if f["name"] == "photo.jpg")
+    url = f"http://127.0.0.1:{server.port}/download/{entry['id']}"
+    head = urllib.request.urlopen(urllib.request.Request(url, method="HEAD"), timeout=5)
+    etag = head.headers["ETag"]
+
+    value = etag if if_range == "match" else if_range
+    request = urllib.request.Request(url, headers={"Range": "bytes=0-99", "If-Range": value})
+    with urllib.request.urlopen(request, timeout=10) as response:
+        assert response.status == expect_status
+        body = response.read()
+    assert len(body) == (100 if expect_status == 206 else entry["bytes"])

@@ -21,6 +21,11 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   `/download/`. `base_url` is normalised where it is set and where it is used.
 - **Tracker**: announcing to a server that has a torrent but no registry
   answered `404 tracker disabled`; the registry is now created on demand.
+- **Resume integrity**: the ETag was built from `int(mtime)`, so a file
+  rewritten inside the same second kept its old validator — a client resuming
+  with `If-Range` got a `206` and spliced new bytes onto old ones. The tag now
+  uses `st_mtime_ns` and the inode, and a failed `If-Range` (stale or
+  unparseable) correctly falls back to a full `200` per RFC 9110.
 - **API authentication**: `_check_auth` called `self._set_auth_cookie()`, a
   method that does not exist, so every request authenticated with
   `X-LFS-PIN` — the way scripts and `curl -H` do it — died with a 500.
