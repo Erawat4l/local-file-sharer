@@ -21,6 +21,9 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   `/download/`. `base_url` is normalised where it is set and where it is used.
 - **Tracker**: announcing to a server that has a torrent but no registry
   answered `404 tracker disabled`; the registry is now created on demand.
+- **Tracker**: `event=stopped` was ignored, so a client that quit kept being
+  handed to other peers for the full three-minute peer timeout, and the swarm
+  counts stayed inflated. A stop now removes the peer immediately.
 - **Multi-range downloads**: `_send_multipart` wrote a CRLF after every part
   but left those `2 * len(ranges)` bytes out of `Content-Length`. A client
   stopped reading at the declared length, so the closing delimiter *and the

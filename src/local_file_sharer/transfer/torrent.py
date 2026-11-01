@@ -411,6 +411,13 @@ class TrackerRegistry:
             swarm = self._swarms.setdefault(info_hash, {})
             for key in [k for k, p in swarm.items() if not p.alive]:
                 swarm.pop(key, None)
+            if event == "stopped":
+                # BEP-3: a graceful goodbye removes the peer at once. Leaving it
+                # in meant clients kept dialling a dead address for three
+                # minutes and the swarm counts stayed inflated.
+                swarm.pop(peer_id, None)
+                self.announces += 1
+                return []
             swarm[peer_id] = Peer(
                 peer_id=peer_id,
                 ip=ip,

@@ -180,3 +180,48 @@ def test_files_from_entries_strips_root(share_tree):
     files = files_from_entries(manifest.iter_files(), root_name="photos")
     assert {f.rel for f in files} == {"photos/one.jpg", "photos/two.png", "photos/2024/three.txt"}
     assert files[0].parts[0] != "photos"
+
+
+# ── tracker swarm bookkeeping ───────────────────────────────────────────────
+def _registry():
+    from local_file_sharer.transfer.torrent import TrackerRegistry
+
+    return TrackerRegistry(), b"\x01" * 20
+
+
+def test_stopped_event_removes_the_peer_at_once():
+    """BEP-3 goodbye: peers must not keep dialling a client that has quit."""
+    registry, info_hash = _registry()
+    registry.announce(info_hash, peer_id=b"A" * 20, ip="10.0.0.1", port=6881, left=0)
+    registry.announce(info_hash, peer_id=b"B" * 20, ip="10.0.0.2", port=6882, left=5000)
+    assert registry.stats(info_hash) == {"complete": 1, "incomplete": 1, "downloaded": 0}
+
+    assert registry.announce(info_hash, peer_id=b"B" * 20, ip="10.0.0.2", port=6882, event="stopped") == []
+    assert registry.stats(info_hash) == {"complete": 1, "incomplete": 0, "downloaded": 0}
+    assert [p.port for p in registry.peers(info_hash)] == [6881]
+
+
+def test_stopping_an_unknown_peer_is_harmless():
+    registry, info_hash = _registry()
+    registry.announce(info_hash, peer_id=b"A" * 20, ip="10.0.0.1", port=6881, left=0)
+    assert registry.announce(info_hash, peer_id=b"Z" * 20, ip="10.0.0.9", port=1, event="stopped") == []
+    assert registry.stats(info_hash)["complete"] == 1
+
+
+def test_a_peer_never_sees_itself_and_reannouncing_does_not_duplicate():
+    registry, info_hash = _registry()
+    first = registry.announce(info_hash, peer_id=b"A" * 20, ip="10.0.0.1", port=6881, left=0, event="started")
+    assert first == [], "a lone peer has nobody else to connect to"
+
+    registry.announce(info_hash, peer_id=b"B" * 20, ip="10.0.0.2", port=6882, left=0)
+    seen_by_a = registry.announce(info_hash, peer_id=b"A" * 20, ip="10.0.0.1", port=6881, left=0)
+    assert [p.port for p in seen_by_a] == [6882]
+    assert len(registry.peers(info_hash)) == 2, "re-announcing must replace, not append"
+
+
+def test_numwant_caps_the_peer_list():
+    registry, info_hash = _registry()
+    for n in range(10):
+        registry.announce(info_hash, peer_id=bytes([n]) * 20, ip=f"10.0.0.{n + 1}", port=7000 + n, left=0)
+    seen = registry.announce(info_hash, peer_id=b"A" * 20, ip="10.0.0.1", port=6881, left=0, numwant=3)
+    assert len(seen) == 3
