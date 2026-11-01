@@ -76,8 +76,9 @@ local_file_sharer = [
 
 [tool.setuptools.data-files]
 # Ship the test suite so `pip install <sdist>` + `pytest` works. setuptools
-# copies `tests/*.py` but skips conftest.py unless it is listed here.
-"" = [".gitignore", "tests/*.py"]
+# copies `tests/*.py` but skips conftest.py unless it is listed here, and it
+# never picks up tests/js/ on its own.
+"" = [".gitignore", "tests/*.py", "tests/js/*.js"]
 
 [tool.pytest.ini_options]
 minversion = "7.0"
