@@ -21,6 +21,10 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   `/download/`. `base_url` is normalised where it is set and where it is used.
 - **Tracker**: announcing to a server that has a torrent but no registry
   answered `404 tracker disabled`; the registry is now created on demand.
+- **`config set` advice**: a rejected value told the user to "fix the value in
+  ~/.config/local-file-sharer/config.toml" — but nothing had been written, so the
+  file was the one place the problem was *not*. A bad argument now says so and
+  points at `config show`; a genuinely broken file still points at the file.
 - **`start … --json` now keeps stdout clean**: the banner and the "share ready"
   panel went to stdout alongside the final JSON object, so `--json | jq` failed
   on the first box-drawing character. Human output moves to stderr in JSON mode;

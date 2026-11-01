@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pytest
@@ -196,3 +197,33 @@ def test_missing_toml_parser_degrades_gracefully(tmp_path, monkeypatch):
     with pytest.raises(ConfigError) as excinfo:
         config_mod._read_toml(present)  # noqa: SLF001
     assert any("tomli" in hint for hint in excinfo.value.hints)
+
+
+def test_config_set_hint_says_nothing_was_written():
+    """A bad argument is not a broken file: the advice must not point at one."""
+    from local_file_sharer.config import set_value
+    from local_file_sharer.errors import ConfigError
+
+    with pytest.raises(ConfigError) as excinfo:
+        set_value("network.port", "not-a-number")
+    hints = " ".join(excinfo.value.all_hints()).lower()
+    assert "nothing was written" in hints
+    assert "config show" in hints
+
+
+def test_a_broken_config_file_points_at_the_file():
+    """The opposite case: the file really is wrong, so say so."""
+    from local_file_sharer.config import load_config
+    from local_file_sharer.errors import ConfigError
+
+    config_path = Path(os.environ["HOME"]) / ".config" / "local-file-sharer" / "config.toml"
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    config_path.write_text('[network]\nport = "not-a-number"\n', encoding="utf-8")
+    try:
+        with pytest.raises(ConfigError) as excinfo:
+            load_config()
+        hints = " ".join(excinfo.value.all_hints()).lower()
+        assert "config file" in hints
+        assert "nothing was written" not in hints
+    finally:
+        config_path.unlink(missing_ok=True)

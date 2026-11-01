@@ -253,7 +253,26 @@ _SECTION_TYPES: dict[str, type] = {
 }
 
 
-def _coerce(current: Any, raw: Any, dotted: str) -> Any:
+def _bad_value(message: str, from_cli: bool) -> ConfigError:
+    if from_cli:
+        return ConfigError(
+            message,
+            hints=[
+                "Nothing was written — pass a value this key accepts",
+                "Run `start config show` to see the current values",
+            ],
+        )
+    return ConfigError(message, hints=["Fix the value in the config file, or delete it to start over"])
+
+
+def _coerce(current: Any, raw: Any, dotted: str, *, from_cli: bool = False) -> Any:
+    """Convert *raw* to the type of *current*.
+
+    Two callers deserve different advice: a bad value in the file means "edit the
+    file", while a bad `config set` argument means "retype it" — nothing was
+    written, so pointing at the file sends the user to the wrong place.
+    """
+
     if isinstance(current, bool):
         if isinstance(raw, bool):
             return raw
@@ -264,18 +283,18 @@ def _coerce(current: Any, raw: Any, dotted: str) -> Any:
         try:
             return int(raw)
         except (TypeError, ValueError) as exc:
-            raise ConfigError(f"{dotted} must be a whole number (got {raw!r})") from exc
+            raise _bad_value(f"{dotted} must be a whole number (got {raw!r})", from_cli) from exc
     if isinstance(current, float):
         try:
             return float(raw)
         except (TypeError, ValueError) as exc:
-            raise ConfigError(f"{dotted} must be a number (got {raw!r})") from exc
+            raise _bad_value(f"{dotted} must be a number (got {raw!r})", from_cli) from exc
     if isinstance(current, list):
         if isinstance(raw, str):
             return [item.strip() for item in raw.split(",") if item.strip()]
         if isinstance(raw, (list, tuple)):
             return [str(item) for item in raw]
-        raise ConfigError(f"{dotted} must be a list (got {raw!r})")
+        raise _bad_value(f"{dotted} must be a list (got {raw!r})", from_cli)
     if isinstance(current, str):
         if isinstance(raw, (list, tuple)):
             return ",".join(str(i) for i in raw)
@@ -428,7 +447,13 @@ def set_value(dotted: str, raw: str) -> Path:
     target: Any = cfg
     for part in parts[:-1]:
         if not hasattr(target, part):
-            raise ConfigError(f"Unknown config section {part!r}")
+            raise ConfigError(
+                f"Unknown config section {part!r}",
+                hints=[
+                    "Run `start config show` to list every key",
+                    "Nothing was written",
+                ],
+            )
         target = getattr(target, part)
     leaf = parts[-1]
     if not hasattr(target, leaf):
@@ -437,7 +462,7 @@ def set_value(dotted: str, raw: str) -> Path:
             hints=["Run `start config show` to list every key"],
         )
     current = getattr(target, leaf)
-    setattr(target, leaf, _coerce(current, raw, dotted))
+    setattr(target, leaf, _coerce(current, raw, dotted, from_cli=True))
     _validate(cfg)
     return cfg.save()
 
