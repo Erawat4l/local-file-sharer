@@ -506,7 +506,17 @@ def run_doctor(*, as_json: bool = False, fast: bool = False) -> int:
             {"name": c.name, "status": c.status, "detail": c.detail, "fix": c.fix, "group": c.group}
             for c in report.checks
         ]
-        console().print_json(data={"checks": payload, "health": report.score()})  # type: ignore[arg-type]
+        console().print_json(
+            data={
+                "checks": payload,
+                "health": report.score(),
+                "healthy": report.healthy,
+                "blocking": len(report.failures),
+                "warnings": len(report.warnings),
+                "blocking_checks": [c.name for c in report.failures],
+                "fixes": [c.fix for c in report.checks if c.fix],
+            }
+        )
     else:
         console().print(render_report(report))
         console().print(

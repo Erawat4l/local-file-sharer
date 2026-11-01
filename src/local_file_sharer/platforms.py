@@ -126,6 +126,10 @@ class Drive:
         return "🖴"
 
 
+#: Where removable media usually appears on Linux/Android/macOS.
+POSIX_MOUNT_ROOTS: tuple[str, ...] = ("/storage", "/mnt", "/media", "/run/media", "/Volumes")
+
+
 def list_drives() -> list[Drive]:
     """List Windows drive letters / POSIX mount points."""
     drives: list[Drive] = []
@@ -153,7 +157,7 @@ def list_drives() -> list[Drive]:
         return drives
 
     seen: set[str] = set()
-    for base in ("/storage", "/mnt", "/media", "/run/media", "/Volumes"):
+    for base in POSIX_MOUNT_ROOTS:
         root = Path(base)
         if not root.is_dir():
             continue

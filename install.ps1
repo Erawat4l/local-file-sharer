@@ -130,7 +130,7 @@ if (-not $NoFish) {
     }
     $exe = if ($lfsCmd) { ($lfsCmd.Source ?? ($lfsCmd -as [string])) } else { 'local-file-sharer' }
     try {
-        & $python -m local_file_sharer.cli completions fish 2>$null |
+        & $python -m local_file_sharer completions fish 2>$null |
             Set-Content -Encoding UTF8 (Join-Path $fishCompDir 'start.fish')
         Write-Ok 'fish completions installed'
     } catch { Write-Warn2 'fish completions skipped' }
@@ -164,7 +164,7 @@ $profileDir = Split-Path -Parent $PROFILE.CurrentUserAllHosts
 if (-not (Test-Path $profileDir)) { New-Item -ItemType Directory -Force -Path $profileDir | Out-Null }
 $compFile = Join-Path $binDir 'local-file-sharer-completions.ps1'
 try {
-    & $python -m local_file_sharer.cli completions powershell | Set-Content -Encoding UTF8 $compFile
+    & $python -m local_file_sharer completions powershell | Set-Content -Encoding UTF8 $compFile
     $sourceLine = ". `"$compFile`""
     if (-not (Test-Path $PROFILE.CurrentUserAllHosts) -or
         -not (Select-String -Path $PROFILE.CurrentUserAllHosts -SimpleMatch $sourceLine -Quiet)) {

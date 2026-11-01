@@ -139,3 +139,29 @@ def test_update_check_handles_offline(capsys, monkeypatch):
     out = capsys.readouterr().out
     assert "offline in tests" in out
     assert "connect to the internet" in out
+
+
+def test_doctor_json_contract(capsys):
+    """`start doctor --json` is what issue reports and CI consume."""
+    payload = json.loads(_run_json(["doctor", "--json", "--fast"]))
+    assert set(payload) >= {"checks", "health", "healthy", "blocking", "warnings", "fixes"}
+    assert isinstance(payload["checks"], list) and payload["checks"]
+    for check in payload["checks"]:
+        assert {"name", "status", "detail", "fix", "group"} <= set(check)
+        assert check["status"] in {"ok", "warn", "fail", "info"}
+    assert payload["blocking"] == len(payload["blocking_checks"])
+    assert 0 <= payload["health"] <= 100
+
+
+def _run_json(argv: list[str]) -> str:
+    """Run the CLI and return stdout with the JSON document isolated."""
+    import contextlib
+    import io
+
+    buffer = io.StringIO()
+    with contextlib.redirect_stdout(buffer):
+        main(argv)
+    text = buffer.getvalue()
+    start = text.index("{")
+    end = text.rindex("}")
+    return text[start : end + 1]

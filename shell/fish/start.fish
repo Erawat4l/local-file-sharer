@@ -1,5 +1,5 @@
 # ─────────────────────────────────────────────────────────────────────────────
-#  distrobox: fish function `start`  (Termux · Linux · macOS · fish on Windows)
+#  fish function `start`  —  Termux · Linux · macOS · fish on Windows
 #
 #  Install:
 #    install.sh copies this file to ~/.config/fish/functions/start.fish
@@ -21,7 +21,7 @@ function start --description 'local-file-sharer — share files between your dev
         if test -n "$lfs_bin"
             command $lfs_bin $cmd $argv
         else if test -n "$py"
-            command $py -m local_file_sharer.cli $cmd $argv
+            command $py -m local_file_sharer $cmd $argv
         else
             echo "local-file-sharer is not installed. Run: pipx install local-file-sharer" >&2
             return 127
@@ -32,7 +32,7 @@ function start --description 'local-file-sharer — share files between your dev
     if test -n "$lfs_bin"
         command $lfs_bin $argv
     else if test -n "$py"
-        command $py -m local_file_sharer.cli $argv
+        command $py -m local_file_sharer $argv
     else
         echo "local-file-sharer is not installed." >&2
         echo "  Termux/Linux/macOS:  pipx install local-file-sharer   (or ./install.sh)" >&2

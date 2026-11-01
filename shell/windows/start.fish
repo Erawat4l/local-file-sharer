@@ -25,7 +25,7 @@ function start --description 'local-file-sharer (Windows) — share files, run d
         return $status
     end
     if test -n "$py"
-        command $py -m local_file_sharer.cli $argv
+        command $py -m local_file_sharer $argv
         return $status
     end
 

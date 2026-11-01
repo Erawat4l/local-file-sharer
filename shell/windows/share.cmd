@@ -27,10 +27,10 @@ if not defined LFS_CMD (
 
 rem 3) the Python module (python / py launcher / pipx venv)
 if not defined LFS_CMD (
-    where python.exe >nul 2>nul && set "LFS_CMD=python.exe -m local_file_sharer.cli"
+    where python.exe >nul 2>nul && set "LFS_CMD=python.exe -m local_file_sharer"
 )
 if not defined LFS_CMD (
-    where py.exe >nul 2>nul && set "LFS_CMD=py.exe -3 -m local_file_sharer.cli"
+    where py.exe >nul 2>nul && set "LFS_CMD=py.exe -3 -m local_file_sharer"
 )
 
 if not defined LFS_CMD (

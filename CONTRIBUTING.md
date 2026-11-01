@@ -120,6 +120,31 @@ we can emit the data descriptor` is gold.
 pytest -q tests/test_server.py -k range
 ```
 
+### Platform coverage
+
+CI runs the suite on **Linux and Windows** for Python 3.9–3.13. Anything that
+touches a real OS facility goes through `platforms.py` so it can be faked:
+
+| Facility | How it is tested (`tests/test_platforms.py`) |
+|---|---|
+| drive letters | `ctypes.windll` is replaced with a 26-bit mask; asserts `A:`, `C:`, `F:` and the empty-mask fallback |
+| POSIX mount points | `POSIX_MOUNT_ROOTS` is steered at a `tmp_path`, including a duplicated symlinked mount |
+| clipboard tools | table-driven over `pbcopy`, `wl-copy`, `xclip`, `xsel`, `termux-clipboard-set`, `clip.exe` |
+| tool lookup | `which` misses, extra names, and the Windows `PATHEXT` scan over `PATH` |
+| firewall hints | asserted per OS: `netsh advfirewall`, Termux battery note, `ufw`/`firewall-cmd` |
+| Tailscale / Cloudflare | only the *detection and parsing* is tested; the CLIs are never invoked |
+
+Two things cannot be exercised in this sandbox and rely on CI or a maintainer
+with the hardware:
+
+- **fish functions** (`shell/**/*.fish`): `tools/check_fish.py` does a structural
+  check locally; CI runs `fish --no-execute` on the real parser.
+- **`install.ps1`**: CI parses it with the PowerShell AST parser; a full run
+  needs a Windows machine.
+
+If you change either, say which of the two you actually ran in the PR
+description.
+
 ---
 
 ## Commit messages

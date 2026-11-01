@@ -88,6 +88,19 @@ jobs:
         run: bash -n install.sh
       - name: install.sh --help
         run: bash install.sh --help | head -20
+      - name: fish structural check (no fish needed)
+        run: python tools/check_fish.py
+      - name: fish functions parse
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq fish
+          fish --no-execute shell/fish/start.fish
+          fish --no-execute shell/windows/start.fish
+          for shell in fish bash powershell zsh; do
+            PYTHONPATH=src python -m local_file_sharer completions "$shell" > /dev/null
+          done
+          PYTHONPATH=src python -m local_file_sharer completions fish > /tmp/start.fish
+          fish --no-execute /tmp/start.fish
       - name: powershell parse
         shell: pwsh
         run: |
