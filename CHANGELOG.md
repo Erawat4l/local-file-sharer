@@ -21,6 +21,12 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   `/download/`. `base_url` is normalised where it is set and where it is used.
 - **Tracker**: announcing to a server that has a torrent but no registry
   answered `404 tracker disabled`; the registry is now created on demand.
+- **Page JS is now executed, not just pattern-matched**: a Node harness
+  (`tests/js/downloader_smoke.js`) loads the real `downloader.html` script in a
+  DOM shim, presses *#download-all*, and checks every file reassembles
+  byte-identically. It catches runtime errors — e.g. a `null.boom()` inside the
+  click handler — that source-shape assertions cannot see. Skips if Node is
+  absent.
 - **Expiry coverage**: expiry was only tested on `/`. It now has tests proving
   an expired share serves no bytes on `/f/`, `all.zip`, `/raw/`, `/webseed/`,
   `/torrent` or `/api/manifest`, that `Range` cannot bypass it, and that

@@ -559,3 +559,29 @@ def test_a_short_upload_reports_failure_and_leaves_no_file(tmp_path, free_port):
         assert not (root / "short.txt").exists(), "a partial file must not be kept"
     finally:
         server.stop()
+
+
+# ── the real page JS, executed (not just pattern-matched) ───────────────────
+def test_the_downloader_page_actually_runs_and_saves_every_file(server):
+    """Pattern-matching the source can't catch a runtime error; Node can."""
+    import shutil
+    import subprocess
+
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not installed")
+
+    root = Path(__file__).resolve().parents[1]
+    harness = root / "tests/js/downloader_smoke.js"
+    html = root / "src/local_file_sharer/web/assets/downloader.html"
+    if not harness.is_file() or not html.is_file():
+        pytest.skip("web assets not present")
+
+    result = subprocess.run(
+        [node, str(harness), f"http://127.0.0.1:{server.port}/", str(html)],
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    assert result.returncode == 0, f"{result.stdout}\n{result.stderr}"
+    assert "ok" in result.stdout
