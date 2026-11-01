@@ -21,6 +21,11 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   `/download/`. `base_url` is normalised where it is set and where it is used.
 - **Tracker**: announcing to a server that has a torrent but no registry
   answered `404 tracker disabled`; the registry is now created on demand.
+- **Expiry coverage**: expiry was only tested on `/`. It now has tests proving
+  an expired share serves no bytes on `/f/`, `all.zip`, `/raw/`, `/webseed/`,
+  `/torrent` or `/api/manifest`, that `Range` cannot bypass it, and that
+  `/healthz` and `/api/expired` stay reachable so a monitor can tell an expired
+  share from a dead one. (No behaviour change — the code was already correct.)
 - **Upload collisions**: two uploads of the same name in the same second both
   reported `ok: true` but were written to the *same* `-<epoch>` filename, so the
   second silently destroyed the first. Names are now chosen with an atomic

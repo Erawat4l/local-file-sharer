@@ -524,3 +524,74 @@ def test_two_shares_in_one_process_do_not_share_a_lockout(share_tree, free_port)
         assert b"hello.txt" in get(second, "/?pin=9999").read()
     finally:
         second.stop()
+
+
+@pytest.mark.parametrize(
+    "path_template",
+    ["/f/{file}", "/download/all.zip", "/api/manifest", "/raw/hello.txt", "/webseed/hello.txt", "/torrent"],
+)
+def test_an_expired_share_serves_no_bytes_anywhere(share_tree, free_port, path_template):
+    """Expiry must hold on every route, not just the index page."""
+    import time
+
+    manifest = Manifest.build([share_tree / "hello.txt"], expires_at=time.time() - 1)
+    server = ShareServer(manifest, host="127.0.0.1", port=free_port)
+    server.start()
+    try:
+        assert server.wait_until_ready(timeout=5)
+        entry = next(iter(manifest.iter_files()))
+        path = path_template.format(file=entry.file_id)
+        with pytest.raises(urllib.error.HTTPError) as excinfo:
+            get(server, path)
+        assert excinfo.value.code == 410
+        assert b"hello" not in excinfo.value.read().lower()
+    finally:
+        server.stop()
+
+
+def test_expiry_cannot_be_bypassed_with_a_range_request(share_tree, free_port):
+    import time
+
+    manifest = Manifest.build([share_tree / "hello.txt"], expires_at=time.time() - 1)
+    server = ShareServer(manifest, host="127.0.0.1", port=free_port)
+    server.start()
+    try:
+        assert server.wait_until_ready(timeout=5)
+        entry = next(iter(manifest.iter_files()))
+        request = urllib.request.Request(url(server, f"/f/{entry.file_id}"), headers={"Range": "bytes=0-4"})
+        with pytest.raises(urllib.error.HTTPError) as excinfo:
+            urllib.request.urlopen(request, timeout=5)
+        assert excinfo.value.code == 410
+    finally:
+        server.stop()
+
+
+def test_healthz_and_the_expired_api_stay_reachable_after_expiry(share_tree, free_port):
+    """A monitor must still be able to tell an expired share from a dead one."""
+    import time
+
+    manifest = Manifest.build([share_tree / "hello.txt"], expires_at=time.time() - 1)
+    server = ShareServer(manifest, host="127.0.0.1", port=free_port)
+    server.start()
+    try:
+        assert server.wait_until_ready(timeout=5)
+        assert json.loads(get(server, "/healthz").read())["ok"] is True
+        assert json.loads(get(server, "/api/expired").read())["expired"] is True
+    finally:
+        server.stop()
+
+
+def test_a_share_that_has_not_expired_still_serves(share_tree, free_port):
+    import time
+
+    manifest = Manifest.build([share_tree / "hello.txt"], expires_at=time.time() + 120)
+    server = ShareServer(manifest, host="127.0.0.1", port=free_port)
+    server.start()
+    try:
+        assert server.wait_until_ready(timeout=5)
+        assert b"hello.txt" in get(server, "/").read()
+        remaining = json.loads(get(server, "/api/expired").read())
+        assert remaining["expired"] is False
+        assert 110 < remaining["ttl"] <= 120, f"ttl should be counting down, got {remaining['ttl']}"
+    finally:
+        server.stop()
