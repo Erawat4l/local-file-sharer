@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#05080f">
+<meta name="robots" content="noindex, nofollow">
+<title>{{title}} · {{brand}} file server</title>
+<link rel="icon" href="/favicon.ico">
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+<div class="wrap">
+
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">LFS</span>
+      <span>{{brand}}<small>web file server</small></span>
+    </div>
+    <nav class="chip" aria-label="breadcrumbs" style="gap:4px">{{breadcrumbs}}</nav>
+    <div class="spacer"></div>
+    <span class="chip accent"><span class="dot"></span> serving</span>
+    <span class="chip">{{file_count}} files · {{folder_size}}</span>
+    <a class="chip" href="{{zip_url}}" download>🗜 download folder</a>
+    <a class="chip" href="/">⬇ download station</a>
+  </header>
+
+  <section class="card" style="margin-bottom:22px">
+    <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end">
+      <div style="flex:1;min-width:240px">
+        <h1 style="margin:0 0 6px;font-size:26px;letter-spacing:-0.02em">Browse <span class="grad" style="background:linear-gradient(100deg,var(--accent),var(--accent-2));-webkit-background-clip:text;background-clip:text;color:transparent">folder</span></h1>
+        <p class="muted" style="margin:0;font-size:13.5px">
+          Every file is served with HTTP Range support — resume, seek and parallelise freely.
+        </p>
+      </div>
+      <form method="get" style="display:flex;gap:8px;flex:1;min-width:240px;max-width:420px">
+        <input type="search" name="q" value="{{search}}" placeholder="Filter in this folder…">
+        <button class="btn ghost sm" type="submit">Filter</button>
+      </form>
+      <div class="actions">
+        <button class="btn sm" id="select-all">Select all</button>
+        <button class="btn alt sm" id="download-selected" disabled>⬇ Download selected (0)</button>
+      </div>
+    </div>
+    <div class="stat-row" style="margin-bottom:0">
+      <div class="stat"><div class="k">files</div><div class="v">{{file_count}}</div></div>
+      <div class="stat"><div class="k">folder size</div><div class="v">{{folder_size}}</div></div>
+      <div class="stat"><div class="k">share total</div><div class="v">{{total_size}}</div></div>
+      <div class="stat"><div class="k">transferred</div><div class="v" id="sent">—</div></div>
+      <div class="stat"><div class="k">speed</div><div class="v" id="speed">—</div></div>
+    </div>
+  </section>
+
+  <div class="list">
+    <div class="list-head">
+      <span>name</span><span style="text-align:right">size</span><span></span>
+    </div>
+    <div id="rows">
+{{rows}}
+    </div>
+  </div>
+
+  <div id="empty" class="{{empty_class}} muted" style="padding:34px;text-align:center">
+    This folder is empty — or the filter matched nothing.
+  </div>
+
+  {{upload_section}}
+
+  <footer>
+    <span>{{brand}} {{version}}</span>
+    <span class="muted">·</span>
+    <span class="mono muted">GET /api/manifest</span>
+    <div class="spacer"></div>
+    <span class="muted">tip: <kbd>aria2c -x16 -s16</kbd> for maximum speed</span>
+  </footer>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const toast = (m) => { const t = $('toast'); t.textContent = m; t.classList.add('show');
+    clearTimeout(window.__t); window.__t = setTimeout(() => t.classList.remove('show'), 1800); };
+  const selected = new Set();
+
+  document.querySelectorAll('.row').forEach(row => {
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.className = 'pick';
+    cb.style.cssText = 'accent-color:#22d3ee;width:16px;height:16px;margin-right:2px';
+    cb.addEventListener('click', (e) => e.stopPropagation());
+    cb.addEventListener('change', () => {
+      if (cb.checked) selected.add(row.href); else selected.delete(row.href);
+      updateButton();
+    });
+    row.prepend(cb);
+    row.addEventListener('click', (e) => {
+      if (e.target === cb) return;
+      // plain click = download; the ↓ cell is the same link
+    });
+  });
+
+  function updateButton() {
+    const btn = $('download-selected');
+    btn.textContent = `⬇ Download selected (${selected.size})`;
+    btn.disabled = selected.size === 0;
+  }
+
+  $('select-all').addEventListener('click', () => {
+    const rows = Array.from(document.querySelectorAll('.row'));
+    const all = selected.size === rows.length;
+    rows.forEach(row => {
+      const cb = row.querySelector('.pick');
+      cb.checked = !all;
+      if (!all) selected.add(row.href); else selected.delete(row.href);
+    });
+    updateButton();
+    $('select-all').textContent = all ? 'Select all' : 'Clear';
+  });
+
+  $('download-selected').addEventListener('click', () => {
+    const urls = Array.from(selected);
+    if (!urls.length) return;
+    let i = 0;
+    const next = () => {
+      if (i >= urls.length) { toast('Queued ' + urls.length + ' downloads'); return; }
+      const a = document.createElement('a');
+      a.href = urls[i]; a.download = ''; document.body.appendChild(a); a.click(); a.remove();
+      i += 1; setTimeout(next, 320);
+    };
+    next();
+  });
+
+  // live transfer readout
+  const fmt = (n) => { const u = ['B','KB','MB','GB','TB']; let i = 0;
+    while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
+    return (i === 0 ? n.toFixed(0) : n.toFixed(1)) + ' ' + u[i]; };
+  async function poll() {
+    try {
+      const s = await (await fetch('/api/stats', { cache: 'no-store' })).json();
+      $('sent').textContent = fmt(s.bytes_sent);
+      $('speed').textContent = s.speed > 0 ? fmt(s.speed) + '/s' : '—';
+    } catch (e) {}
+  }
+  setInterval(poll, 1500); poll();
+})();
+</script>
+</body>
+</html>

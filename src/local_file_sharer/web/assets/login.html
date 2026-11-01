@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#05080f">
+<meta name="robots" content="noindex, nofollow">
+<title>PIN required · {{brand}}</title>
+<link rel="icon" href="/favicon.ico">
+<link rel="stylesheet" href="/static/app.css">
+<style>
+  .lock { min-height: 100vh; display: grid; place-items: center; padding: 22px; }
+  .lock form { width: min(420px, 100%); display: grid; gap: 16px; text-align: center; }
+  .lock .logo { width: 56px; height: 56px; margin: 0 auto; font-size: 18px; border-radius: 16px; }
+  .lock h1 { margin: 0; font-size: 24px; letter-spacing: -0.02em; }
+  .lock p { margin: 0; color: var(--text-dim); font-size: 14px; }
+  .lock .error { color: var(--danger); font-size: 13px; opacity: 0; transition: opacity .2s ease; }
+  .lock .error.is-visible { opacity: 1; }
+  .pin-input {
+    font-family: var(--mono); font-size: 28px; letter-spacing: 0.42em; text-align: center;
+    padding: 16px; border-radius: 14px;
+  }
+</style>
+</head>
+<body>
+  <div class="lock">
+    <div class="card">
+      <form method="post" autocomplete="off">
+        <span class="logo">🔒</span>
+        <h1>{{brand}}</h1>
+        <p>This share is protected. Enter the PIN to continue.</p>
+        <input class="pin-input" type="password" name="pin" inputmode="numeric"
+               autocomplete="one-time-code" placeholder="••••" autofocus aria-label="PIN">
+        <div class="error {{hidden}}">{{error}}</div>
+        <button class="btn" type="submit">Unlock</button>
+        <p class="muted" style="font-size:12px">Ask the sender for the PIN — it is shown in their terminal.</p>
+      </form>
+    </div>
+  </div>
+</body>
+</html>

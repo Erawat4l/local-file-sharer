@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#05080f">
+<meta name="robots" content="noindex, nofollow">
+<meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate">
+<title>{{title}} · {{brand}}</title>
+<link rel="icon" href="/favicon.ico">
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+<div class="wrap">
+
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">LFS</span>
+      <span>{{brand}}<small>download station</small></span>
+    </div>
+    <span class="chip accent"><span class="dot"></span> live</span>
+    <span class="chip">mode <b>{{mode}}</b></span>
+    <span class="chip">⏳ <b id="expiry">{{expiry}}</b></span>
+    <div class="spacer"></div>
+    <span class="chip">👥 <b id="devices">{{device_count}}</b> devices</span>
+    <span class="chip">{{version}}</span>
+  </header>
+
+  <section class="hero">
+    <div class="card">
+      <h1>Download <span class="grad">everything</span>, fast.</h1>
+      <p class="lead">
+        {{file_count}} files · {{total_size}} shared from <span class="mono">{{peer}}</span>.
+        Grab one file, several at once with 16 parallel connections, or pull the whole
+        share as a single resumable <span class="mono">.zip</span>.
+      </p>
+
+      <div class="stat-row">
+        <div class="stat"><div class="k">files</div><div class="v">{{file_count}}</div></div>
+        <div class="stat"><div class="k">total size</div><div class="v">{{total_size}}</div></div>
+        <div class="stat"><div class="k">connections</div><div class="v">{{parallel}} <small>parallel</small></div></div>
+        <div class="stat"><div class="k">speed</div><div class="v" id="speed">—</div></div>
+      </div>
+
+      <div class="actions">
+        <button class="btn" id="download-all">⬇ Download all · {{parallel}} connections</button>
+        <a class="btn alt" href="{{zip_url}}" id="zip-link">🗜 Everything as .zip</a>
+        <button class="btn ghost" id="copy-command">📋 Copy curl one-liner</button>
+        <button class="btn ghost" id="copy-aria">⚡ aria2c -x16</button>
+        {{torrent_links}}
+      </div>
+
+      <div style="margin-top:18px">
+        <div class="progress"><i id="progress-bar"></i></div>
+        <div style="display:flex;justify-content:space-between;margin-top:8px" class="mono muted">
+          <span id="progress-text">idle</span>
+          <span id="eta">—</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="card qr-card">
+      <div class="qr-frame">
+        <img id="qr" alt="QR code for this share" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'/%3E">
+      </div>
+      <div class="copy-row">
+        <input id="share-url" value="{{base_url}}" readonly aria-label="Share URL">
+        <button class="btn ghost sm" id="copy-url">Copy</button>
+      </div>
+      <div class="qr-caption">scan to open on another device</div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <h2>Shared files</h2>
+      <span class="count">{{file_count}} items · {{total_size}}</span>
+      <div class="spacer" style="flex:1"></div>
+      <input id="filter" type="search" placeholder="Filter files…" style="max-width:260px">
+    </div>
+    <div class="grid" id="file-grid">
+{{files}}
+    </div>
+    <div id="empty" class="hidden muted" style="padding:30px;text-align:center">No files match that filter.</div>
+  </section>
+
+  {{upload_section}}
+
+  <footer>
+    <span>{{brand}} {{version}}</span>
+    <span class="muted">·</span>
+    <span class="muted">resumable · range requests · zero-copy sendfile</span>
+    <div class="spacer"></div>
+    <span class="muted">powered by pure Python + rich</span>
+  </footer>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(() => {
+  const CL = 16; // parallel connections for the download-all button
+  const files = Array.from(document.querySelectorAll('.card.file')).map(el => ({
+    id: el.dataset.id,
+    name: el.querySelector('h3').textContent.trim(),
+    url: `/f/${el.dataset.id}`,
+    size: el.querySelector('p').textContent.trim(),
+  }));
+
+  const $ = (id) => document.getElementById(id);
+  const toast = (msg) => {
+    const el = $('toast'); el.textContent = msg; el.classList.add('show');
+    clearTimeout(window.__toast); window.__toast = setTimeout(() => el.classList.remove('show'), 1900);
+  };
+  const copy = async (text, label) => {
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        const ta = document.createElement('textarea');
+        ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+        document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove();
+      }
+      toast(label || 'Copied to clipboard');
+    } catch (e) { toast('Copy failed — select manually'); }
+  };
+
+  // ── QR (rendered locally so the page works offline) ─────────────────────
+  async function renderQR(text) {
+    try {
+      const res = await fetch('/api/qr?data=' + encodeURIComponent(text));
+      if (!res.ok) throw new Error('no qr');
+      const svg = await res.text();
+      $('qr').src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+    } catch (e) { /* keep the placeholder */ }
+  }
+  const base = $('share-url').value;
+  if (base) renderQR(base);
+
+  // ── parallel download (16 connections) ─────────────────────────────────
+  async function downloadParallel(file) {
+    try {
+      const head = await fetch(file.url, { method: 'HEAD', cache: 'no-store' });
+      const len = parseInt(head.headers.get('content-length') || '0', 10);
+      if (!len || !head.headers.get('accept-ranges')) {
+        window.location.href = file.url; return;
+      }
+      const chunk = Math.ceil(len / CL);
+      const parts = [];
+      for (let i = 0; i < CL; i++) {
+        const start = i * chunk;
+        const end = Math.min(len - 1, start + chunk - 1);
+        if (start > end) break;
+        parts.push({ start, end });
+      }
+      const blob = new Blob(new Array(parts.length));
+      for (const [i, p] of parts.entries()) {
+        const r = await fetch(file.url, { headers: { Range: `bytes=${p.start}-${p.end}` }, cache: 'no-store' });
+        const buf = await r.arrayBuffer();
+        blob[i] = buf;
+        const pct = ((i + 1) / parts.length) * 100;
+        $('progress-bar').style.width = pct.toFixed(1) + '%';
+        $('progress-text').textContent = `${file.name} · part ${i + 1}/${parts.length}`;
+      }
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = file.name; document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 30000);
+      $('progress-text').textContent = `${file.name} · saved`;
+      toast('Saved ' + file.name);
+    } catch (e) {
+      window.location.href = file.url; // fall back to a normal download
+    }
+  }
+
+  $('download-all').addEventListener('click', async () => {
+    const btn = $('download-all');
+    btn.disabled = true;
+    for (const [i, f] of files.entries()) {
+      $('progress-text').textContent = `queued ${i + 1}/${files.length} · ${f.name}`;
+      await downloadParallel(f);
+      await new Promise(r => setTimeout(r, 260));
+    }
+    btn.disabled = false;
+    toast('All downloads started');
+  });
+
+  const mkCmd = (list, baseUrl) => list.map(f => `curl -O ${baseUrl.replace(/\/$/, '')}/f/${f.id}`).join(' \n  ');
+  $('copy-command').addEventListener('click', () =>
+    copy(`curl -L -O ${base}download/all.zip`, 'curl command copied'));
+  $('copy-aria').addEventListener('click', () =>
+    copy(`aria2c -x16 -s16 -k1M ${base}download/all.zip`, 'aria2c command copied'));
+  $('copy-url').addEventListener('click', () => copy(base, 'Link copied'));
+  document.querySelectorAll('[data-copy]').forEach(btn =>
+    btn.addEventListener('click', () => copy(btn.dataset.copy, 'Magnet link copied')));
+
+  // ── filter ──────────────────────────────────────────────────────────────
+  $('filter').addEventListener('input', (e) => {
+    const q = e.target.value.toLowerCase();
+    let shown = 0;
+    document.querySelectorAll('.card.file').forEach(el => {
+      const hit = el.querySelector('h3').textContent.toLowerCase().includes(q);
+      el.classList.toggle('hidden', !hit);
+      if (hit) shown++;
+    });
+    $('empty').classList.toggle('hidden', shown !== 0);
+  });
+
+  // ── live stats (no full page reloads) ──────────────────────────────────
+  let lastBytes = 0, lastTs = Date.now();
+  async function poll() {
+    try {
+      const r = await fetch('/api/stats', { cache: 'no-store' });
+      const s = await r.json();
+      const now = Date.now();
+      const dt = Math.max(0.2, (now - lastTs) / 1000);
+      const inst = Math.max(0, (s.bytes_sent - lastBytes) / dt);
+      lastBytes = s.bytes_sent; lastTs = now;
+      const speed = s.speed > 0 ? s.speed : inst;
+      $('speed').textContent = speed > 0 ? fmt(speed) + '/s' : '—';
+      $('devices').textContent = s.device_count;
+      const { sent, total } = s.transferred || {};
+      if (total) {
+        $('progress-bar').style.width = Math.min(100, (sent / total) * 100).toFixed(1) + '%';
+        $('progress-text').textContent = `${fmt(sent)} / ${fmt(total)}`;
+        $('eta').textContent = speed > 0 ? 'ETA ' + eta((total - sent) / speed) : '—';
+      }
+      const d = document.getElementById('expiry');
+      const exp = await fetch('/api/expiry', { cache: 'no-store' }).then(r => r.json()).catch(() => null);
+      if (exp && exp.ttl !== null && d) d.textContent = exp.ttl > 0 ? 'expires in ' + eta(exp.ttl) : 'expired';
+    } catch (e) { /* offline or server gone: stay quiet */ }
+  }
+  const fmt = (n) => {
+    const u = ['B', 'KB', 'MB', 'GB', 'TB']; let i = 0;
+    while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
+    return (i === 0 ? n.toFixed(0) : n.toFixed(1)) + ' ' + u[i];
+  };
+  const eta = (s) => {
+    s = Math.max(0, Math.round(s));
+    if (s < 60) return s + 's';
+    const m = Math.floor(s / 60), r = s % 60;
+    if (m < 60) return m + 'm ' + String(r).padStart(2, '0') + 's';
+    const h = Math.floor(m / 60);
+    return h + 'h ' + String(m % 60).padStart(2, '0') + 'm';
+  };
+  setInterval(poll, 1200); poll();
+})();
+</script>
+</body>
+</html>

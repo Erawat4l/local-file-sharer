@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#05080f">
+<meta name="robots" content="noindex, nofollow">
+<title>{{file_name}} · {{brand}} player</title>
+<link rel="icon" href="/favicon.ico">
+<style>
+  /* Self-contained player styling: full-bleed, cinema dark, cyan accents. */
+  :root{
+    --bg:#04060b; --panel:#0b1120; --line:rgba(148,163,184,.16);
+    --text:#e8eefc; --dim:#93a3c0; --faint:#5b6b86;
+    --accent:#22d3ee; --accent-2:#a78bfa; --danger:#fb7185;
+    --mono:"JetBrains Mono","SF Mono",ui-monospace,monospace;
+    color-scheme:dark;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
+    font-family:"Inter","Segoe UI",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+  body{background-image:
+      radial-gradient(900px 520px at 15% -10%, rgba(34,211,238,.16), transparent 60%),
+      radial-gradient(760px 480px at 88% 6%, rgba(167,139,250,.16), transparent 60%);
+    background-attachment:fixed}
+  .shell{display:grid;grid-template-columns:minmax(0,1fr) 330px;height:100vh;gap:0}
+  @media (max-width:980px){.shell{grid-template-columns:1fr;height:auto}}
+
+  /* ── stage ── */
+  .stage{position:relative;display:flex;flex-direction:column;min-width:0;padding:18px 22px 0}
+  .topline{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+  .logo{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;font-family:var(--mono);font-size:13px;
+    background:linear-gradient(135deg, rgba(34,211,238,.22), rgba(167,139,250,.22));
+    border:1px solid rgba(34,211,238,.4);box-shadow:0 0 24px -8px rgba(34,211,238,.7);color:#c8f7ff}
+  .title{font-weight:650;font-size:15px;letter-spacing:-.01em;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .badge{font-family:var(--mono);font-size:11px;padding:4px 9px;border-radius:999px;border:1px solid var(--line);color:var(--dim)}
+  .spacer{flex:1}
+
+  .video-wrap{position:relative;flex:1;min-height:260px;border-radius:18px;overflow:hidden;
+    background:#000;border:1px solid var(--line);box-shadow:0 30px 80px -40px rgba(0,0,0,.95)}
+  video,audio{width:100%;height:100%;display:block;background:#000}
+  video{object-fit:contain}
+  .stage-audio .video-wrap{display:grid;place-items:center;background:
+      radial-gradient(circle at 50% 40%, rgba(34,211,238,.18), transparent 62%), #060a12}
+  .stage-audio video{display:none}
+  .artwork{text-align:center;padding:28px}
+  .artwork .disc{width:180px;height:180px;margin:0 auto 18px;border-radius:50%;
+    background:conic-gradient(from 0deg, #0f172a, #1e293b, #0f172a, #22d3ee22, #0f172a);
+    border:1px solid var(--line);display:grid;place-items:center;font-size:54px;
+    animation:spin 9s linear infinite paused}
+  .playing .artwork .disc{animation-play-state:running}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .artwork h2{margin:0;font-size:17px}
+  .artwork p{margin:6px 0 0;color:var(--faint);font-family:var(--mono);font-size:12px}
+
+  /* custom controls */
+  .controls{margin-top:14px;padding:14px 16px;border-radius:16px;border:1px solid var(--line);
+    background:rgba(11,17,32,.78);backdrop-filter:blur(16px);display:grid;gap:10px}
+  .seekrow{display:flex;align-items:center;gap:12px}
+  .t{font-family:var(--mono);font-size:11.5px;color:var(--dim);min-width:52px;text-align:center}
+  input[type=range]{-webkit-appearance:none;appearance:none;flex:1;height:22px;background:transparent;cursor:pointer}
+  input[type=range]::-webkit-slider-runnable-track{height:6px;border-radius:999px;
+    background:linear-gradient(90deg,var(--accent) var(--p,0%), rgba(148,163,184,.20) var(--p,0%))}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;border-radius:50%;
+    background:#fff;margin-top:-4px;box-shadow:0 0 0 4px rgba(34,211,238,.28)}
+  input[type=range]::-moz-range-track{height:6px;border-radius:999px;background:rgba(148,163,184,.2)}
+  input[type=range]::-moz-range-progress{height:6px;border-radius:999px;background:var(--accent)}
+  input[type=range]::-moz-range-thumb{width:14px;height:14px;border:0;border-radius:50%;background:#fff}
+
+  .buttons{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  button{font-family:inherit;color:var(--text);background:rgba(148,163,184,.08);
+    border:1px solid var(--line);border-radius:11px;padding:9px 13px;font-size:13px;cursor:pointer;
+    display:inline-flex;align-items:center;gap:7px;transition:background .14s ease,transform .14s ease}
+  button:hover{background:rgba(148,163,184,.16);transform:translateY(-1px)}
+  button.primary{background:linear-gradient(135deg,#67e8f9,#22d3ee 55%,#38bdf8);color:#04121a;
+    border:0;font-weight:650;box-shadow:0 14px 30px -16px rgba(34,211,238,.9)}
+  button.icon{font-size:15px;padding:9px 11px}
+  .volume{display:flex;align-items:center;gap:8px;min-width:120px}
+  .volume input{width:90px}
+
+  .understage{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:14px 2px 20px;color:var(--faint);font-size:12.5px}
+  .understage a{color:var(--accent);text-decoration:none}
+  kbd{font-family:var(--mono);font-size:11px;padding:2px 6px;border-radius:6px;
+    border:1px solid var(--line);background:rgba(148,163,184,.1);color:var(--dim)}
+
+  /* ── playlist ── */
+  aside{border-left:1px solid var(--line);background:rgba(8,13,24,.72);backdrop-filter:blur(18px);
+    padding:18px 16px;overflow:auto}
+  aside h3{margin:0 0 12px;font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:var(--faint)}
+  .playlist{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+  .playlist li{display:flex;align-items:center;gap:8px;justify-content:space-between;padding:9px 11px;
+    border-radius:10px;border:1px solid transparent;font-size:13px}
+  .playlist li a{color:var(--text);text-decoration:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .playlist li span{font-family:var(--mono);font-size:11px;color:var(--faint);flex:0 0 auto}
+  .playlist li:hover{background:rgba(148,163,184,.09)}
+  .playlist li.active{background:rgba(34,211,238,.12);border-color:rgba(34,211,238,.4)}
+  .playlist li.active a{color:#a5f3fc}
+  .stats{margin-top:18px;padding-top:16px;border-top:1px solid var(--line);display:grid;gap:10px}
+  .stats .row{display:flex;justify-content:space-between;font-size:12.5px;color:var(--dim)}
+  .stats .row b{font-family:var(--mono);color:var(--text);font-weight:500}
+  .toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(16px);opacity:0;
+    background:rgba(11,17,32,.96);border:1px solid rgba(34,211,238,.45);padding:11px 18px;border-radius:11px;
+    font-size:13px;transition:.18s ease;z-index:50}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+</style>
+</head>
+<body>
+<div class="shell">
+  <main class="stage" id="stage">
+    <div class="topline">
+      <span class="logo">LFS</span>
+      <span class="title" title="{{file_name}}">{{file_name}}</span>
+      <span class="badge">{{size}}</span>
+      <span class="badge" id="speed">0 B/s</span>
+      <div class="spacer"></div>
+      <span class="badge">{{version}}</span>
+    </div>
+
+    <div class="video-wrap">
+      <video id="player" playsinline preload="metadata" crossorigin="anonymous">
+        Your browser cannot play this file. Use the download link below.
+      </video>
+      <div class="artwork hidden" id="artwork">
+        <div class="disc">🎵</div>
+        <h2>{{file_name}}</h2>
+        <p>{{mime}} · {{size}}</p>
+      </div>
+    </div>
+
+    <div class="controls">
+      <div class="seekrow">
+        <span class="t" id="cur">0:00</span>
+        <input id="seek" type="range" min="0" max="1000" value="0" step="1" aria-label="Seek">
+        <span class="t" id="dur">—</span>
+      </div>
+      <div class="buttons">
+        <button class="primary" id="play">▶ Play</button>
+        <button class="icon" id="back10" title="Back 10s">⏪</button>
+        <button class="icon" id="fwd10" title="Forward 10s">⏩</button>
+        <div class="volume">
+          <button class="icon" id="mute" title="Mute">🔊</button>
+          <input id="vol" type="range" min="0" max="100" value="100" aria-label="Volume">
+        </div>
+        <div class="spacer"></div>
+        <button id="rate" title="Playback speed">1×</button>
+        <button id="full" title="Fullscreen">⛶</button>
+        <button id="pip" title="Picture in picture">🖼</button>
+        <a href="{{download_url}}" download><button>⬇ Download</button></a>
+      </div>
+    </div>
+
+    <div class="understage">
+      <span>Streaming with HTTP Range — seek anywhere instantly.</span>
+      <span class="spacer" style="flex:1"></span>
+      <span><kbd>space</kbd> play · <kbd>←</kbd><kbd>→</kbd> ±10s · <kbd>f</kbd> fullscreen · <kbd>m</kbd> mute</span>
+    </div>
+  </main>
+
+  <aside>
+    <h3>Playlist · {{playlist_count}}</h3>
+    <ul class="playlist" id="playlist">
+{{playlist}}
+    </ul>
+    <div class="stats">
+      <div class="row"><span>buffered</span><b id="buffered">0%</b></div>
+      <div class="row"><span>transferred</span><b id="sent">—</b></div>
+      <div class="row"><span>devices</span><b id="devices">1</b></div>
+      <div class="row"><span>format</span><b>{{mime}}</b></div>
+    </div>
+    <p style="margin-top:18px;font-size:12px;color:var(--faint);line-height:1.55">
+      If the preview stays black, the codec is not supported by this browser
+      (common for MKV/HEVC). Download the file and play it locally — the transfer is lossless either way.
+    </p>
+  </aside>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+(() => {
+  const v = document.getElementById('player');
+  const stage = document.getElementById('stage');
+  const seek = document.getElementById('seek');
+  const cur = document.getElementById('cur');
+  const dur = document.getElementById('dur');
+  const playBtn = document.getElementById('play');
+  const toast = (m) => { const t = document.getElementById('toast'); t.textContent = m;
+    t.classList.add('show'); clearTimeout(window.__t); window.__t = setTimeout(() => t.classList.remove('show'), 1600); };
+
+  // The stream URL (identity-encoded so Range offsets are byte exact).
+  const src = '/f/{{file_id}}';
+  const mime = '{{mime}}';
+  const isAudio = mime.startsWith('audio/');
+  if (isAudio) {
+    stage.classList.add('stage-audio');
+    document.getElementById('artwork').classList.remove('hidden');
+  }
+  v.src = src;
+  v.load();
+
+  const clock = (s) => {
+    if (!isFinite(s)) return '—';
+    s = Math.max(0, Math.round(s));
+    const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), x = s % 60;
+    return h ? `${h}:${String(m).padStart(2,'0')}:${String(x).padStart(2,'0')}`
+             : `${m}:${String(x).padStart(2,'0')}`;
+  };
+
+  v.addEventListener('loadedmetadata', () => {
+    dur.textContent = clock(v.duration);
+    // restore last position so a reload keeps your place
+    const saved = parseFloat(localStorage.getItem('lfs-pos:' + location.pathname) || '0');
+    if (saved > 3 && saved < v.duration - 5) v.currentTime = saved;
+  });
+  v.addEventListener('timeupdate', () => {
+    if (v.duration) {
+      const pct = (v.currentTime / v.duration) * 100;
+      seek.value = String(Math.round(pct * 10));
+      seek.style.setProperty('--p', pct + '%');
+      cur.textContent = clock(v.currentTime);
+    }
+    if (Math.floor(v.currentTime) % 4 === 0) {
+      localStorage.setItem('lfs-pos:' + location.pathname, String(v.currentTime));
+    }
+  });
+  v.addEventListener('play', () => { playBtn.textContent = '⏸ Pause'; stage.classList.add('playing'); });
+  v.addEventListener('pause', () => { playBtn.textContent = '▶ Play'; stage.classList.remove('playing'); });
+  v.addEventListener('progress', () => {
+    if (!v.buffered.length || !v.duration) return;
+    const end = v.buffered.end(v.buffered.length - 1);
+    document.getElementById('buffered').textContent = Math.round((end / v.duration) * 100) + '%';
+  });
+  v.addEventListener('error', () => toast('This codec cannot be previewed — download it instead'));
+
+  seek.addEventListener('input', () => {
+    const pct = Number(seek.value) / 10;
+    seek.style.setProperty('--p', pct + '%');
+    if (v.duration) v.currentTime = (pct / 100) * v.duration;
+  });
+  playBtn.addEventListener('click', () => (v.paused ? v.play() : v.pause()));
+  document.getElementById('back10').addEventListener('click', () => { v.currentTime = Math.max(0, v.currentTime - 10); });
+  document.getElementById('fwd10').addEventListener('click', () => { v.currentTime = Math.min(v.duration || 1e9, v.currentTime + 10); });
+  document.getElementById('mute').addEventListener('click', (e) => {
+    v.muted = !v.muted; e.currentTarget.textContent = v.muted ? '🔇' : '🔊';
+  });
+  document.getElementById('vol').addEventListener('input', (e) => { v.volume = e.target.value / 100; v.muted = v.volume === 0; });
+  const rates = [1, 1.25, 1.5, 2, 0.75];
+  let rateIdx = 0;
+  document.getElementById('rate').addEventListener('click', (e) => {
+    rateIdx = (rateIdx + 1) % rates.length; v.playbackRate = rates[rateIdx];
+    e.currentTarget.textContent = rates[rateIdx] + '×';
+  });
+  document.getElementById('full').addEventListener('click', () => {
+    if (document.fullscreenElement) document.exitFullscreen();
+    else (stage.requestFullscreen ? stage.requestFullscreen() : v.webkitEnterFullscreen?.());
+  });
+  document.getElementById('pip').addEventListener('click', async () => {
+    try { await v.requestPictureInPicture(); } catch (e) { toast('Picture-in-picture unavailable'); }
+  });
+
+  document.addEventListener('keydown', (e) => {
+    if (e.target.tagName === 'INPUT') return;
+    if (e.code === 'Space') { e.preventDefault(); v.paused ? v.play() : v.pause(); }
+    if (e.code === 'ArrowRight') v.currentTime = Math.min(v.duration || 1e9, v.currentTime + 10);
+    if (e.code === 'ArrowLeft') v.currentTime = Math.max(0, v.currentTime - 10);
+    if (e.key === 'f') stage.requestFullscreen?.();
+    if (e.key === 'm') { v.muted = !v.muted; }
+  });
+
+  // live transfer stats
+  const fmt = (n) => { const u=['B','KB','MB','GB','TB']; let i=0;
+    while (n>=1024 && i<u.length-1){n/=1024;i++;} return (i===0?n.toFixed(0):n.toFixed(1))+' '+u[i]; };
+  let last = 0, lastT = Date.now();
+  async function poll() {
+    try {
+      const s = await (await fetch('/api/stats', { cache: 'no-store' })).json();
+      const now = Date.now(), dt = Math.max(0.3, (now - lastT) / 1000);
+      const inst = Math.max(0, (s.bytes_sent - last) / dt);
+      last = s.bytes_sent; lastT = now;
+      const sp = s.speed > 0 ? s.speed : inst;
+      document.getElementById('speed').textContent = sp > 0 ? fmt(sp) + '/s' : '0 B/s';
+      document.getElementById('sent').textContent = fmt(s.bytes_sent);
+      document.getElementById('devices').textContent = s.device_count || 1;
+    } catch (e) {}
+  }
+  setInterval(poll, 1500); poll();
+})();
+</script>
+</body>
+</html>
