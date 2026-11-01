@@ -39,6 +39,12 @@ dev = [
   "pytest-cov>=4.1",
   "ruff>=0.3",
 ]
+# Regenerating docs/assets needs the renderers; not needed to ship the package.
+shots = [
+  "fonttools>=4.50",
+  "pillow>=10.0",
+  "resvg-py>=0.3",
+]
 
 [project.scripts]
 start = "local_file_sharer.cli:main"
@@ -64,6 +70,11 @@ local_file_sharer = [
   "web/assets/static/*",
   "py.typed",
 ]
+
+[tool.setuptools.data-files]
+# Ship the test suite so `pip install <sdist>` + `pytest` works. setuptools
+# copies `tests/*.py` but skips conftest.py unless it is listed here.
+"" = [".gitignore", "tests/*.py"]
 
 [tool.pytest.ini_options]
 minversion = "7.0"

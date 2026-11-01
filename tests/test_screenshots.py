@@ -17,6 +17,7 @@ REPO = Path(__file__).resolve().parents[1]
 TOOLS = REPO / "tools" / "screenshots"
 
 pytest.importorskip("rich")
+pytest.importorskip("fontTools", reason="the screenshot toolchain needs fontTools")
 
 if not (TOOLS / "termsvg.py").exists():  # pragma: no cover - tool is optional
     pytest.skip("screenshot toolchain not present", allow_module_level=True)

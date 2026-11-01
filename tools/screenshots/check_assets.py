@@ -74,7 +74,11 @@ def uncovered_emoji() -> list[str]:
     for extra in (REPO / "src", REPO / "tools" / "screenshots"):
         if str(extra) not in sys.path:
             sys.path.insert(0, str(extra))
-    import termsvg  # noqa: PLC0415 - optional maintainer tool
+    try:
+        import termsvg  # noqa: PLC0415 - optional maintainer tool
+    except ModuleNotFoundError as exc:  # pragma: no cover - CI without the toolchain
+        print(f"! skipping the emoji check ({exc.name} is not installed)")
+        return []
 
     from local_file_sharer.menu import ACTIONS  # noqa: PLC0415
 

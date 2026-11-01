@@ -91,7 +91,9 @@ jobs:
       - name: fish structural check (no fish needed)
         run: python tools/check_fish.py
       - name: README images resolve
-        run: python tools/screenshots/check_assets.py
+        run: |
+          pip install ".[shots]"
+          python tools/screenshots/check_assets.py
       - name: fish functions parse
         run: |
           sudo apt-get update -qq

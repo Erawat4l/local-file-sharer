@@ -8,7 +8,8 @@ and large modes, and a data-URL helper for the web UI.
 from __future__ import annotations
 
 import base64
-import io
+import struct
+import zlib
 from dataclasses import dataclass
 
 import qrcode
@@ -144,15 +145,34 @@ def print_qr(
         con.print(Text(caption, style=theme.muted, justify="left"))
 
 
-def png_bytes(data: str, *, box_size: int = 8, error_correction: int = ERROR_CORRECT_M) -> bytes:
-    """PNG bytes without requiring Pillow at import time."""
-    qr = qrcode.QRCode(error_correction=error_correction, box_size=box_size, border=2)
-    qr.add_data(data)
-    qr.make(fit=True)
-    image = qr.make_image(fill_color="black", back_color="white")
-    buffer = io.BytesIO()
-    image.save(buffer, format="PNG")
-    return buffer.getvalue()
+def _png(matrix_rows: list[list[bool]], scale: int) -> bytes:
+    """A minimal 1-bit greyscale PNG — no Pillow, no qrcode-pil plugin."""
+    cells = len(matrix_rows)
+    width = cells * scale
+    height = width
+    raw = bytearray()
+    for row in matrix_rows:
+        line = bytearray(b"\x00")  # filter type 0
+        for value in row:
+            line.extend((b"\x00" if value else b"\xff") * scale)  # 0 = black
+        # Repeat the scanline `scale` times, once per pixel row.
+        raw.extend(bytes(line) * scale)
+
+    def chunk(kind: bytes, payload: bytes) -> bytes:
+        return (
+            struct.pack(">I", len(payload))
+            + kind
+            + payload
+            + struct.pack(">I", zlib.crc32(kind + payload) & 0xFFFFFFFF)
+        )
+
+    header = struct.pack(">IIBBBBB", width, height, 8, 0, 0, 0, 0)  # 8-bit greyscale
+    return (
+        b"\x89PNG\r\n\x1a\n"
+        + chunk(b"IHDR", header)
+        + chunk(b"IDAT", zlib.compress(bytes(raw), 9))
+        + chunk(b"IEND", b"")
+    )
 
 
 def svg(data: str, *, error_correction: int = ERROR_CORRECT_M, border: int = 2) -> str:

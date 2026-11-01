@@ -110,9 +110,9 @@ def test_unknown_keys_are_ignored(tmp_path: Path):
 
 def test_secrets_are_gitignored_path():
     assert secrets_path().name == "config.local.toml"
-    assert ".gitignore" in str(Path.cwd()) or True  # sanity: repo root exists
     gitignore = Path(__file__).resolve().parents[1] / ".gitignore"
-    assert gitignore.is_file()
+    if not gitignore.is_file():  # running outside a checkout (installed sdist)
+        pytest.skip("no .gitignore next to the tests")
     assert "config.local.toml" in gitignore.read_text()
 
 
@@ -122,3 +122,36 @@ def test_speed_and_ui_clamped(tmp_path: Path):
     cfg = load_config(path=target, respect_env=False)
     assert cfg.speed.parallel_connections == 64
     assert cfg.speed.socket_buffer >= 64 * 1024
+
+
+def test_sdist_would_include_the_test_suite():
+    """`pip install <sdist> && pytest` must work: conftest.py is easy to lose.
+
+    setuptools copies `tests/*.py` as data files but silently skips conftest.py
+    unless it is listed, which left an sdist whose whole suite errored on a
+    missing `free_port` fixture.
+    """
+    import tomllib
+
+    root = Path(__file__).resolve().parents[1]
+    pyproject = root / "pyproject.toml"
+    if not pyproject.is_file():  # installed wheel, nothing to check
+        pytest.skip("no pyproject.toml next to the tests")
+
+    config = tomllib.loads(pyproject.read_text())
+    data_files = config.get("tool", {}).get("setuptools", {}).get("data-files", {})
+    patterns = [pattern for group in data_files.values() for pattern in group]
+    assert "tests/*.py" in patterns
+    assert ".gitignore" in patterns, "the secrets test reads it"
+
+
+def test_optional_dependency_groups_are_declared():
+    import tomllib
+
+    root = Path(__file__).resolve().parents[1]
+    pyproject = root / "pyproject.toml"
+    if not pyproject.is_file():
+        pytest.skip("no pyproject.toml next to the tests")
+
+    extras = tomllib.loads(pyproject.read_text())["project"]["optional-dependencies"]
+    assert {"dev", "shots"} <= set(extras)

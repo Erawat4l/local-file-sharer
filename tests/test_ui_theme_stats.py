@@ -139,11 +139,45 @@ def test_qr_size_helpers():
     assert qr.choose_error_correction("http://10.0.0.2:8080/", width=100) > 0
 
 
-def test_qr_png_bytes():
+def test_qr_png_encoder_matches_the_matrix():
+    """The PNG writer is dependency-free; it must agree with the SVG matrix."""
+    import struct
+    import zlib
+
     from local_file_sharer import qr
 
-    data = qr.png_bytes("hello", box_size=2)
+    matrix = qr.matrix("http://10.0.0.2:8080/", border=2)
+    scale = 3
+    data = qr._png(matrix, scale)  # noqa: SLF001 - the encoder is a helper
+
     assert data[:8] == b"\x89PNG\r\n\x1a\n"
+    width, height, depth, colour = struct.unpack(">IIBB", data[16:26])
+    assert (width, height) == (len(matrix) * scale, len(matrix) * scale)
+    assert (depth, colour) == (8, 0)  # 8-bit greyscale
+
+    # Walk the chunks and inflate the pixels back out.
+    pos, pixels = 8, b""
+    while pos < len(data):
+        length = struct.unpack(">I", data[pos : pos + 4])[0]
+        kind = data[pos + 4 : pos + 8]
+        payload = data[pos + 8 : pos + 8 + length]
+        assert (
+            zlib.crc32(kind + payload) & 0xFFFFFFFF
+            == struct.unpack(">I", data[pos + 8 + length : pos + 12 + length])[0]
+        )
+        if kind == b"IDAT":
+            pixels = zlib.decompress(payload)
+        pos += 12 + length
+
+    stride = width + 1  # one filter byte per scanline
+    assert len(pixels) == stride * height
+    for row_index in range(height):
+        line = pixels[row_index * stride : (row_index + 1) * stride]
+        assert line[0] == 0, "filter type must be 0 (None)"
+        expected = matrix[row_index // scale]
+        for column in range(width):
+            dark = line[1 + column] == 0
+            assert dark == bool(expected[column // scale]), (row_index, column)
 
 
 def test_tracker_counts_bytes_and_speed():
