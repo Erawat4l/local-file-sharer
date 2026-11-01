@@ -51,7 +51,8 @@ class LocalEndpoint:
 
     @property
     def icon(self) -> str:
-        return {"wifi": "📶", "ethernet": "🔗"}.get(self.kind, "🌐")
+        # ASCII only: emoji are two cells wide and mis-measure on a phone
+        return {"wifi": "w", "ethernet": "e"}.get(self.kind, "n")
 
     @property
     def pretty(self) -> str:

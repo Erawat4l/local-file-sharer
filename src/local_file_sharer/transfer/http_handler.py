@@ -371,6 +371,8 @@ class ShareRequestHandler(BaseHTTPRequestHandler):
                 self.handle_download(path[len("/download/") :].strip("/"))
             elif path.startswith("/zip/"):
                 self.serve_zip(item_id=path[len("/zip/") :].strip("/"))
+            elif path.startswith("/browse/"):
+                self.page_share_folder(path[len("/browse/") :].strip("/"), query)
             elif path.startswith("/folder/"):
                 self.serve_folder_zip(path[len("/folder/") :].strip("/"))
             elif path.startswith("/raw/"):
@@ -557,8 +559,8 @@ class ShareRequestHandler(BaseHTTPRequestHandler):
         torrent_links = ""
         if torrent is not None:
             torrent_links = (
-                f'<a class="btn ghost" href="/torrent" download>🌱 .torrent</a>'
-                f'<button class="btn ghost" data-copy="{html.escape(torrent.magnet)}">🧲 magnet link</button>'  # type: ignore[attr-defined]
+                f'<a class="btn ghost" href="/torrent" download>.torrent</a>'
+                f'<button class="btn ghost" data-copy="{html.escape(torrent.magnet)}">magnet link</button>'  # type: ignore[attr-defined]
             )
         body = (
             template.replace("{{title}}", html.escape(self.ctx.manifest.title))
@@ -600,14 +602,15 @@ class ShareRequestHandler(BaseHTTPRequestHandler):
         rows = "".join(self._browser_row(f, base="/") for f in entries)
         for item in folders:
             rows = (
-                f'<a class="row" href="/d/{item.item_id}"><span class="row-icon">📁</span>'
+                f'<a class="row" href="/d/{item.item_id}">'
+                f'<span class="row-icon">{icon_svg("folder")}</span>'
                 f'<span class="row-name">{html.escape(item.name)}/</span>'
                 f'<span class="row-size">{item.size_text}</span>'
                 f'<span class="row-get">→</span></a>'
             ) + rows
         body = (
             template.replace("{{title}}", html.escape(self.ctx.manifest.title))
-            .replace("{{breadcrumbs}}", '<a href="/">🏠 all files</a>')
+            .replace("{{breadcrumbs}}", '<a href="/">all files</a>')
             .replace("{{rows}}", rows)
             .replace("{{file_count}}", str(self.ctx.manifest.file_count))
             .replace("{{folder_size}}", human_size(self.ctx.manifest.total_bytes))
@@ -631,6 +634,37 @@ class ShareRequestHandler(BaseHTTPRequestHandler):
             self.send_error_page(HTTPStatus.NOT_FOUND, "That folder is not part of this share")
             return
         sub = (query.get("p") or [""])[0].strip("/")
+        self._render_browser(item, sub, query)
+
+    def page_share_folder(self, folder: str, query: dict[str, list[str]]) -> None:
+        """The file listing for one sub-folder of a share (``/browse/<folder>``).
+
+        The front page shows sub-folders as cards; clicking one has to land on
+        its contents. The item id is an implementation detail, so the folder is
+        addressed by name and resolved here.
+        """
+        wanted = urllib.parse.unquote(folder).strip("/")
+        item = next(
+            (
+                candidate
+                for candidate in self.ctx.manifest.items
+                if candidate.is_dir and wanted.split("/")[0] in {candidate.name, candidate.item_id}
+            ),
+            None,
+        )
+        if item is None or not item.files:
+            self.send_error_page(HTTPStatus.NOT_FOUND, "That folder is not part of this share")
+            return
+        # "/browse/Photos/2024" -> item Photos, sub-path 2024
+        head, _, rest = wanted.partition("/")
+        sub = rest if head == item.name else ""
+        self._render_browser(item, sub, query)
+
+    def _render_browser(self, item, sub: str, query: dict[str, list[str]]) -> None:  # noqa: ANN001
+        descends = f"{item.name}/{sub}" if sub else item.name
+        if sub and not any(f.rel.startswith(f"{descends}/") for f in item.files):
+            self.send_error_page(HTTPStatus.NOT_FOUND, "That folder is not part of this share")
+            return
         template = (self.ctx.assets or {}).get("server.html") or (self.ctx.assets or {}).get("index.html")
         if not template:
             self.send_error_page(HTTPStatus.INTERNAL_SERVER_ERROR, "UI assets are missing")
@@ -641,7 +675,7 @@ class ShareRequestHandler(BaseHTTPRequestHandler):
         if search:
             lowered = search.lower()
             entries = [f for f in entries if lowered in f.rel.lower()]
-        rows = "\n".join(self._browser_row(f, base=f"/d/{item_id}") for f in entries)
+        rows = "\n".join(self._browser_row(f, base=f"/d/{item.item_id}") for f in entries)
         breadcrumbs = self._breadcrumbs(item, sub)
         body = (
             template.replace("{{title}}", html.escape(item.name))
@@ -649,7 +683,7 @@ class ShareRequestHandler(BaseHTTPRequestHandler):
             .replace("{{rows}}", rows)
             .replace("{{file_count}}", str(len(item.files)))
             .replace("{{folder_size}}", item.size_text)
-            .replace("{{zip_url}}", f"/zip/{item_id}")
+            .replace("{{zip_url}}", f"/zip/{item.item_id}")
             .replace("{{total_size}}", human_size(self.ctx.manifest.total_bytes))
             .replace("{{manifest_url}}", "/api/manifest")
             .replace("{{base_url}}", html.escape(self.ctx.base_url))
@@ -684,7 +718,7 @@ class ShareRequestHandler(BaseHTTPRequestHandler):
             f'<span class="row-icon">{icon}</span>'
             f'<span class="row-name" title="{html.escape(entry.rel)}">{html.escape(entry.rel.split("/")[-1])}</span>'
             f'<span class="row-size">{size}</span>'
-            f'<span class="row-get">↓</span>'
+            f'<span class="row-get" aria-label="Download">{icon_svg("download")}</span>'
             f"</a>"
         )
 
@@ -876,7 +910,7 @@ class ShareRequestHandler(BaseHTTPRequestHandler):
             "<script>(()=>{const z=document.getElementById('dropzone'),i=document.getElementById('file-input');"
             "const send=async(fs)=>{for(const f of fs){const r=await fetch('/api/upload?name='+"
             "encodeURIComponent(f.name),{method:'POST',body:f,headers:{'Content-Type':'application/octet-stream'}});"
-            "const j=await r.json().catch(()=>({}));z.textContent=(r.ok?'✅ sent '+f.name:'⚠️ '+(j.error||'failed'));}}};"
+            "const j=await r.json().catch(()=>({}));z.textContent=(r.ok?'sent '+f.name:'failed: '+(j.error||''));}}};"
             "z.addEventListener('dragover',e=>{e.preventDefault();z.classList.add('drag')});"
             "z.addEventListener('dragleave',()=>z.classList.remove('drag'));"
             "z.addEventListener('drop',e=>{e.preventDefault();z.classList.remove('drag');send(e.dataTransfer.files)});"
@@ -1296,13 +1330,15 @@ def _entry_cards(manifest) -> list[str]:  # noqa: ANN001 - Manifest, imported la
         total = sum(entry.size for entry in members)
         count = len(members)
         label = f"{count} file{'' if count == 1 else 's'}"
+        # the name opens the folder; the zip button downloads it in one go
         cards.append(
             f'<article class="card folder" data-kind="folder" data-name="{html.escape(name.lower())}">'
-            f'<div class="card-icon">📁</div>'
-            f'<div class="card-main"><h3 title="{html.escape(name)}">{html.escape(name)}</h3>'
-            f"<p>{label} · {human_size(total)}</p></div>"
+            f'<div class="card-icon">{icon_svg("folder")}</div>'
+            f'<a class="card-main" href="/browse/{urllib.parse.quote(name)}">'
+            f'<h3 title="{html.escape(name)}">{html.escape(name)}</h3>'
+            f"<p>{label} · {human_size(total)}</p></a>"
             f'<div class="card-actions">'
-            f'<a class="btn" href="/folder/{urllib.parse.quote(name)}" download>Download zip</a>'
+            f'<a class="btn" href="/folder/{urllib.parse.quote(name)}" download>{DOWNLOAD_ZIP_LABEL}</a>'
             f"</div></article>"
         )
     for entry in sorted(loose, key=lambda e: e.rel.lower()):
@@ -1323,9 +1359,39 @@ def _entry_cards(manifest) -> list[str]:  # noqa: ANN001 - Manifest, imported la
     return cards
 
 
+#: Monochrome file glyphs. Emoji render as tofu boxes on a phone without a
+#: colour-emoji font (and clash with the black/white palette), so the icons are
+#: inline SVG: 24x24, currentColor, no dependency, no extra request.
+_ICON_PATHS = {
+    "folder": '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+    "video": '<path d="M4 6h11v12H4z"/><path d="M15 10l5-3v10l-5-3z"/>',
+    "audio": '<path d="M9 18V6l10-2v12"/><circle cx="6" cy="18" r="3"/><circle cx="16" cy="16" r="3"/>',
+    "image": '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/>'
+    '<path d="M21 16l-5-5-6 6-3-3-4 4"/>',
+    "pdf": '<path d="M6 3h8l4 4v14H6z"/><path d="M14 3v5h4"/><path d="M9 13h6M9 17h4"/>',
+    "text": '<path d="M6 3h8l4 4v14H6z"/><path d="M14 3v5h4"/><path d="M9 12h6M9 16h6"/>',
+    "archive": '<path d="M4 8h16v12H4z"/><path d="M3 4h18v4H3z"/><path d="M10 12h4"/>',
+    "download": '<path d="M12 4v11"/><path d="M7 11l5 5 5-5"/><path d="M5 20h14"/>',
+}
+_ICON_KINDS = {"video": "video", "audio": "audio", "image": "image", "pdf": "pdf", "text": "text"}
+
+#: "Download zip" would be squeezed into "zip" on a phone in the old markup;
+#: the label is spelled out here and only shortened by CSS when it has to be.
+DOWNLOAD_ZIP_LABEL = '<span class="full">Download</span> zip'
+
+
+def icon_svg(kind: str) -> str:
+    """An inline monochrome SVG for a file kind (or ``folder``)."""
+    path = _ICON_PATHS.get(kind, _ICON_PATHS["archive"])
+    return (
+        '<svg class="ico" viewBox="0 0 24 24" width="20" height="20" fill="none" '
+        'stroke="currentColor" stroke-width="1.6" stroke-linecap="round" '
+        f'stroke-linejoin="round" aria-hidden="true">{path}</svg>'
+    )
+
+
 def _icon_for(entry: FileEntry) -> str:
-    kind = kind_of(entry.path)
-    return {"video": "🎬", "audio": "🎵", "image": "🖼️", "pdf": "📕", "text": "📄"}.get(kind, "📦")
+    return icon_svg(_ICON_KINDS.get(kind_of(entry.path), "archive"))
 
 
 ERROR_FALLBACK = """<!doctype html><html><head><meta charset="utf-8">

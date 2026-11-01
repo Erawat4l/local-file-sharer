@@ -51,10 +51,13 @@ def test_list_entries_missing_folder(tmp_path):
 
 
 def test_icons():
-    assert icon_for(Path("movie.mkv"), icons=True) == "🎬"
-    assert icon_for(Path("song.mp3"), icons=True) == "🎵"
-    assert icon_for(Path("a.py"), icons=True) == "🐍"
-    assert icon_for(Path("Unknown"), icons=True) == "📄"
+    # single-cell glyphs only: emoji are double width and mis-measure on phones
+    assert icon_for(Path("movie.mkv"), icons=True) == ">"
+    assert icon_for(Path("song.mp3"), icons=True) == "~"
+    assert icon_for(Path("a.py"), icons=True) == ":"
+    assert icon_for(Path("Unknown"), icons=True) == "-"
+    for name in ("movie.mkv", "song.mp3", "a.py", "Unknown", "shots.png"):
+        assert len(icon_for(Path(name), icons=True)) == 1
     assert icon_for(Path("movie.mkv"), icons=False) == ""
 
 

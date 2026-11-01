@@ -37,6 +37,7 @@ from rich.text import Text
 from .. import platforms
 from ..fmt import fit, human_size
 from ..picker import (
+    FOLDER_ICON,
     Entry,
     SelectionSummary,
     analyze,
@@ -200,11 +201,11 @@ def _selection_bar(state: PickerState, width: int) -> RenderableType:
     paths = list(state.selected.values())
     summary = analyze(paths, max_entries=20_000)
     chips = [
-        stat_chip("📄", f"{summary.files}", theme.accent),
-        stat_chip("📁", f"{summary.folders}", theme.info),
+        stat_chip("-", f"{summary.files}", theme.accent),
+        stat_chip("d", f"{summary.folders}", theme.info),
         stat_chip("💾", summary.size_text, theme.success),
         stat_chip(
-            "✅" if summary.shareable else "⚠️",
+            "ok" if summary.shareable else "!",
             summary.status_text(),
             theme.success if summary.shareable else theme.warning,
         ),
@@ -389,7 +390,9 @@ def _fallback_prompt(state: PickerState) -> str:
     view = state.visible()
     for index, entry in enumerate(view[:40], start=1):
         console().print(
-            Text(f"  {index:>3} {'📁' if entry.is_dir else entry.icon} {entry.name}  ({entry.display_size})")
+            Text(
+                f"  {index:>3} {FOLDER_ICON if entry.is_dir else entry.icon} {entry.name}  ({entry.display_size})"
+            )
         )
     return console().input(
         Text(" numbers (6,7,8 / 6-8) or path, Enter to share, q to quit › ", style="lfs.accent")
@@ -414,7 +417,7 @@ def run_picker(
     try:
         state.reload(icons=icons)
     except Exception as exc:  # noqa: BLE001 - fall back to home
-        console().print(Text(f"⚠️  {exc}", style=theme.warning))
+        console().print(Text(f"!  {exc}", style=theme.warning))
         state.cwd = platforms.home_dir()
         state.reload(icons=icons)
 

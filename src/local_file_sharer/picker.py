@@ -20,126 +20,102 @@ from .errors import PickerError
 from .fmt import human_size
 
 # ── Icons ────────────────────────────────────────────────────────────────────
+# Icons are single-cell text glyphs, not emoji. On a phone terminal an emoji is
+# two cells wide but is often measured as one, which pushes the file size and
+# the rest of the row out of alignment — and in Termux the emoji font is often
+# missing entirely, so they render as tofu boxes. These are ASCII/Latin-1 only.
 EXTENSION_ICONS: dict[str, str] = {
     # video
-    "mp4": "🎬",
-    "mkv": "🎬",
-    "avi": "🎬",
-    "mov": "🎬",
-    "webm": "🎬",
-    "m4v": "🎬",
-    "flv": "🎬",
-    "wmv": "🎬",
-    "mpg": "🎬",
-    "mpeg": "🎬",
-    "m3u8": "🎬",
-    "mts": "🎬",
+    "mp4": ">",
+    "mkv": ">",
+    "avi": ">",
+    "mov": ">",
+    "webm": ">",
+    "m4v": ">",
+    "flv": ">",
+    "wmv": ">",
+    "mpg": ">",
+    "mpeg": ">",
+    "m3u8": ">",
+    "mts": ">",
     # audio
-    "mp3": "🎵",
-    "flac": "🎵",
-    "wav": "🎵",
-    "m4a": "🎵",
-    "aac": "🎵",
-    "ogg": "🎵",
-    "opus": "🎵",
-    "wma": "🎵",
-    "aiff": "🎵",
-    "mid": "🎵",
+    "mp3": "~",
+    "flac": "~",
+    "wav": "~",
+    "m4a": "~",
+    "aac": "~",
+    "ogg": "~",
+    "opus": "~",
+    "wma": "~",
+    "aiff": "~",
+    "mid": "~",
     # images
-    "jpg": "🖼️",
-    "jpeg": "🖼️",
-    "png": "🖼️",
-    "gif": "🖼️",
-    "webp": "🖼️",
-    "bmp": "🖼️",
-    "svg": "🖼️",
-    "ico": "🖼️",
-    "heic": "🖼️",
-    "avif": "🖼️",
-    "tiff": "🖼️",
-    # docs
-    "pdf": "📕",
-    "doc": "📘",
-    "docx": "📘",
-    "odt": "📘",
-    "txt": "📄",
-    "md": "📝",
-    "rtf": "📄",
-    "epub": "📚",
-    "mobi": "📚",
-    "djvu": "📚",
-    # sheets / slides
-    "xls": "📊",
-    "xlsx": "📊",
-    "csv": "📊",
-    "ods": "📊",
-    "ppt": "📽️",
-    "pptx": "📽️",
-    "odp": "📽️",
+    "jpg": "#",
+    "jpeg": "#",
+    "png": "#",
+    "gif": "#",
+    "webp": "#",
+    "bmp": "#",
+    "svg": "#",
+    "ico": "#",
+    "heic": "#",
+    "avif": "#",
+    "tiff": "#",
     # archives
-    "zip": "🗜️",
-    "rar": "🗜️",
-    "7z": "🗜️",
-    "tar": "🗜️",
-    "gz": "🗜️",
-    "bz2": "🗜️",
-    "xz": "🗜️",
-    "zst": "🗜️",
-    "iso": "💿",
-    "apk": "📦",
-    "exe": "⚙️",
-    "msi": "⚙️",
-    "deb": "📦",
-    "rpm": "📦",
-    "pkg": "📦",
-    "dmg": "💿",
-    "jar": "☕",
+    "zip": "=",
+    "tar": "=",
+    "gz": "=",
+    "xz": "=",
+    "bz2": "=",
+    "7z": "=",
+    "rar": "=",
+    "zst": "=",
+    # docs
+    "md": "-",
+    "txt": "-",
+    "log": "-",
+    "ini": "-",
+    "cfg": "-",
+    "conf": "-",
+    "toml": "-",
+    "yaml": "-",
+    "yml": "-",
+    "json": "-",
     # code
-    "py": "🐍",
-    "js": "🟨",
-    "ts": "🟦",
-    "tsx": "🟦",
-    "jsx": "🟨",
-    "json": "🧾",
-    "yml": "🧾",
-    "yaml": "🧾",
-    "toml": "🧾",
-    "xml": "🧾",
-    "html": "🌐",
-    "css": "🎨",
-    "sh": "⌨️",
-    "bash": "⌨️",
-    "ps1": "⌨️",
-    "bat": "⌨️",
-    "c": "🔧",
-    "h": "🔧",
-    "cpp": "🔧",
-    "rs": "🦀",
-    "go": "🐹",
-    "java": "☕",
-    "kt": "🟪",
-    "sql": "🗃️",
-    # misc
-    "torrent": "🌱",
-    "log": "🧻",
-    "ini": "🧾",
-    "cfg": "🧾",
-    "conf": "🧾",
+    "py": ":",
+    "js": ":",
+    "ts": ":",
+    "rs": ":",
+    "go": ":",
+    "c": ":",
+    "h": ":",
+    "cpp": ":",
+    "sh": ":",
+    "fish": ":",
+    # packages and installers
+    "apk": "+",
+    "exe": "+",
+    "msi": "+",
+    "deb": "+",
+    "rpm": "+",
 }
 
 SPECIAL_ICONS: dict[str, str] = {
-    "android": "🤖",
-    "dcim": "📷",
-    "download": "⬇️",
-    "downloads": "⬇️",
-    "documents": "📁",
-    "movies": "🎬",
-    "music": "🎵",
-    "pictures": "🖼️",
-    "videos": "🎬",
-    "node_modules": "📦",
-    ".git": "🔧",
+    "android": "+",
+    "dcim": "#",
+    "download": "v",
+    "downloads": "v",
+    "documents": "-",
+    "movies": ">",
+    "music": "~",
+    "pictures": "#",
+    "videos": ">",
+    "node_modules": "=",
+    ".git": "=",
 }
+
+FOLDER_ICON = "d"
+FILE_ICON = "-"
 
 
 def icon_for(path: Path, *, is_dir: bool | None = None, icons: bool = True) -> str:
@@ -151,11 +127,11 @@ def icon_for(path: Path, *, is_dir: bool | None = None, icons: bool = True) -> s
         except OSError:
             is_dir = False
     if is_dir:
-        return SPECIAL_ICONS.get(path.name.lower(), "📁")
+        return SPECIAL_ICONS.get(path.name.lower(), FOLDER_ICON)
     suffix = path.suffix.lower().lstrip(".")
     if not suffix:
-        return "📄"
-    return EXTENSION_ICONS.get(suffix, "📄")
+        return FILE_ICON
+    return EXTENSION_ICONS.get(suffix, FILE_ICON)
 
 
 # ── Entries ──────────────────────────────────────────────────────────────────
@@ -169,7 +145,7 @@ class Entry:
     hidden: bool = False
     readable: bool = True
     link: bool = False
-    icon: str = "📄"
+    icon: str = FILE_ICON
 
     @property
     def display_size(self) -> str:

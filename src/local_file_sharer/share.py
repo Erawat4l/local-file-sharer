@@ -420,7 +420,7 @@ class ShareRunner:
                         "through Cloudflare's edge: expect roughly 1–8 MB/s instead of LAN speed.",
                         style=theme.warning,
                     ),
-                    title="⚠️ slow-speed warning",
+                    title="! slow-speed warning",
                     border=theme.warning,
                 )
             )

@@ -22,27 +22,30 @@ from .config import Config
 from .errors import SharerError
 from .fmt import human_size
 from .network import local_endpoints, tailscale_status
-from .picker import analyze
+from .picker import FILE_ICON, FOLDER_ICON, analyze
 from .share import MODE_TAGLINES, MODES, ShareRequest, ShareRunner, ask_expiry, ask_pin, make_pin
 from .state import State
 from .ui import banner
 from .ui.components import divider, error_panel, info_panel
-from .ui.console import console, current_theme, screen_width
+from .ui.console import console, current_theme, screen_width, wrap_command
 from .ui.picker_ui import run_picker
 
+# Icons are one cell wide. A double-width emoji here pushed every row's
+# description out by a column on a phone, and Termux often has no emoji font, so
+# the menu came out as a column of tofu boxes.
 ACTIONS = [
-    ("1", "Download", "download", "⬇️", "forced download · resumable · folders auto-zip"),
-    ("2", "Serve", "serve", "🌐", "web file browser for this device or the whole folder"),
-    ("3", "Stream", "stream", "▶️", "media player with instant seeking"),
-    ("4", "Torrent", "torrent", "🌱", ".torrent + magnet · built-in tracker + webseed"),
-    ("r", "Recent", "recent", "🕘", "re-share a recently shared file"),
-    ("f", "Favourites", "favorites", "⭐", "jump to a favourite folder"),
-    ("c", "Config", "config", "⚙️", "edit settings, theme and PIN"),
-    ("d", "Doctor", "doctor", "🩺", "check dependencies, firewall and network"),
-    ("t", "Theme", "theme", "◐", "switch dark / light / mono"),
-    ("u", "Update", "update", "⬆️", "check GitHub for a new release"),
+    ("1", "Download", "download", "v", "forced download · resumable · folders auto-zip"),
+    ("2", "Serve", "serve", "n", "web file browser for this device or the whole folder"),
+    ("3", "Stream", "stream", ">", "media player with instant seeking"),
+    ("4", "Torrent", "torrent", "t", ".torrent + magnet · built-in tracker + webseed"),
+    ("r", "Recent", "recent", "*", "re-share a recently shared file"),
+    ("f", "Favourites", "favorites", "+", "jump to a favourite folder"),
+    ("c", "Config", "config", "c", "edit settings, theme and PIN"),
+    ("d", "Doctor", "doctor", "d", "check dependencies, firewall and network"),
+    ("t", "Theme", "theme", "t", "switch dark / light / mono"),
+    ("u", "Update", "update", "^", "check GitHub for a new release"),
     ("?", "Help", "help", "?", "keys, one-liners and troubleshooting"),
-    ("q", "Quit", "quit", "⏏️", "leave the menu"),
+    ("q", "Quit", "quit", "q", "leave the menu"),
 ]
 
 
@@ -90,15 +93,20 @@ def render_menu(ctx: MenuContext) -> Group:
     width = screen_width()
     blocks: list = []
 
-    head = Table.grid(expand=True)
-    head.add_column()
-    head.add_column(justify="right")
-    left = Text()
-    left.append(" LFS ", style=f"bold black on {theme.accent}")
-    left.append(f" {APP_NAME}", style=theme.primary)
-    left.append(f"  v{__version__}", style=theme.faint)
-    right = Text(f"{time.strftime('%H:%M')} · {platforms.hostname()}", style=theme.faint)
-    head.add_row(left, right)
+    name = f" {APP_NAME}  v{__version__}"
+    right_text = f"{time.strftime('%H:%M')} · {platforms.hostname()}"
+    head = Text()
+    head.append(" LFS ", style=f"bold black on {theme.accent}")
+    if len(name) + 8 + len(right_text) <= width:
+        # wide enough for one line: name on the left, clock on the right
+        padding = max(1, width - len(name) - len(right_text) - 8)
+        head.append(name, style=theme.primary)
+        head.append(" " * padding)
+        head.append(right_text, style=theme.faint)
+    else:
+        # a phone: name first, clock on its own line rather than squeezed out
+        head.append(name, style=theme.primary)
+        head.append("\n" + right_text, style=theme.faint)
     blocks.append(head)
     blocks.append(divider(width=min(width - 2, 76)))
 
@@ -110,34 +118,34 @@ def render_menu(ctx: MenuContext) -> Group:
     table.add_column(no_wrap=True)
     table.add_column(overflow="ellipsis")
     table.add_row("", Text("SHARE", style=theme.info), Text("", style=theme.faint))
-    for key, label, _action, icon, desc in ACTIONS[:4]:
+    for key, label, _action, _icon, desc in ACTIONS[:4]:
         table.add_row(
             Text(key, style=theme.key),
-            Text(f"{icon} {label}", style=theme.secondary),
+            Text(label, style=theme.secondary),
             Text(desc, style=theme.faint),
         )
     table.add_row("", Text("RECENT & FAVOURITES", style=theme.info), Text("", style=theme.faint))
-    for key, label, _action, icon, desc in ACTIONS[4:6]:
+    for key, label, _action, _icon, desc in ACTIONS[4:6]:
         table.add_row(
             Text(key, style=theme.key),
-            Text(f"{icon} {label}", style=theme.secondary),
+            Text(label, style=theme.secondary),
             Text(desc, style=theme.faint),
         )
     table.add_row("", Text("SETTINGS", style=theme.info), Text("", style=theme.faint))
-    for key, label, _action, icon, desc in ACTIONS[6:]:
+    for key, label, _action, _icon, desc in ACTIONS[6:]:
         table.add_row(
             Text(key, style=theme.key),
-            Text(f"{icon} {label}", style=theme.secondary),
+            Text(label, style=theme.secondary),
             Text(desc, style=theme.faint),
         )
     blocks.append(table)
     blocks.append(Text(""))
-    blocks.append(
-        Text(
-            " pick a mode, then choose files · `lfs <path>` skips the menu · `lfs doctor` checks your setup",
-            style=theme.faint,
-        )
-    )
+    for line in wrap_command(
+        "pick a mode, then choose files · `lfs <path>` skips the menu · `lfs doctor` checks your setup",
+        indent=" ",
+        width=width,
+    ):
+        blocks.append(Text(line, style=theme.faint))
     return Group(*blocks)
 
 
@@ -190,7 +198,7 @@ def _recent(ctx: MenuContext) -> None:
         return
     for index, record in enumerate(recents[: ctx.config.ui.recent_limit], start=1):
         path = Path(record["path"])
-        icon = "📁" if path.is_dir() else "📄"
+        icon = FOLDER_ICON if path.is_dir() else FILE_ICON
         con.print(
             Text(f"  {index:>2}. {icon} {path}  ", style=theme.secondary)
             + Text(f"×{record.get('count', 1)}", style=theme.faint)

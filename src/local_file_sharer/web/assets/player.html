@@ -137,7 +137,7 @@
         Your browser cannot play this file. Use the download link below.
       </video>
       <div class="artwork hidden" id="artwork">
-        <div class="disc">🎵</div>
+        <div class="disc"><svg viewBox="0 0 24 24" width="54" height="54" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V6l10-2v12"/><circle cx="6" cy="18" r="3"/><circle cx="16" cy="16" r="3"/></svg></div>
         <h2>{{file_name}}</h2>
         <p>{{mime}} · {{size}}</p>
       </div>
@@ -151,17 +151,17 @@
       </div>
       <div class="buttons">
         <button class="primary" id="play">▶ Play</button>
-        <button class="icon" id="back10" title="Back 10s">⏪</button>
-        <button class="icon" id="fwd10" title="Forward 10s">⏩</button>
+        <button class="icon" id="back10" title="Back 10s" aria-label="Back 10 seconds">-10</button>
+        <button class="icon" id="fwd10" title="Forward 10s" aria-label="Forward 10 seconds">+10</button>
         <div class="volume">
-          <button class="icon" id="mute" title="Mute">🔊</button>
+          <button class="icon" id="mute" title="Mute" aria-label="Mute">vol</button>
           <input id="vol" type="range" min="0" max="100" value="100" aria-label="Volume">
         </div>
         <div class="spacer"></div>
         <button id="rate" title="Playback speed">1×</button>
-        <button id="full" title="Fullscreen">⛶</button>
-        <button id="pip" title="Picture in picture">🖼</button>
-        <a href="{{download_url}}" download><button>⬇ Download</button></a>
+        <button id="full" title="Fullscreen">Full</button>
+        <button id="pip" title="Picture in picture" aria-label="Picture in picture">PiP</button>
+        <a href="{{download_url}}" download><button>Download</button></a>
       </div>
     </div>
 
@@ -256,7 +256,7 @@
   document.getElementById('back10').addEventListener('click', () => { v.currentTime = Math.max(0, v.currentTime - 10); });
   document.getElementById('fwd10').addEventListener('click', () => { v.currentTime = Math.min(v.duration || 1e9, v.currentTime + 10); });
   document.getElementById('mute').addEventListener('click', (e) => {
-    v.muted = !v.muted; e.currentTarget.textContent = v.muted ? '🔇' : '🔊';
+    v.muted = !v.muted; e.currentTarget.textContent = v.muted ? 'mute' : 'vol';
   });
   document.getElementById('vol').addEventListener('input', (e) => { v.volume = e.target.value / 100; v.muted = v.volume === 0; });
   const rates = [1, 1.25, 1.5, 2, 0.75];
@@ -290,7 +290,7 @@
   document.addEventListener('fullscreenchange', () => {
     const on = Boolean(document.fullscreenElement);
     stage.classList.toggle('is-fullscreen', on);
-    document.getElementById('full').textContent = on ? '⤢ Exit' : '⤢ Full';
+    document.getElementById('full').textContent = on ? 'Exit' : 'Full';
     // keep the video sized after the layout flips
     requestAnimationFrame(() => v.dispatchEvent(new Event('resize')));
   });

@@ -110,7 +110,7 @@ def error_panel(
         body.append(Text(""))
         body.append(Text(detail, style=theme.faint))
     return Panel(
-        Group(*body), title=f"⚠️ {title}", title_align="left", border_style=theme.danger, padding=(1, 2)
+        Group(*body), title=f"! {title}", title_align="left", border_style=theme.danger, padding=(1, 2)
     )
 
 
@@ -179,7 +179,7 @@ def file_table(items: Sequence[dict], *, width: int | None = None) -> Table:
     table.add_column("", style=theme.faint, no_wrap=True)
     for item in items:
         table.add_row(
-            item.get("icon", "📄"),
+            item.get("icon", "-"),
             Text(item.get("name", ""), style=theme.secondary),
             item.get("size", ""),
             item.get("status", ""),
@@ -200,7 +200,9 @@ def speed_bar(speed: float, *, peak: float = 0.0, width: int = 24) -> Text:
 
 def mode_badge(mode: str) -> Text:
     theme = current_theme()
-    icons = {"download": "⬇️", "serve": "🌐", "stream": "▶️", "torrent": "🌱"}
+    # one-cell glyphs: a double-width emoji in a phone terminal shifts the
+    # whole badge and the border it sits in
+    icons = {"download": "v", "serve": "n", "stream": ">", "torrent": "t"}
     labels = {"download": "Download", "serve": "Serve", "stream": "Stream", "torrent": "Torrent"}
     text = Text()
     text.append(f" {icons.get(mode, '•')} {labels.get(mode, mode)} ", style=f"bold black on {theme.accent}")
