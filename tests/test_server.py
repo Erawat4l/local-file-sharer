@@ -595,3 +595,51 @@ def test_a_share_that_has_not_expired_still_serves(share_tree, free_port):
         assert 110 < remaining["ttl"] <= 120, f"ttl should be counting down, got {remaining['ttl']}"
     finally:
         server.stop()
+
+
+def test_a_share_with_many_files_zips_completely(tmp_path, free_port):
+    """Hundreds of entries exercise the central directory, not just one file."""
+    root = tmp_path / "many"
+    root.mkdir()
+    for index in range(400):
+        (root / f"file_{index:04d}.txt").write_text(f"content {index}", encoding="utf-8")
+
+    server = ShareServer(Manifest.build([root]), host="127.0.0.1", port=free_port)
+    server.start()
+    try:
+        assert server.wait_until_ready(timeout=5)
+        data = get(server, "/download/all.zip").read()
+        archive = zipfile.ZipFile(io.BytesIO(data))
+        assert len(archive.namelist()) == 400
+        assert archive.testzip() is None
+        for index in (0, 199, 399):
+            entry = f"many/file_{index:04d}.txt"
+            assert archive.read(entry) == f"content {index}".encode()
+    finally:
+        server.stop()
+
+
+def test_a_deep_range_returns_the_right_offsets(tmp_path, free_port):
+    """Resuming a large archive deep inside must not shift the offset."""
+    root = tmp_path / "big"
+    root.mkdir()
+    payload = bytes(range(256)) * 4096  # 1 MiB, non-repeating at every scale
+    (root / "payload.bin").write_bytes(payload)
+
+    server = ShareServer(Manifest.build([root]), host="127.0.0.1", port=free_port)
+    server.start()
+    try:
+        assert server.wait_until_ready(timeout=5)
+        whole = get(server, "/download/all.zip").read()
+        archive = zipfile.ZipFile(io.BytesIO(whole))
+        assert archive.read("big/payload.bin") == payload
+
+        # Local header sits at 0; find the payload inside the archive and ask for
+        # a window straddling it, exactly as a resuming client would.
+        offset = whole.index(payload[:1024])
+        start, end = offset + 1000, offset + 2000
+        window = get(server, "/download/all.zip", {"Range": f"bytes={start}-{end}"}).read()
+        assert window == whole[start : end + 1]
+        assert window == payload[1000:2001]
+    finally:
+        server.stop()

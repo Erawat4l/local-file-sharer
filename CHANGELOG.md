@@ -21,6 +21,11 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   `/download/`. `base_url` is normalised where it is set and where it is used.
 - **Tracker**: announcing to a server that has a torrent but no registry
   answered `404 tracker disabled`; the registry is now created on demand.
+- **ZIP edge cases are covered**: verified by hand that a 3 GiB single-file
+  archive (ZIP64 territory) has a valid EOCD and central directory, that a
+  3000-file archive zips completely with correct CRCs, and that a range taken
+  deep inside a large archive lands on the right offset. Tests now cover the
+  many-entry and deep-range cases without needing 3 GiB of disk.
 - **Symlinks leaked files outside the share**: `walk_folder` listed every
   directory entry, so sharing `~/Documents` with one stray `innocent.txt ->
   ~/.ssh/id_rsa` link published the private key. Links are now followed only
