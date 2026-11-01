@@ -71,7 +71,7 @@ def to_half_blocks(
         top = rows[index]
         bottom = rows[index + 1]
         chars: list[str] = []
-        for t, b in zip(top, bottom, strict=False):
+        for t, b in zip(top, bottom):  # noqa: B905 - strict= is 3.10+
             if t and b:
                 chars.append(dark)
             elif t:

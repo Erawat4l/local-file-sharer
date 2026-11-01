@@ -21,7 +21,13 @@ from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
 from typing import Any
 
-import tomllib
+try:  # Python 3.11+ ships tomllib; older versions get the tomli backport.
+    import tomllib
+except ModuleNotFoundError:  # pragma: no cover - exercised on 3.9/3.10
+    try:
+        import tomli as tomllib
+    except ModuleNotFoundError:  # pragma: no cover
+        tomllib = None  # type: ignore[assignment]
 
 from . import platforms
 from .errors import ConfigError
@@ -291,6 +297,18 @@ def _apply_table(target: Any, table: dict[str, Any], prefix: str = "") -> None:
 
 
 def _read_toml(path: Path) -> dict[str, Any]:
+    if tomllib is None:  # Python < 3.11 without the tomli backport
+        # No parser means we cannot read the file at all. A missing *config* is
+        # not fatal (defaults are fine), so only fail if the user made one.
+        if not path.is_file():
+            return {}
+        raise ConfigError(
+            f"Could not read {path}: this Python has no built-in TOML parser.",
+            hints=[
+                "pip install tomli   (it is installed automatically on Python 3.9/3.10)",
+                f"Or move the file aside — defaults are fine: mv {shlex.quote(str(path))} {shlex.quote(str(path))}.bak",
+            ],
+        )
     try:
         with path.open("rb") as handle:
             return tomllib.load(handle)

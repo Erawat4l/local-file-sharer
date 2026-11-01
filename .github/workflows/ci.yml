@@ -29,6 +29,8 @@ jobs:
         run: ruff check src tests --output-format=github
       - name: ruff format
         run: ruff format --check --diff src tests
+      - name: oldest supported Python (3.9) compatibility
+        run: python tools/check_compat.py
 
   test:
     name: test · ${{ matrix.os }} · py${{ matrix.python }}

@@ -124,6 +124,16 @@ def test_speed_and_ui_clamped(tmp_path: Path):
     assert cfg.speed.socket_buffer >= 64 * 1024
 
 
+def _toml_module():
+    """tomllib on 3.11+, tomli on 3.9/3.10 (a declared dev dependency)."""
+    try:
+        import tomllib  # type: ignore[import-not-found]
+    except ModuleNotFoundError:  # pragma: no cover - Python 3.9/3.10
+        tomli = pytest.importorskip("tomli")
+        return tomli
+    return tomllib
+
+
 def test_sdist_would_include_the_test_suite():
     """`pip install <sdist> && pytest` must work: conftest.py is easy to lose.
 
@@ -131,8 +141,7 @@ def test_sdist_would_include_the_test_suite():
     unless it is listed, which left an sdist whose whole suite errored on a
     missing `free_port` fixture.
     """
-    import tomllib
-
+    tomllib = _toml_module()
     root = Path(__file__).resolve().parents[1]
     pyproject = root / "pyproject.toml"
     if not pyproject.is_file():  # installed wheel, nothing to check
@@ -146,8 +155,7 @@ def test_sdist_would_include_the_test_suite():
 
 
 def test_optional_dependency_groups_are_declared():
-    import tomllib
-
+    tomllib = _toml_module()
     root = Path(__file__).resolve().parents[1]
     pyproject = root / "pyproject.toml"
     if not pyproject.is_file():
@@ -155,3 +163,36 @@ def test_optional_dependency_groups_are_declared():
 
     extras = tomllib.loads(pyproject.read_text())["project"]["optional-dependencies"]
     assert {"dev", "shots"} <= set(extras)
+
+
+def test_sources_stay_compatible_with_python_39():
+    """The wheel claims >=3.9 but CI here only has 3.11, so check the AST."""
+    import subprocess
+    import sys
+
+    root = Path(__file__).resolve().parents[1]
+    script = root / "tools" / "check_compat.py"
+    if not script.is_file():
+        pytest.skip("compatibility checker not present")
+    result = subprocess.run(  # noqa: S603
+        [sys.executable, str(script)], capture_output=True, text=True, cwd=root, check=False
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_missing_toml_parser_degrades_gracefully(tmp_path, monkeypatch):
+    """On 3.9/3.10 the stdlib has no tomllib. Without the tomli backport:
+    default settings must still work, and a real config must fail *usefully*."""
+    from local_file_sharer import config as config_mod
+    from local_file_sharer.errors import ConfigError
+
+    monkeypatch.setattr(config_mod, "tomllib", None)
+
+    absent = tmp_path / "absent.toml"
+    assert config_mod._read_toml(absent) == {}  # noqa: SLF001
+
+    present = tmp_path / "present.toml"
+    present.write_text('theme = "neon"\n', encoding="utf-8")
+    with pytest.raises(ConfigError) as excinfo:
+        config_mod._read_toml(present)  # noqa: SLF001
+    assert any("tomli" in hint for hint in excinfo.value.hints)

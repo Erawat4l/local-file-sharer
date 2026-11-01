@@ -21,6 +21,11 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   `/download/`. `base_url` is normalised where it is set and where it is used.
 - **Tracker**: announcing to a server that has a torrent but no registry
   answered `404 tracker disabled`; the registry is now created on demand.
+- **Python 3.9/3.10**: `config.py` imported `tomllib` unconditionally, so the
+  package raised `ModuleNotFoundError` at import time on every version the wheel
+  claims to support. It now falls back to `tomli` (a marker-guarded dependency),
+  degrades to defaults when there is no config file, and `tools/check_compat.py`
+  guards the AST in CI — there is no 3.9 interpreter to test with otherwise.
 - **Docs screenshots**: every committed PNG shipped with tofu boxes where emoji
   belonged (the Twemoji tree was one directory too deep), and `to_svg` failed
   silently. It now warns per missing glyph, `tools/screenshots/check_assets.py`
