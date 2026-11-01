@@ -480,3 +480,36 @@ def test_if_range_controls_whether_a_resume_happens(server, if_range, expect_sta
         assert response.status == expect_status
         body = response.read()
     assert len(body) == (100 if expect_status == 206 else entry["bytes"])
+
+
+# ── multipart/byteranges: aria2c -x16 and Safari use this ───────────────────
+def test_multipart_range_body_is_well_formed_and_complete(server, tree):
+    """The per-part CRLFs were missing from Content-Length, so the tail was cut."""
+    import email
+    import email.policy
+
+    target = tree / "photo.jpg"
+    data = target.read_bytes()
+    entry = next(f for f in manifest_of(server)["files"] if f["name"] == "photo.jpg")
+    url = f"http://127.0.0.1:{server.port}/download/{entry['id']}"
+
+    spans = [(0, 9), (100, 199), (len(data) - 120, len(data) - 1)]
+    spec = ",".join(f"{a}-{b}" for a, b in spans)
+    request = urllib.request.Request(url, headers={"Range": f"bytes={spec}"})
+    with urllib.request.urlopen(request, timeout=10) as response:
+        assert response.status == 206
+        assert response.headers["Content-Type"].startswith("multipart/byteranges")
+        body = response.read()
+        # A short Content-Length makes the client stop mid-boundary.
+        assert int(response.headers["Content-Length"]) == len(body)
+        content_type = response.headers["Content-Type"]
+
+    message = email.message_from_bytes(
+        b"Content-Type: " + content_type.encode() + b"\r\nMIME-Version: 1.0\r\n\r\n" + body,
+        policy=email.policy.HTTP,
+    )
+    parts = list(message.iter_parts())
+    assert len(parts) == len(spans), "every requested range must arrive"  # keeps zip() aligned
+    for part, (start, end) in zip(parts, spans):  # noqa: B905 - 3.9 has no strict=
+        assert part["Content-Range"].split()[1] == f"{start}-{end}/{len(data)}"
+        assert part.get_payload(decode=True) == data[start : end + 1]

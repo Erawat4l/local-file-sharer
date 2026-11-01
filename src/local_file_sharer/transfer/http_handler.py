@@ -970,8 +970,14 @@ class ShareRequestHandler(BaseHTTPRequestHandler):
                 f"--{boundary}\r\nContent-Type: {content_type}\r\n"
                 f"Content-Range: bytes {start}-{end}/{size}\r\n\r\n".encode()
             )
-        closing = f"\r\n--{boundary}--\r\n".encode()
-        total = sum(len(p) for p in parts) + sum(e - s + 1 for s, e in ranges) + len(closing)
+        # Every part is followed by one CRLF, and the closing delimiter adds
+        # four more bytes plus the boundary. Forgetting the per-part CRLFs made
+        # Content-Length short by 2 * len(ranges), so a client stopped reading
+        # mid-boundary and dropped the tail of the last range (RFC 2046 §5.1.1).
+        closing = f"--{boundary}--\r\n".encode()
+        total = (
+            sum(len(p) for p in parts) + sum(e - s + 1 for s, e in ranges) + 2 * len(ranges) + len(closing)
+        )
         self.send_response(HTTPStatus.PARTIAL_CONTENT)
         self.send_common_headers(content_type=f"multipart/byteranges; boundary={boundary}", length=total)
         self.send_header("Accept-Ranges", "bytes")

@@ -21,6 +21,11 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   `/download/`. `base_url` is normalised where it is set and where it is used.
 - **Tracker**: announcing to a server that has a torrent but no registry
   answered `404 tracker disabled`; the registry is now created on demand.
+- **Multi-range downloads**: `_send_multipart` wrote a CRLF after every part
+  but left those `2 * len(ranges)` bytes out of `Content-Length`. A client
+  stopped reading at the declared length, so the closing delimiter *and the
+  tail of the last range* were silently dropped — `aria2c -x16` and Safari,
+  which both use `multipart/byteranges`, got truncated data.
 - **Resume integrity**: the ETag was built from `int(mtime)`, so a file
   rewritten inside the same second kept its old validator — a client resuming
   with `If-Range` got a `206` and spliced new bytes onto old ones. The tag now
