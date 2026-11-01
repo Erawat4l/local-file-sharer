@@ -643,3 +643,39 @@ def test_a_deep_range_returns_the_right_offsets(tmp_path, free_port):
         assert window == payload[1000:2001]
     finally:
         server.stop()
+
+
+def test_stats_are_not_public_on_a_pin_protected_share(share_tree, free_port):
+    """`/api/stats` was exempt, and it names files and shows visitor IPs."""
+    manifest = Manifest.build([share_tree / "hello.txt"])
+    server = ShareServer(manifest, host="127.0.0.1", port=free_port, pin="4242")
+    server.start()
+    try:
+        assert server.wait_until_ready(timeout=5)
+        with pytest.raises(urllib.error.HTTPError) as excinfo:
+            get(server, "/api/stats")
+        assert excinfo.value.code == 401
+        assert b"hello" not in excinfo.value.read().lower()
+
+        # Logged in, the page's live counter still works.
+        import http.cookiejar
+
+        jar = http.cookiejar.CookieJar()
+        opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
+        opener.open(url(server, "/?pin=4242"), timeout=5).read()
+        payload = json.loads(opener.open(url(server, "/api/stats"), timeout=5).read())
+        assert "bytes_sent" in payload and "uptime" in payload
+    finally:
+        server.stop()
+
+
+def test_healthz_stays_public_so_a_monitor_can_poll_it(share_tree, free_port):
+    """Gating stats must not take the cheap liveness probe with it."""
+    manifest = Manifest.build([share_tree / "hello.txt"])
+    server = ShareServer(manifest, host="127.0.0.1", port=free_port, pin="4242")
+    server.start()
+    try:
+        assert server.wait_until_ready(timeout=5)
+        assert json.loads(get(server, "/healthz").read())["ok"] is True
+    finally:
+        server.stop()

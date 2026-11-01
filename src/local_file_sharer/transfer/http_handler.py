@@ -441,7 +441,7 @@ class ShareRequestHandler(BaseHTTPRequestHandler):
     def _check_auth(self, path: str, query: dict[str, list[str]]) -> bool:
         if not self.ctx.pin:
             return True
-        if path in ("/healthz", "/favicon.ico", "/robots.txt", "/api/stats"):
+        if path in ("/healthz", "/favicon.ico", "/robots.txt"):
             return True
         token = self._cookie_token()
         if token_valid(self.ctx.pin, token):

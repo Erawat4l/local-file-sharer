@@ -21,6 +21,10 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   `/download/`. `base_url` is normalised where it is set and where it is used.
 - **Tracker**: announcing to a server that has a torrent but no registry
   answered `404 tracker disabled`; the registry is now created on demand.
+- **`/api/stats` leaked on PIN-protected shares**: the endpoint was exempt from
+  the PIN check so the login page could show a counter, but its payload names
+  every shared file and lists each visitor's IP and byte count. It now requires
+  the PIN like everything else; `/healthz` stays public for monitoring.
 - **Config and state files are private (0600)**: `config.toml` stores
   `share.pin` in plain text and `state.json` remembers absolute paths and share
   URLs, but both were created world-readable (0644). They are now written with
