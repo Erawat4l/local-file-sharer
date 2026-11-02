@@ -16,7 +16,7 @@
       5. registers tab-completion for PowerShell
 
 .EXAMPLE
-    irm https://raw.githubusercontent.com/Erawat4l/local-file-sharer/main/install.ps1 | iex
+    $env:LFS_BRANCH='arena/d7f4713b-local-file-sharer'; irm https://raw.githubusercontent.com/Erawat4l/local-file-sharer/arena/d7f4713b-local-file-sharer/install.ps1 | iex
 
 .EXAMPLE
     .\install.ps1 -Dev -NoExtras
@@ -34,9 +34,10 @@ $ErrorActionPreference = 'Stop'
 $App       = 'local-file-sharer'
 $Version   = '1.0.0'
 $RepoSlug  = 'Erawat4l/local-file-sharer'
-# `main` is the released line; set $Env:LFS_BRANCH to install from a branch
-# (useful while a branch is ahead of main, e.g. an unreleased feature).
-$Branch    = if ($Env:LFS_BRANCH) { $Env:LFS_BRANCH } else { 'main' }
+# The package lives on this branch, not on `main` — `main` holds only a stub
+# README, so installing from it fails with "neither 'setup.py' nor
+# 'pyproject.toml' found". Override with $Env:LFS_BRANCH when needed.
+$Branch    = if ($Env:LFS_BRANCH) { $Env:LFS_BRANCH } else { 'arena/d7f4713b-local-file-sharer' }
 $RawBase   = "https://raw.githubusercontent.com/$RepoSlug/$Branch"
 
 function Write-Step  { param($m) Write-Host "> $m" -ForegroundColor Cyan }

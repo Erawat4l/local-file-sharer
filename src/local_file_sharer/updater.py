@@ -166,9 +166,7 @@ def upgrade_from_git(ref: str | None = None) -> int:
                 return 1
         if completed.returncode != 0:
             con.print(f"[lfs.danger]upgrade failed[/]  see {REPOSITORY_PAGE} for manual steps")
-            con.print(
-                f"[lfs.muted]try a branch explicitly:[/] lfs upgrade --ref {DEFAULT_BRANCH}"
-            )
+            con.print(f"[lfs.muted]try a branch explicitly:[/] lfs upgrade --ref {DEFAULT_BRANCH}")
             return completed.returncode
     con.print("[lfs.success]updated[/]  restart `lfs` to use the new code")
     return 0

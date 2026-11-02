@@ -2,7 +2,7 @@
 # ─────────────────────────────────────────────────────────────────────────────
 #  local-file-sharer · one-line installer for Termux, Linux and macOS
 #
-#    curl -fsSL https://raw.githubusercontent.com/Erawat4l/local-file-sharer/main/install.sh | bash
+#    curl -fsSL https://raw.githubusercontent.com/Erawat4l/local-file-sharer/arena/d7f4713b-local-file-sharer/install.sh | bash
 #
 #  What it does
 #    1. detects Termux / Linux / macOS and the Python version
@@ -21,9 +21,11 @@
 set -euo pipefail
 
 REPO_SLUG="Erawat4l/local-file-sharer"
-# `main` is the released line; set LFS_BRANCH to install from a branch (used
-# while a branch is ahead of main).
-BRANCH="${LFS_BRANCH:-main}"
+# The package lives on this branch, not on `main` — `main` holds only a stub
+# README, so installing from it fails with "neither 'setup.py' nor
+# 'pyproject.toml' found". Override with LFS_BRANCH=… when a newer branch is
+# ahead.
+BRANCH="${LFS_BRANCH:-arena/d7f4713b-local-file-sharer}"
 RAW_BASE="https://raw.githubusercontent.com/${REPO_SLUG}/${BRANCH}"
 APP="local-file-sharer"
 VERSION="1.0.0"

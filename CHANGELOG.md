@@ -9,6 +9,17 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Fixed
 
+- **`lfs upgrade` / `lfs update` can actually install.** The default branch was
+  `main`, and `main` in this repository holds nothing but a 19-byte README — no
+  `pyproject.toml`. So every upgrade ran `pip install git+…@main` and died with
+  *"does not appear to be a Python project: neither 'setup.py' nor
+  'pyproject.toml' found"*. Worse, a copy installed from `main` reported
+  `installed_ref() == "main"` and therefore retried the same broken branch
+  forever. `lfs upgrade` now asks the API whether the branch has a
+  `pyproject.toml` before installing, redirects to a branch that does (saying
+  why), and defaults to `arena/d7f4713b-local-file-sharer`. An explicit
+  `--ref` is still honoured, with a warning if it cannot work. Offline, the
+  check is skipped rather than blocking the install.
 - **`lfs update` works.** It was not a registered command, so `update` was read
   as a *path* and fell through to the share path, which answered
   "Nothing to share" — a baffling way to say "no such command". It is now an

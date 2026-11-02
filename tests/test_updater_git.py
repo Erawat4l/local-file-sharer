@@ -16,8 +16,15 @@ def test_git_spec_names_the_repository_and_ref():
     assert spec.endswith("@arena/example")
 
 
-def test_git_spec_defaults_to_main():
-    assert updater.git_spec().endswith("@main")
+def test_git_spec_defaults_to_an_installable_branch():
+    """`main` is a stub README — installing from it fails inside pip.
+
+    The default has to be a branch that actually carries pyproject.toml, or
+    every `lfs upgrade` on a fresh clone dies with "does not appear to be a
+    Python project".
+    """
+    assert updater.git_spec().endswith("@" + updater.DEFAULT_BRANCH)
+    assert updater.DEFAULT_BRANCH != "main"
 
 
 def test_installed_ref_reads_direct_url(monkeypatch):
@@ -42,7 +49,8 @@ def test_installed_ref_falls_back_to_main(monkeypatch):
     from importlib.metadata import PackageNotFoundError
 
     monkeypatch.setattr("importlib.metadata.distribution", boom)
-    assert updater.installed_ref() == "main"
+    # no metadata at all: fall back to the branch that can be installed
+    assert updater.installed_ref() == updater.DEFAULT_BRANCH
     assert updater.installed_from_git() is False
 
 
@@ -85,3 +93,69 @@ def test_upgrade_from_git_refuses_to_overwrite_a_standalone_exe(monkeypatch):
 def test_every_spec_is_a_valid_requirement(ref):
     spec = updater.git_spec(ref)
     assert " " in spec and "@" in spec and spec.count("git+") == 1
+
+
+def test_ref_has_package_reports_a_missing_pyproject(monkeypatch):
+    """`main` has no pyproject.toml; the arena branch does."""
+    monkeypatch.setattr(updater, "ref_has_package", lambda ref, **kw: ref != "main")
+    assert updater.ref_has_package("main") is False
+    assert updater.ref_has_package(updater.DEFAULT_BRANCH) is True
+
+
+def test_resolve_ref_redirects_away_from_a_branch_with_no_package(monkeypatch):
+    """The exact bug: a copy installed from `main` could never update.
+
+    It re-ran pip against `main` forever and failed with
+    "does not appear to be a Python project".
+    """
+    monkeypatch.setattr(updater, "installed_ref", lambda: "main")
+    monkeypatch.setattr(updater, "ref_has_package", lambda ref, **kw: ref != "main")
+
+    ref, note = updater.resolve_ref(None)
+    assert ref == updater.DEFAULT_BRANCH
+    assert ref != "main"
+    assert "main" in note and "pyproject" in note, "the redirect must be explained"
+
+
+def test_resolve_ref_keeps_an_explicit_ref(monkeypatch):
+    monkeypatch.setattr(updater, "ref_has_package", lambda ref, **kw: True)
+    assert updater.resolve_ref("arena/some-branch") == ("arena/some-branch", "")
+
+
+def test_resolve_ref_warns_about_an_explicit_ref_with_no_package(monkeypatch):
+    monkeypatch.setattr(updater, "ref_has_package", lambda ref, **kw: False)
+    ref, note = updater.resolve_ref("main")
+    assert ref == "main", "an explicit --ref is still honoured"
+    assert "will fail" in note
+
+
+def test_offline_does_not_block_the_install(monkeypatch):
+    """If the check cannot run, assume the ref is fine and let pip decide."""
+    import urllib.error
+
+    def boom(*_a, **_kw):
+        raise urllib.error.URLError("offline")
+
+    monkeypatch.setattr(updater.urllib.request, "urlopen", boom)
+    assert updater.ref_has_package("anything") is True
+
+
+def test_upgrade_from_git_uses_the_resolved_ref(monkeypatch):
+    """`lfs upgrade` must install the branch resolve_ref picked, not `main`."""
+    seen = {}
+
+    class Done:
+        returncode = 0
+
+    def fake_run(cmd, check=False, **_kw):
+        seen["cmd"] = cmd
+        return Done()
+
+    monkeypatch.setattr(updater.subprocess, "run", fake_run)
+    monkeypatch.setattr(updater, "detect_installer", lambda: "pipx")
+    monkeypatch.setattr(updater, "installed_ref", lambda: "main")
+    monkeypatch.setattr(updater, "ref_has_package", lambda ref, **kw: ref != "main")
+
+    assert updater.upgrade_from_git(None) == 0
+    assert updater.DEFAULT_BRANCH in " ".join(seen["cmd"])
+    assert "@main" not in " ".join(seen["cmd"])
