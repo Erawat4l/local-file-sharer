@@ -5,6 +5,7 @@ from __future__ import annotations
 import http.cookiejar
 import io
 import json
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -858,7 +859,16 @@ def test_the_tracker_counts_exactly_what_it_sends(tmp_path, free_port):
         for thread in threads:
             thread.join()
 
-        final = json.loads(get(server, "/api/stats").read())
+        # The client sees EOF the moment the last byte lands, but the server
+        # records it in a `finally` a few milliseconds later. Reading /api/stats
+        # straight after join() can catch the counter one transfer short, which
+        # looked like lost bytes and failed only under full-suite load.
+        deadline = time.monotonic() + 5
+        while True:
+            final = json.loads(get(server, "/api/stats").read())
+            if final["bytes_sent"] >= size * 9 or time.monotonic() > deadline:
+                break
+            time.sleep(0.02)
         assert final["bytes_sent"] == size * 9, "concurrent sends must not lose bytes"
         assert final["requests"] == 9
         assert final["peak_speed"] >= 0

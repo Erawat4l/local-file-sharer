@@ -177,6 +177,25 @@ a:hover { color: #fff; border-bottom-color: #fff; }
   background: #161616; border: 1px solid var(--line);
 }
 .ico { display: block; }
+
+/* inline glyphs in chips and buttons: sized in em so they scale with the
+   text, and inheriting currentColor so they invert with the theme */
+svg.i { width: 1.05em; height: 1.05em; flex: 0 0 auto; vertical-align: -0.15em; }
+.btn svg.i, .chip svg.i { display: inline-block; }
+@media (max-width: 420px) {
+  /* the phone has no room for the count; the number is repeated on the page */
+  .btn .wide-only { display: none; }
+}
+@media (max-width: 520px) {
+  /* wrapped inline buttons came out ragged — "Download all" short, the zip
+     button longer, both left-hugging. Stacked full-width rows read as one
+     column instead of an accident. */
+  .actions-wrap { display: flex; justify-content: flex-end; align-items: flex-end; }
+  .actions { flex-direction: column; align-items: stretch; flex: 1 1 auto; }
+  .actions > .btn { flex: 0 0 auto; min-width: 0; }
+  .actions > .btn, .actions > a.btn { width: 100%; }
+}
+.logo svg.i { width: 18px; height: 18px; }
 .card-main { min-width: 0; flex: 1; }
 .card-main h3 { margin: 0; font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .card-main p { margin: 3px 0 0; font-size: 12px; color: var(--text-faint); font-family: var(--mono); }

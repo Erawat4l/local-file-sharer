@@ -34,20 +34,31 @@ from .ui.picker_ui import run_picker
 # Icons are one cell wide. A double-width emoji here pushed every row's
 # description out by a column on a phone, and Termux often has no emoji font, so
 # the menu came out as a column of tofu boxes.
+# The menu is five numbered choices, not twelve. Everything a user needs to
+# share a file is in those five; settings, doctor, theme and update live behind
+# `?` so the screen answers one question instead of listing a control panel.
+# Icons are single-cell: a double-width emoji shifted every row on a phone.
 ACTIONS = [
     ("1", "Download", "download", "v", "forced download · resumable · folders auto-zip"),
     ("2", "Serve", "serve", "n", "web file browser for this device or the whole folder"),
     ("3", "Stream", "stream", ">", "media player with instant seeking"),
     ("4", "Torrent", "torrent", "t", ".torrent + magnet · built-in tracker + webseed"),
+    ("5", "Quit", "quit", "q", "leave the menu"),
+]
+
+#: Shown by `?` — the same actions plus the maintenance commands.
+EXTRA_ACTIONS = [
     ("r", "Recent", "recent", "*", "re-share a recently shared file"),
     ("f", "Favourites", "favorites", "+", "jump to a favourite folder"),
     ("c", "Config", "config", "c", "edit settings, theme and PIN"),
     ("d", "Doctor", "doctor", "d", "check dependencies, firewall and network"),
     ("t", "Theme", "theme", "t", "switch dark / light / mono"),
-    ("u", "Update", "update", "^", "check GitHub for a new release"),
+    ("u", "Update", "update", "^", "install the newest code from GitHub"),
     ("?", "Help", "help", "?", "keys, one-liners and troubleshooting"),
     ("q", "Quit", "quit", "q", "leave the menu"),
 ]
+
+ALL_ACTIONS = ACTIONS + EXTRA_ACTIONS
 
 
 @dataclass
@@ -118,31 +129,19 @@ def render_menu(ctx: MenuContext) -> Group:
     table.add_column(width=3, no_wrap=True)
     table.add_column(no_wrap=True)
     table.add_column(overflow="ellipsis")
-    table.add_row("", Text("SHARE", style=theme.info), Text("", style=theme.faint))
-    for key, label, _action, _icon, desc in ACTIONS[:4]:
+    # a phone cannot hold "name + description" on one line, and letting the
+    # description wrap doubles the height of a five-row menu; drop it instead
+    show_desc = width >= 70
+    for key, label, _action, _icon, desc in ACTIONS:
         table.add_row(
             Text(key, style=theme.key),
             Text(label, style=theme.secondary),
-            Text(desc, style=theme.faint),
-        )
-    table.add_row("", Text("RECENT & FAVOURITES", style=theme.info), Text("", style=theme.faint))
-    for key, label, _action, _icon, desc in ACTIONS[4:6]:
-        table.add_row(
-            Text(key, style=theme.key),
-            Text(label, style=theme.secondary),
-            Text(desc, style=theme.faint),
-        )
-    table.add_row("", Text("SETTINGS", style=theme.info), Text("", style=theme.faint))
-    for key, label, _action, _icon, desc in ACTIONS[6:]:
-        table.add_row(
-            Text(key, style=theme.key),
-            Text(label, style=theme.secondary),
-            Text(desc, style=theme.faint),
+            Text(desc if show_desc else "", style=theme.faint),
         )
     blocks.append(table)
     blocks.append(Text(""))
     for line in wrap_command(
-        "pick a mode, then choose files · `lfs <path>` skips the menu · `lfs doctor` checks your setup",
+        "press ? for more commands · `lfs <path>` skips the menu entirely",
         indent=" ",
         width=width,
     ):
@@ -327,9 +326,31 @@ def _theme_menu(ctx: MenuContext) -> None:
         switch_theme(name, ctx.config, ctx.state)
 
 
+def render_extra_commands() -> Group:
+    """The commands that do not fit on the five-row menu."""
+    theme = current_theme()
+    table = Table.grid(padding=(0, 2))
+    table.add_column(width=3, no_wrap=True)
+    table.add_column(no_wrap=True)
+    table.add_column(overflow="fold")
+    for key, label, _action, _icon, desc in EXTRA_ACTIONS:
+        table.add_row(
+            Text(key, style=theme.key),
+            Text(label, style=theme.secondary),
+            Text(desc, style=theme.faint),
+        )
+    return Group(
+        Text(" more commands", style=theme.info),
+        table,
+        Text(""),
+        Text(" lfs <path> shares immediately · ? again for the full help", style=theme.faint),
+    )
+
+
 def _help(ctx: MenuContext) -> None:
     from .ui.components import HELP_MAIN  # noqa: PLC0415
 
+    console().print(render_extra_commands())
     console().print(HELP_MAIN)
 
 
@@ -413,7 +434,9 @@ def _reload_config(config: Config) -> Config:
 
 
 def _resolve_action(answer: str) -> str | None:
-    lookup = {key: action for key, _l, action, _i, _d in ACTIONS}
+    # the menu prints five rows, but the other keys keep working: the screen is
+    # short, the vocabulary is not
+    lookup = {key: action for key, _l, action, _i, _d in ALL_ACTIONS}
     if answer in lookup:
         return lookup[answer]
     lowered = answer.lower()

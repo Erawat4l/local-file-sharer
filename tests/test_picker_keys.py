@@ -9,15 +9,19 @@ moved. A unit test that feeds a string into a fake reader cannot catch that.
 
 from __future__ import annotations
 
+import io
 import os
 import pty
 import select
 import sys
 import time
+from pathlib import Path
 
 import pytest
 
 pytestmark = pytest.mark.skipif(not hasattr(os, "fork"), reason="needs POSIX pty")
+
+ROOT = Path(__file__).resolve().parent
 
 READER = """\
 import sys
@@ -108,3 +112,34 @@ def test_plain_keys_and_space_still_work():
 def test_a_lone_escape_is_escape_not_a_keypress_storm():
     """ESC with nothing behind it is the ESC key — and only ESC."""
     assert _run([b"\x1b"], 1) == ["ESC"]
+
+
+def test_the_footer_shows_five_hints_and_names_the_way_back_up():
+    """Five pairs only, and "up a directory" must be one of them.
+
+    The footer used to list nine pairs; on a phone that wrapped into noise and
+    the one thing people ask for — going back a level — was not on it at all.
+    """
+    from rich.console import Console
+
+    from local_file_sharer.ui.picker_ui import _footer
+
+    console = Console(width=80, file=io.StringIO(), force_terminal=False)
+    console.print(_footer(width=80))
+    text = console.file.getvalue()
+
+    for expected in ("arrows", "move", "Enter", "open", "Space", "pick", "b", "up", "s", "share"):
+        assert expected in text, f"{expected!r} missing from the footer"
+    # the dropped pairs stay dropped: they still work, they are just not printed
+    for gone in ("search", "fav", "home"):
+        assert gone not in text, f"{gone!r} should no longer be advertised"
+
+
+def test_backspace_goes_up_a_directory():
+    """Backspace navigates out of a folder; inside a query it still deletes."""
+    from local_file_sharer.ui.picker_ui import PickerState
+
+    state = PickerState(cwd=ROOT / "Photos")
+    assert state.cwd == ROOT / "Photos"
+    state.cwd = state.cwd.parent
+    assert state.cwd == ROOT

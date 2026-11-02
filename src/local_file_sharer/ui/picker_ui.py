@@ -232,16 +232,16 @@ def _footer(width: int | None = None) -> RenderableType:
     Truncating a label ("Space pi…") is worse than omitting the pair: the user
     cannot tell what the key does either way, but the stub looks broken.
     """
+    # Five pairs, in the order a person needs them. `b up` is deliberately
+    # spelled out: the single most common question was "how do I go back a
+    # directory". ESC, /, a, f, h and q still work, they are just not advertised
+    # on a screen that already could not fit what it had.
     hints = [
-        ("j/k", "move"),
-        ("Space", "pick"),
+        ("arrows", "move"),
         ("Enter", "open"),
+        ("Space", "pick"),
+        ("b", "up"),
         ("s", "share"),
-        ("a", "all"),
-        ("/", "search"),
-        ("f", "fav"),
-        ("h", "home"),
-        ("q", "quit"),
     ]
     return footer_keys(hints, width=width)
 
@@ -262,7 +262,7 @@ def render(state: PickerState, *, width: int | None = None, height: int | None =
         index = state.offset + offset
         lines.append(_row(index + 1, entry, state, width - 4, active=(index == state.cursor)))
     if not visible:
-        lines.append(Text("   (empty folder — press h to go up)", style=theme.faint))
+        lines.append(Text("   (empty folder — press b to go up)", style=theme.faint))
 
     mini = banner.mini_header(theme, mode="picker", detail=str(state.cwd.name or state.cwd))
     counter = Text(
@@ -559,7 +559,7 @@ def run_picker(
                 state.cwd = platforms.home_dir()
                 state.query = ""
                 state.reload(icons=icons)
-            elif key == "b":
+            elif key in ("b", "BACKSPACE"):
                 state.cwd = state.cwd.parent
                 state.reload(icons=icons)
             elif key == "a":

@@ -21,8 +21,8 @@
     <div class="spacer"></div>
     <span class="chip accent"><span class="dot"></span> serving</span>
     <span class="chip">{{file_count}} files · {{folder_size}}</span>
-    <a class="chip" href="{{zip_url}}" download>🗜 download folder</a>
-    <a class="chip" href="/">⬇ download station</a>
+    <a class="chip" href="{{zip_url}}" download><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h16v12H4z"/><path d="M3 4h18v4H3z"/><path d="M10 12h4"/></svg> download folder</a>
+    <a class="chip" href="/"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"/><path d="M7 11l5 5 5-5"/><path d="M5 20h14"/></svg> download station</a>
   </header>
 
   <section class="card" style="margin-bottom:22px">
@@ -37,9 +37,11 @@
         <input type="search" name="q" value="{{search}}" placeholder="Filter in this folder…">
         <button class="btn ghost sm" type="submit">Filter</button>
       </form>
+      <div class="actions-wrap">
       <div class="actions">
         <button class="btn sm" id="select-all">Select all</button>
-        <button class="btn alt sm" id="download-selected" disabled>⬇ Download selected (0)</button>
+        <button class="btn alt sm" id="download-selected" disabled><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"/><path d="M7 11l5 5 5-5"/><path d="M5 20h14"/></svg> <span>Download selected (0)</span></button>
+      </div>
       </div>
     </div>
     <div class="stat-row" style="margin-bottom:0">
@@ -102,7 +104,7 @@
 
   function updateButton() {
     const btn = $('download-selected');
-    btn.textContent = `⬇ Download selected (${selected.size})`;
+    btn.querySelector("span").textContent = `Download selected (${selected.size})`;
     btn.disabled = selected.size === 0;
   }
 

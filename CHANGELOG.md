@@ -7,6 +7,33 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Changed
+
+- **The main menu is five rows.** It listed twelve labelled actions, which read
+  as a control panel rather than an answer to "what do you want to share?".
+  Download, Serve, Stream, Torrent and Quit remain; Recent, Favourites, Config,
+  Doctor, Theme, Update and Help moved behind `?`. Their keys still work
+  directly. Descriptions are dropped below 70 columns instead of wrapping,
+  because a wrapped description doubled the height of every row on a phone.
+- **The file picker's footer is five hints, and one of them is "up".** The old
+  footer listed nine pairs, so a narrow terminal silently dropped whole pairs
+  and `b` (go back a directory) was never shown at all — the single most common
+  question. It now reads `arrows move · Enter open · Space pick · b up ·
+  s share`, and Backspace goes up too. The empty-folder hint points at `b`.
+- **The picker no longer opens on an unreadable folder.** On Termux
+  `/storage/emulated/0` is a directory long before `termux-setup-storage` has
+  been run, so `storage_root()` returned it and the picker printed
+  `! Permission denied: /` before falling back. It now probes by listing.
+- **No emoji anywhere in the web UI.** The broken glyphs ("all is shattered")
+  were tofu boxes: the pages used emoji for icons and the phone's browser had no
+  emoji font for them. Every one is now an inline SVG — clock, people, download,
+  zip, copy, bolt, lock, house and upload — including the two generated in
+  Python (the breadcrumb house and the upload dropzone), which the earlier
+  template sweep missed.
+- **Web buttons stack into one column on a phone.** Wrapped inline buttons came
+  out ragged — "Download all" short, the zip button longer, both left-hugging —
+  and the phone had no room for "· 16 connections" on the label.
+
 ### Added
 
 - **`lfs upgrade`**: installs the newest code from GitHub, from the same branch

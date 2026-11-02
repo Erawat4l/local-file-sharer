@@ -73,11 +73,26 @@ def downloads_dir() -> Path:
     return home_dir()
 
 
+def _readable(path: Path) -> bool:
+    """Can the picker actually list *path*? ``is_dir()`` is not enough."""
+    try:
+        with os.scandir(path):
+            return True
+    except OSError:
+        return False
+
+
 def storage_root() -> Path:
-    """Best starting folder for the picker."""
+    """Best starting folder for the picker.
+
+    On Termux ``/storage/emulated/0`` exists as a directory long before
+    ``termux-setup-storage`` has been run — it just cannot be listed, so the
+    picker opened on a folder that raised ``Permission denied: /`` the moment
+    it tried to read it. Probe by listing instead of by ``is_dir()``.
+    """
     if TERMUX:
         shared = Path("/storage/emulated/0")
-        if shared.is_dir():
+        if _readable(shared):
             return shared
     if WINDOWS:
         drive = os.environ.get("SYSTEMDRIVE", "C:")

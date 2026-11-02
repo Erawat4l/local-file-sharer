@@ -697,7 +697,9 @@ class ShareRequestHandler(BaseHTTPRequestHandler):
 
     def _breadcrumbs(self, item, sub: str) -> str:  # noqa: ANN001
         parts = [item.name, *[p for p in sub.split("/") if p]]
-        out = [f'<a href="/d/{item.item_id}">🏠 {html.escape(item.name)}</a>']
+        out = [
+            f'<a href="/d/{item.item_id}"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 11l8-7 8 7"/><path d="M6 10v9h12v-9"/></svg> {html.escape(item.name)}</a>'
+        ]
         trail = ""
         for part in parts[1:]:
             trail = f"{trail}/{part}" if trail else part
@@ -902,7 +904,7 @@ class ShareRequestHandler(BaseHTTPRequestHandler):
             return ""
         return (
             '<div class="dropzone" id="dropzone">'
-            "📤 <b>Drop files here</b> to send them back to the host machine "
+            '<svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V5"/><path d="M7 10l5-5 5 5"/><path d="M5 19h14"/></svg> <b>Drop files here</b> to send them back to the host machine "'
             '(or <label style="text-decoration:underline;cursor:pointer">choose files'
             '<input id="file-input" type="file" multiple hidden></label>)</div>'
             "<script>(()=>{const z=document.getElementById('dropzone'),i=document.getElementById('file-input');"
