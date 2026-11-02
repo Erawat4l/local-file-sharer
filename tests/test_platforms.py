@@ -398,3 +398,47 @@ def test_sendfile_progress_is_called_for_every_chunk(payload_file, monkeypatch):
         platforms.sendfile(_FakeSocket(), handle, 0, len(data), progress=seen.append)
     assert sum(seen) == len(data)
     assert all(delta > 0 for delta in seen)
+
+
+def test_start_dir_skips_a_remembered_folder_it_cannot_read(tmp_path, monkeypatch):
+    """A remembered `/` must not beat the user's real storage.
+
+    `state.last_dir` was validated with `is_dir()`, so `/` and
+    `/data/data/com.termux` passed — they are directories, they just cannot be
+    listed. The picker then opened on one and printed `Permission denied: /`.
+    """
+    from local_file_sharer import platforms
+
+    locked = tmp_path / "locked"
+    locked.mkdir()
+    locked.chmod(0o000)
+    readable = tmp_path / "readable"
+    readable.mkdir()
+
+    monkeypatch.setattr(platforms, "home_dir", lambda: readable)
+    monkeypatch.setattr(platforms, "storage_root", lambda: readable)
+
+    try:
+        chosen = platforms.start_dir(locked)
+        assert chosen == readable, "an unreadable memory must not win"
+        # and a readable memory is honoured
+        assert platforms.start_dir(readable) == readable
+    finally:
+        locked.chmod(0o755)
+
+
+def test_start_dir_falls_back_to_home_when_nothing_is_readable(tmp_path, monkeypatch):
+    from local_file_sharer import platforms
+
+    locked = tmp_path / "locked"
+    locked.mkdir()
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setattr(platforms, "home_dir", lambda: home)
+    monkeypatch.setattr(platforms, "storage_root", lambda: locked)
+    locked.chmod(0o000)
+
+    try:
+        assert platforms.start_dir(locked) == home
+    finally:
+        locked.chmod(0o755)

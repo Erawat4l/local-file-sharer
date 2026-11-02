@@ -141,7 +141,7 @@ def render_menu(ctx: MenuContext) -> Group:
     blocks.append(table)
     blocks.append(Text(""))
     for line in wrap_command(
-        "press ? for more commands · `lfs <path>` skips the menu entirely",
+        "`lfs <path>` shares straight away · `?` for more commands",
         indent=" ",
         width=width,
     ):
@@ -187,7 +187,7 @@ def share_paths(ctx: MenuContext, paths: Sequence[Path], mode: str = "download")
 
 def _pick_and_share(ctx: MenuContext, mode: str) -> None:
     theme = current_theme()
-    start = ctx.state.last_dir or platforms.storage_root()
+    start = platforms.start_dir(ctx.state.last_dir)
     result = run_picker(start, icons=ctx.config.icons, animate=False, page_size=ctx.config.ui.page_size)
     if result.cancelled or not result.paths:
         console().print(Text(" nothing selected", style=theme.faint))

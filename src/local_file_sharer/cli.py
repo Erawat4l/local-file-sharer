@@ -65,6 +65,7 @@ SUBCOMMAND_NAMES = (
     "completion",
     "banner",
     "upgrade",
+    "update",
     "version",
     "help",
 )
@@ -93,11 +94,19 @@ def add_common_flags(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--no-dashboard", action="store_true", help="plain log instead of the live dashboard")
     parser.add_argument("--theme", choices=("dark", "light", "mono"), default=None, help="colour theme")
     parser.add_argument("--no-anim", action="store_true", help="static banner (no shimmer)")
+    # Bare `lfs` now shows the menu, which is what people expect and what the
+    # README shows. These two flags choose the other behaviour explicitly.
     parser.add_argument(
         "--menu",
         dest="no_picker",
         action="store_true",
-        help="open the text menu instead of the arrow-key picker",
+        help="show the text menu first (the default)",
+    )
+    parser.add_argument(
+        "--picker",
+        dest="force_picker",
+        action="store_true",
+        help="skip the menu and go straight to the arrow-key picker",
     )
     parser.add_argument(
         "--icons", dest="icons", action="store_true", default=None, help="glyph icons in the picker"
@@ -179,6 +188,7 @@ def build_command_parsers() -> dict[str, argparse.ArgumentParser]:
         prog="lfs upgrade",
         parents=[common],
         description="install the newest code from GitHub (the package is not on PyPI)",
+        epilog="`lfs update` does the same thing.",
     )
     upgrade.add_argument(
         "--ref",
@@ -186,6 +196,8 @@ def build_command_parsers() -> dict[str, argparse.ArgumentParser]:
         help="branch or tag to install (default: the one this copy came from)",
     )
     parsers["upgrade"] = upgrade
+    # `lfs update` is the word people reach for; it shares the same parser.
+    parsers["update"] = upgrade
 
     completions = argparse.ArgumentParser(
         prog="lfs completions", parents=[common], description="print a shell completion script"
@@ -324,13 +336,13 @@ def _handle_error(exc: BaseException, *, debug: bool) -> int:
 # Commands
 # ─────────────────────────────────────────────────────────────────────────────
 def cmd_menu(cfg: Config, state: State, args: argparse.Namespace) -> int:
-    """Bare `lfs`: straight into the file picker, the way the README shows it.
+    """Bare `lfs`: show the menu, then act.
 
-    A menu that first asks "what would you like to do?" in line mode means
-    typing a digit and pressing Enter before any arrow key does anything, which
-    is not what a terminal UI is for. Unless the user asked for the menu (or has
-    no real terminal), go straight to the arrow-key picker and share whatever
-    is chosen.
+    Jumping straight into the file picker hid the five modes behind a screen
+    that only offered "pick files", so people who wanted Serve or Stream never
+    saw them and asked why the menu was missing. The menu is the front door;
+    `lfs --picker` and pressing 1 keep the one-step path for people who share
+    files all day.
     """
     from rich.text import Text  # noqa: PLC0415
 
@@ -340,7 +352,8 @@ def cmd_menu(cfg: Config, state: State, args: argparse.Namespace) -> int:
 
     animate = cfg.animate_banner and not args.no_anim
     con = make_console()
-    if not con.is_terminal or getattr(args, "no_picker", False):
+    jump_in = getattr(args, "force_picker", False)
+    if not con.is_terminal or not jump_in:
         return run_menu(config=cfg, state=state, animate=animate)
 
     from .ui.picker_ui import run_picker  # noqa: PLC0415
@@ -349,14 +362,13 @@ def cmd_menu(cfg: Config, state: State, args: argparse.Namespace) -> int:
     con.print(render_menu(ctx))
     con.print(
         Text(
-            " opening the picker — j/k or arrows move · Space pick · s share · q menu",
+            " opening the picker — arrows move · Space pick · b up · s share · q menu",
             style=current_theme().info,
         )
     )
-    start = state.last_dir or platforms.storage_root()
+    start = platforms.start_dir(state.last_dir)
     result = run_picker(start, icons=cfg.icons, page_size=cfg.ui.page_size)
     if result.cancelled or not result.paths:
-        # nothing picked: fall back to the menu rather than exiting silently
         return run_menu(config=cfg, state=state, animate=False)
     share_paths(ctx, result.paths)
     return 0
@@ -556,6 +568,7 @@ def main(argv: list[str] | None = None) -> int:
                 "completion": cmd_completions,
                 "banner": cmd_banner,
                 "upgrade": cmd_upgrade,
+                "update": cmd_upgrade,
             }[command]
             return handler(cfg, state, args)
         except KeyboardInterrupt:

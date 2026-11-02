@@ -7,6 +7,30 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Fixed
+
+- **`lfs update` works.** It was not a registered command, so `update` was read
+  as a *path* and fell through to the share path, which answered
+  "Nothing to share" — a baffling way to say "no such command". It is now an
+  alias of `lfs upgrade` and shares its parser.
+- **Bare `lfs` shows the menu again.** It jumped straight into the file picker,
+  so the five modes (Download, Serve, Stream, Torrent) were hidden behind a
+  screen that only offered "pick files". `lfs --picker` jumps in directly, and
+  `1` on the menu goes straight to the picker as before.
+- **The picker opens in your storage, not a locked system folder.** The start
+  folder was `state.last_dir or storage_root()`, and `last_dir` was validated
+  with `is_dir()` — so a remembered `/` or `/data/data/com.termux` counted as
+  valid (they are directories; they just cannot be listed) and beat real
+  storage. `platforms.start_dir()` now probes by listing and skips anything
+  unreadable, falling through to `/storage/emulated/0`, then `~/storage`, then
+  home.
+- **Pressing `b` into a locked folder no longer closes the picker.** Going up
+  from `/data/data/com.termux` lands on `/data/data`, which Android will not
+  list; that exception escaped the key loop and ended the session, losing the
+  selection and showing a full error panel for pressing "up". All navigation
+  (Enter, `b`, Backspace, `h`, `g`) now goes through one `enter_dir()` helper
+  that stays put and flashes the reason.
+
 ### Changed
 
 - **The main menu is five rows.** It listed twelve labelled actions, which read

@@ -82,6 +82,31 @@ def _readable(path: Path) -> bool:
         return False
 
 
+def start_dir(remembered: Path | None = None) -> Path:
+    """Where the picker should open.
+
+    A remembered folder is only useful if it can be listed. ``is_dir()`` says
+    ``/`` and ``/data/data/com.termux`` are folders, and they are — they just
+    cannot be read, so trusting the memory opened the picker on a locked
+    directory and printed ``Permission denied: /`` instead of the user's
+    storage. Anything unreadable is skipped in favour of the real root.
+    """
+    candidates, seen = [], set()
+    for candidate in (remembered, storage_root() if TERMUX else None, home_dir()):
+        if candidate is None:
+            continue
+        try:
+            resolved = Path(candidate)
+        except (TypeError, ValueError):
+            continue
+        if resolved in seen:
+            continue
+        seen.add(resolved)
+        if _readable(resolved):
+            candidates.append(resolved)
+    return candidates[0] if candidates else home_dir()
+
+
 def storage_root() -> Path:
     """Best starting folder for the picker.
 
@@ -91,9 +116,12 @@ def storage_root() -> Path:
     it tried to read it. Probe by listing instead of by ``is_dir()``.
     """
     if TERMUX:
-        shared = Path("/storage/emulated/0")
-        if _readable(shared):
-            return shared
+        # `termux-setup-storage` creates ~/storage as a symlink to the same
+        # place; trying both means the picker finds shared storage whichever
+        # route the user's Android build exposes.
+        for shared in (Path("/storage/emulated/0"), home_dir() / "storage"):
+            if _readable(shared):
+                return shared
     if WINDOWS:
         drive = os.environ.get("SYSTEMDRIVE", "C:")
         profile = home_dir()

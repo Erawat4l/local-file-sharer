@@ -226,6 +226,35 @@ def _search_box(state: PickerState) -> Text:
     return Text("")
 
 
+def enter_dir(
+    state: PickerState, target: Path, *, icons: bool = True, favorites: set[str] | None = None
+) -> bool:
+    """Move into *target*, or stay put and say why. Returns whether it moved.
+
+    Going up from ``/data/data/com.termux`` lands on ``/data/data``, which
+    Android will not list. That raised out of the picker's loop and closed it,
+    so the user lost their selection and got a full error panel for pressing
+    "up". A locked folder is a fact about the filesystem, not a crash: flash a
+    message and leave the cursor where it was.
+    """
+    target = Path(target)
+    previous = state.cwd
+    state.cwd = target
+    try:
+        state.reload(icons=icons)
+    except Exception as exc:  # noqa: BLE001 - unreadable is expected here
+        state.cwd = previous
+        state.reload(icons=icons)
+        state.flash(f"{exc} — staying in {previous.name or previous}", "danger")
+        return False
+    state.cursor = 0
+    state.offset = 0
+    state.query = ""
+    if favorites is not None:
+        state.favorite = str(state.cwd) in favorites
+    return True
+
+
 def _footer(width: int | None = None) -> RenderableType:
     """Key hints, most useful first, so a narrow terminal drops whole pairs.
 
@@ -466,9 +495,12 @@ def run_picker(
     state = PickerState(cwd=cwd, page_size=page_size, favorite=str(cwd) in favorites)
     try:
         state.reload(icons=icons)
-    except Exception as exc:  # noqa: BLE001 - fall back to home
-        console().print(Text(f"!  {exc}", style=theme.warning))
-        state.cwd = platforms.home_dir()
+    except Exception:  # noqa: BLE001 - start somewhere readable instead of failing
+        # Nobody chose this folder; it came from the start-up default. Printing
+        # "!  Permission denied: /" before the picker appeared read as a crash
+        # and pushed people to ask why sharing had failed. Move to a readable
+        # folder silently and let the header show where we landed.
+        state.cwd = platforms.start_dir(None)
         state.reload(icons=icons)
 
     con = console()
@@ -527,17 +559,7 @@ def run_picker(
                 if entry is None:
                     continue
                 if entry.is_dir:
-                    state.cwd = entry.path
-                    state.cursor = 0
-                    state.offset = 0
-                    state.query = ""
-                    state.favorite = str(entry.path) in favorites
-                    try:
-                        state.reload(icons=icons)
-                    except Exception as exc:  # noqa: BLE001
-                        state.flash(str(exc), "danger")
-                        state.cwd = state.cwd.parent
-                        state.reload(icons=icons)
+                    enter_dir(state, entry.path, icons=icons, favorites=favorites)
                 else:
                     state.selected.setdefault(str(entry.path), entry.path)
                     state.flash(f"added {entry.name}", "success")
@@ -546,22 +568,11 @@ def run_picker(
             elif key in ("k",):
                 state.move(-1)
             elif key in ("g", "h"):
-                state.cwd = state.cwd.parent
-                state.cursor = 0
-                state.query = ""
-                state.favorite = str(state.cwd) in favorites
-                try:
-                    state.reload(icons=icons)
-                except Exception:  # noqa: BLE001
-                    state.cwd = platforms.home_dir()
-                    state.reload(icons=icons)
+                enter_dir(state, state.cwd.parent, icons=icons, favorites=favorites)
             elif key == "H":
-                state.cwd = platforms.home_dir()
-                state.query = ""
-                state.reload(icons=icons)
+                enter_dir(state, platforms.start_dir(None), icons=icons, favorites=favorites)
             elif key in ("b", "BACKSPACE"):
-                state.cwd = state.cwd.parent
-                state.reload(icons=icons)
+                enter_dir(state, state.cwd.parent, icons=icons, favorites=favorites)
             elif key == "a":
                 state.selected = {str(e.path): e.path for e in state.visible()}
                 state.flash(f"selected all {len(state.selected)} items", "success")

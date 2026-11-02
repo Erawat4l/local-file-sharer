@@ -139,6 +139,7 @@ def test_command_parsers_exist():
         "completions",
         "banner",
         "upgrade",
+        "update",
         "version",
         "help",
     ):
@@ -284,3 +285,22 @@ def test_the_share_command_switches_streams_only_for_json():
     finally:
         console_module.human_output_to_stderr = original
         console_module.human_output_to_stderr(False)
+
+
+def test_update_is_an_alias_for_upgrade():
+    """`lfs update` used to be read as a path called "update".
+
+    It fell through to the share path, which answered "Nothing to share" — a
+    confusing way to say "no such command".
+    """
+    from local_file_sharer.cli import split_argv
+
+    for word in ("update", "upgrade"):
+        command, rest = split_argv([word])
+        assert command == word
+        assert rest == []
+
+
+def test_update_and_upgrade_share_one_parser():
+    parsers = build_command_parsers()
+    assert parsers["update"] is parsers["upgrade"]

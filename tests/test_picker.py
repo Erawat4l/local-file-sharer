@@ -152,3 +152,37 @@ def test_resolve_user_path(share_tree):
     quoted = resolve_user_path(f'"{share_tree / "hello.txt"}"')
     assert quoted == share_tree / "hello.txt"
     assert resolve_user_path("~/x").name == "x"
+
+
+def test_going_up_into_a_locked_folder_keeps_the_picker_open(tmp_path):
+    """`b` at /data/data/com.termux lands on /data/data, which Android hides.
+
+    That raised out of the key loop and closed the picker, losing the user's
+    selection and showing a full error panel for pressing "up".
+    """
+    from local_file_sharer.ui.picker_ui import PickerState, enter_dir
+
+    outer = tmp_path / "outer"
+    inner = outer / "inner"
+    inner.mkdir(parents=True)
+    (inner / "note.txt").write_text("hi")
+    locked = tmp_path / "locked"
+    locked.mkdir()
+
+    state = PickerState(cwd=inner)
+    state.reload()
+    assert [e.name for e in state.visible()] == ["note.txt"]
+
+    locked.chmod(0o000)
+    try:
+        moved = enter_dir(state, locked)
+        assert moved is False, "a locked folder must not be entered"
+        assert state.cwd == inner, "the picker must stay where it was"
+        assert [e.name for e in state.visible()] == ["note.txt"], "listing must survive"
+        assert "Permission denied" in state.message
+    finally:
+        locked.chmod(0o755)
+
+    # and a readable folder still navigates normally
+    assert enter_dir(state, outer) is True
+    assert state.cwd == outer

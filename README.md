@@ -255,13 +255,13 @@ lfs upgrade                  # install the newest code from GitHub
 | `↑ ↓` / `j k` | move |
 | `PgUp` `PgDn` | page |
 | `Enter` | open folder / add file |
-| `Space` | toggle row |
+| `b` / `Backspace` | up one folder |
 | `6,7,8` or `6-8` | select by number, then `Enter` |
 | `a` / `c` | select all / clear |
 | `s` | share the selection |
 | `/` | fuzzy search this folder |
 | `f` | favourite / unfavourite folder |
-| `d` `h` `b` | drives · home · up |
+| `d` `h` | drives · home |
 | `?` `q` | help · quit |
 
 The footer always shows the live summary — **files · subfolders · size · shareable
