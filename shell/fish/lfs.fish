@@ -20,8 +20,8 @@ function lfs --description 'local-file-sharer — share files between your devic
     else if test -n "$py"
         command $py -m local_file_sharer $argv
     else
-        echo "local-file-sharer is not installed." >&2
-        echo "  Termux/Linux/macOS:  pipx install local-file-sharer   (or ./install.sh)" >&2
+        echo "LOCAL FILE SHARER is not installed." >&2
+        echo "  Termux/Linux/macOS:  ./install.sh   (or: pipx install 'local-file-sharer @ git+https://github.com/Erawat4l/local-file-sharer.git')" >&2
         echo "  Windows:             irm https://raw.githubusercontent.com/Erawat4l/local-file-sharer/main/install.ps1 | iex" >&2
         return 127
     end

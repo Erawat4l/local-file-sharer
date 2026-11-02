@@ -3,16 +3,16 @@
     local-file-sharer installer for Windows 10/11 (PowerShell 5.1+).
 
 .DESCRIPTION
-    Installs the `start` command for local-file-sharer and wires it up for fish
-    (already installed) plus a `share.cmd` fallback, because `start` is a
-    built-in in cmd.exe and PowerShell and cannot be replaced by a normal
-    executable on those shells.
+    Installs LOCAL FILE SHARER and its `lfs` command, wires it into fish (if
+    present) and puts `lfs.cmd` on PATH so it works in cmd.exe and PowerShell
+    too. `lfs` is not a built-in in either shell, so the command is a real
+    executable rather than an alias.
 
     What it does
       1. finds Python 3.9+ (or installs nothing and tells you how)
       2. installs the package with pipx (preferred) or `pip install --user`
-      3. adds %APPDATA%\fish\functions\start.fish so fish's `start` runs it
-      4. drops share.cmd on PATH as the cmd.exe / PowerShell fallback
+      3. adds %APPDATA%\fish\functions\lfs.fish so fish gets `lfs`
+      4. drops lfs.cmd on PATH for cmd.exe / PowerShell
       5. registers tab-completion for PowerShell
 
 .EXAMPLE
@@ -34,7 +34,10 @@ $ErrorActionPreference = 'Stop'
 $App       = 'local-file-sharer'
 $Version   = '1.0.0'
 $RepoSlug  = 'Erawat4l/local-file-sharer'
-$RawBase   = "https://raw.githubusercontent.com/$RepoSlug/main"
+# `main` is the released line; set $Env:LFS_BRANCH to install from a branch
+# (useful while a branch is ahead of main, e.g. an unreleased feature).
+$Branch    = if ($Env:LFS_BRANCH) { $Env:LFS_BRANCH } else { 'main' }
+$RawBase   = "https://raw.githubusercontent.com/$RepoSlug/$Branch"
 
 function Write-Step  { param($m) Write-Host "> $m" -ForegroundColor Cyan }
 function Write-Ok    { param($m) Write-Host "OK $m" -ForegroundColor Green }
@@ -50,8 +53,12 @@ if ($Uninstall) {
     Write-Step 'uninstalling'
     if (Get-Command pipx -ErrorAction SilentlyContinue) { pipx uninstall $App 2>$null }
     python -m pip uninstall -y $App 2>$null
-    $fishFn = Join-Path $env:APPDATA 'fish\functions\start.fish'
-    if (Test-Path $fishFn) { Remove-Item $fishFn -Force }
+    foreach ($name in @('lfs.fish', 'start.fish', 'share.cmd')) {
+        $old = Join-Path $env:APPDATA "fish\functions\$name"
+        if (Test-Path $old) { Remove-Item $old -Force }
+    }
+    $binDir = Join-Path $env:LOCALAPPDATA 'local-file-sharer\bin'
+    if (Test-Path $binDir) { Remove-Item $binDir -Recurse -Force }
     Write-Warn2 'your config (%APPDATA%\local-file-sharer\config.toml) was left untouched'
     exit 0
 }
@@ -111,43 +118,46 @@ if ($lfsCmd) { Write-Ok "installed -> $($lfsCmd.Source ?? $lfsCmd)" } else { Wri
 
 # ── fish integration (fish is already installed on device 1) ────────────────
 if (-not $NoFish) {
-    Write-Step 'wiring the fish function `start`'
+    Write-Step 'wiring the fish function `lfs`'
     $fishDir = Join-Path $env:APPDATA 'fish'
     $fishFnDir = Join-Path $fishDir 'functions'
     $fishCompDir = Join-Path $fishDir 'completions'
     New-Item -ItemType Directory -Force -Path $fishFnDir, $fishCompDir | Out-Null
 
-    $localFish = Join-Path $PSScriptRoot 'shell\windows\start.fish'
+    $localFish = Join-Path $PSScriptRoot 'shell\windows\lfs.fish'
     if (Test-Path $localFish) {
-        Copy-Item $localFish (Join-Path $fishFnDir 'start.fish') -Force
-        Write-Ok "fish function -> $fishFnDir\start.fish"
+        Copy-Item $localFish (Join-Path $fishFnDir 'lfs.fish') -Force
+        Write-Ok "fish function -> $fishFnDir\lfs.fish"
     } else {
         try {
-            Invoke-WebRequest -UseBasicParsing -Uri "$RawBase/shell/windows/start.fish" `
-                -OutFile (Join-Path $fishFnDir 'start.fish')
-            Write-Ok "downloaded fish function -> $fishFnDir\start.fish"
+            Invoke-WebRequest -UseBasicParsing -Uri "$RawBase/shell/windows/lfs.fish" `
+                -OutFile (Join-Path $fishFnDir 'lfs.fish')
+            Write-Ok "downloaded fish function -> $fishFnDir\lfs.fish"
         } catch { Write-Warn2 "could not write the fish function: $_" }
     }
     $exe = if ($lfsCmd) { ($lfsCmd.Source ?? ($lfsCmd -as [string])) } else { 'local-file-sharer' }
     try {
         & $python -m local_file_sharer completions fish 2>$null |
-            Set-Content -Encoding UTF8 (Join-Path $fishCompDir 'start.fish')
+            Set-Content -Encoding UTF8 (Join-Path $fishCompDir 'lfs.fish')
         Write-Ok 'fish completions installed'
     } catch { Write-Warn2 'fish completions skipped' }
-    Write-Host '   open a new fish session, then type: start' -ForegroundColor DarkGray
+    Write-Host '   open a new fish session, then type: lfs' -ForegroundColor DarkGray
 }
 
-# ── share.cmd fallback (cmd.exe + PowerShell) ───────────────────────────────
-Write-Step 'installing the share.cmd fallback'
+# ── lfs.cmd (cmd.exe + PowerShell) ─────────────────────────────────────────
+Write-Step 'installing the lfs.cmd launcher'
 $binDir = Join-Path $env:LOCALAPPDATA 'local-file-sharer\bin'
 New-Item -ItemType Directory -Force -Path $binDir | Out-Null
-$localCmd = Join-Path $PSScriptRoot 'shell\windows\share.cmd'
+$localCmd = Join-Path $PSScriptRoot 'shell\windows\lfs.cmd'
 if (Test-Path $localCmd) {
-    Copy-Item $localCmd (Join-Path $binDir 'share.cmd') -Force
+    Copy-Item $localCmd (Join-Path $binDir 'lfs.cmd') -Force
 } else {
-    Invoke-WebRequest -UseBasicParsing -Uri "$RawBase/shell/windows/share.cmd" -OutFile (Join-Path $binDir 'share.cmd')
+    Invoke-WebRequest -UseBasicParsing -Uri "$RawBase/shell/windows/lfs.cmd" -OutFile (Join-Path $binDir 'lfs.cmd')
 }
-Write-Ok "share.cmd -> $binDir\share.cmd"
+# `share.cmd` was the old name; remove it so PATH has one launcher
+$staleShare = Join-Path $binDir 'share.cmd'
+if (Test-Path $staleShare) { Remove-Item $staleShare -Force }
+Write-Ok "lfs.cmd -> $binDir\lfs.cmd"
 
 $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
 $pathParts = @()
@@ -196,13 +206,11 @@ if (-not $NoExtras) {
 Write-Host ''
 Write-Host ' done - local-file-sharer is ready' -ForegroundColor Green
 Write-Host @"
-   fish:        start                (the function shadows the built-in inside fish)
-   cmd.exe:     share                (share.cmd fallback - `start` is a cmd built-in)
-   PowerShell:  share  or  local-file-sharer
-   menu         start
-   doctor       start doctor
-   config       start config show
-   update       start --update
+   any shell:   lfs                  (lfs.cmd is on PATH; fish gets a function)
+   menu         lfs
+   doctor       lfs doctor
+   config       lfs config show
+   update       lfs --update
 
    config: %APPDATA%\local-file-sharer\config.toml
    docs:   https://github.com/$RepoSlug#readme

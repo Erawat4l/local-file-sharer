@@ -31,7 +31,7 @@ function lfs --description 'local-file-sharer (Windows) — share files, run doc
 
     echo "local-file-sharer is not installed." >&2
     echo "  Run:  irm https://raw.githubusercontent.com/Erawat4l/local-file-sharer/main/install.ps1 | iex" >&2
-    echo "  Or:   pipx install local-file-sharer" >&2
+    echo "  Or:   pipx install 'local-file-sharer @ git+https://github.com/Erawat4l/local-file-sharer.git'" >&2
     return 127
 end
 

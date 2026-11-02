@@ -1,14 +1,14 @@
 @echo off
 rem ────────────────────────────────────────────────────────────────────────────
-rem  local-file-sharer · cmd.exe fallback launcher
+rem  LOCAL FILE SHARER · cmd.exe / PowerShell launcher
 rem
-rem  `start` is a built-in in cmd.exe and PowerShell, so it cannot be replaced by
-rem  a batch file on PATH. This wrapper is the fallback: type `share` in cmd, or
-rem  add a user alias in PowerShell. install.ps1 adds `share.cmd` to PATH.
+rem  `lfs` is not a built-in in cmd.exe or PowerShell, so this is a real command
+rem  on PATH rather than an alias. It finds the installed Python entry point and
+rem  falls back to `python -m local_file_sharer`.
 rem
-rem  Usage:  share            → interactive menu
-rem          share doctor     → diagnostics
-rem          share D:\Photos  → share a folder immediately
+rem  Usage:  lfs               → interactive menu
+rem          lfs doctor      → diagnostics
+rem          lfs D:\Photos    → share a folder immediately
 rem ────────────────────────────────────────────────────────────────────────────
 setlocal EnableExtensions
 
@@ -36,11 +36,11 @@ if not defined LFS_CMD (
 if not defined LFS_CMD (
     echo [local-file-sharer] Python not found.
     echo   Install Python 3.9+ ^(winget install Python.Python.3.12^),
-    echo   or run: powershell -ExecutionPolicy Bypass -File "%~dp0install.ps1"
+    echo   or run: powershell -ExecutionPolicy Bypass -File "%~dp0..\..\install.ps1"
     exit /b 127
 )
 
-rem Make sure UTF-8 emojis/icons render in the Windows console.
+rem UTF-8 output: the box-drawing and glyphs need it on a legacy console.
 chcp 65001 >nul 2>nul
 set PYTHONUTF8=1
 set PYTHONIOENCODING=utf-8

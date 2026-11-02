@@ -21,7 +21,10 @@
 set -euo pipefail
 
 REPO_SLUG="Erawat4l/local-file-sharer"
-RAW_BASE="https://raw.githubusercontent.com/${REPO_SLUG}/main"
+# `main` is the released line; set LFS_BRANCH to install from a branch (used
+# while a branch is ahead of main).
+BRANCH="${LFS_BRANCH:-main}"
+RAW_BASE="https://raw.githubusercontent.com/${REPO_SLUG}/${BRANCH}"
 APP="local-file-sharer"
 VERSION="1.0.0"
 
@@ -77,7 +80,9 @@ if [ "$UNINSTALL" = "1" ]; then
     pipx uninstall "$APP" && ok "removed the pipx install"
   fi
   python3 -m pip uninstall -y "$APP" >/dev/null 2>&1 && ok "removed the pip install" || true
-  rm -f "${HOME}/.config/fish/functions/start.fish" 2>/dev/null || true
+  rm -f "${HOME}/.config/fish/functions/start.fish" \
+        "${HOME}/.config/fish/functions/lfs.fish" \
+        "${HOME}/.config/fish/completions/lfs.fish" 2>/dev/null || true
   warn "your config (~/.config/${APP}/config.toml) was left untouched"
   exit 0
 fi
@@ -143,20 +148,26 @@ if [ "$DEV" = "1" ]; then
     "$PY" -m pip install --user -e . && ok "installed (editable) with pip"
   fi
 elif [ "$PIPX_OK" = "1" ]; then
-  pipx install --force "$APP" >/dev/null 2>&1 && ok "installed with pipx" \
-    || { warn "pipx could not install from PyPI — falling back to GitHub"; \
-         pipx install --force "git+https://github.com/${REPO_SLUG}.git" && ok "installed from GitHub with pipx"; }
+  # not on PyPI: install straight from the repository
+  pipx install --force "git+https://github.com/${REPO_SLUG}.git@${BRANCH}" \
+    && ok "installed from GitHub with pipx"
 else
   warn "pipx not found (recommended for CLI tools)"
   if [ "$PLATFORM" = "termux" ]; then
     warn "Termux: python -m pip install --user . may need: pkg install python-pip"
   fi
-  "$PY" -m pip install --user --upgrade "$APP" >/dev/null 2>&1 \
-    || "$PY" -m pip install --user --upgrade "git+https://github.com/${REPO_SLUG}.git" \
-    || die "pip install failed.
-  Try: ${PY} -m pip install --user --break-system-packages ${APP}
-  Or:  pipx install ${APP}"
-  ok "installed with pip --user"
+  if "$PY" -m pip install --user --upgrade "git+https://github.com/${REPO_SLUG}.git@${BRANCH}" >/dev/null 2>&1; then
+    ok "installed with pip --user"
+  elif "$PY" -m pip install --user --upgrade --break-system-packages \
+         "git+https://github.com/${REPO_SLUG}.git@${BRANCH}" >/dev/null 2>&1; then
+    # Debian/Ubuntu mark the system Python as externally managed (PEP 668).
+    # A --user install cannot break the OS packages, so it is safe here.
+    ok "installed with pip --user (--break-system-packages)"
+  else
+    die "pip install failed.
+  Try: ${PY} -m pip install --user --break-system-packages "git+https://github.com/${REPO_SLUG}.git@${BRANCH}"
+  Or:  pipx install "git+https://github.com/${REPO_SLUG}.git@${BRANCH}""
+  fi
 fi
 
 # Make sure ~/.local/bin is on PATH for the current session.
@@ -166,7 +177,7 @@ case ":$PATH:" in
      printf "${DIM}  added ~/.local/bin to PATH for this session${RESET}\n" ;;
 esac
 
-if ! command -v start >/dev/null 2>&1 && ! command -v local-file-sharer >/dev/null 2>&1; then
+if ! command -v lfs >/dev/null 2>&1 && ! command -v local-file-sharer >/dev/null 2>&1; then
   warn "the \`lfs\` command is not on PATH yet — open a new terminal or add:"
   printf "    export PATH=\"\$HOME/.local/bin:\$PATH\"   # add to ~/.bashrc / ~/.profile\n"
 fi
@@ -178,23 +189,25 @@ if [ "$NO_FISH" = "0" ]; then
   if command -v fish >/dev/null 2>&1 || [ -d "$FISH_DIR" ]; then
     mkdir -p "$FISH_DIR/functions" "$FISH_DIR/completions"
     SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd || true)"
-    if [ -n "$SRC" ] && [ -f "$SRC/shell/fish/start.fish" ]; then
-      cp "$SRC/shell/fish/start.fish" "$FISH_DIR/functions/start.fish"
-      ok "installed fish function → $FISH_DIR/functions/start.fish"
+    # a leftover start.fish from an older install would shadow nothing we want
+    rm -f "$FISH_DIR/functions/start.fish" 2>/dev/null || true
+    if [ -n "$SRC" ] && [ -f "$SRC/shell/fish/lfs.fish" ]; then
+      cp "$SRC/shell/fish/lfs.fish" "$FISH_DIR/functions/lfs.fish"
+      ok "installed fish function → $FISH_DIR/functions/lfs.fish"
     else
-      if command -v curl >/dev/null 2>&1 && curl -fsSL "${RAW_BASE}/shell/fish/start.fish" \
-           -o "$FISH_DIR/functions/start.fish" 2>/dev/null; then
-        ok "downloaded fish function → $FISH_DIR/functions/start.fish"
+      if command -v curl >/dev/null 2>&1 && curl -fsSL "${RAW_BASE}/shell/fish/lfs.fish" \
+           -o "$FISH_DIR/functions/lfs.fish" 2>/dev/null; then
+        ok "downloaded fish function → $FISH_DIR/functions/lfs.fish"
       else
         warn "could not write the fish function (offline?)"
       fi
     fi
     # fish completions
     if command -v local-file-sharer >/dev/null 2>&1; then
-      local-file-sharer completions fish > "$FISH_DIR/completions/start.fish" 2>/dev/null \
+      local-file-sharer completions fish > "$FISH_DIR/completions/lfs.fish" 2>/dev/null \
         && ok "installed fish completions"
     fi
-    printf "${DIM}  open a new fish session, then type: start${RESET}\n"
+    printf "${DIM}  open a new fish session, then type: lfs${RESET}\n"
   else
     printf "${DIM}  fish not detected — skipping (install it for the nicest experience)${RESET}\n"
   fi
@@ -204,12 +217,14 @@ fi
 header "shell completions"
 if command -v local-file-sharer >/dev/null 2>&1; then
   BASH_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/bash-completion/completions"
-  if mkdir -p "$BASH_DIR" 2>/dev/null && local-file-sharer completions bash > "$BASH_DIR/start" 2>/dev/null; then
-    ok "bash completion → $BASH_DIR/start"
+  rm -f "$BASH_DIR/start" 2>/dev/null || true
+  if mkdir -p "$BASH_DIR" 2>/dev/null && local-file-sharer completions bash > "$BASH_DIR/lfs" 2>/dev/null; then
+    ok "bash completion → $BASH_DIR/lfs"
   fi
   ZSH_DIR="${ZDOTDIR:-$HOME}/.zfunc"
   if [ -d "$ZSH_DIR" ] || mkdir -p "$ZSH_DIR" 2>/dev/null; then
-    local-file-sharer completions zsh > "$ZSH_DIR/_start" 2>/dev/null && ok "zsh completion → $ZSH_DIR/_start"
+    rm -f "$ZSH_DIR/_start" 2>/dev/null || true
+    local-file-sharer completions zsh > "$ZSH_DIR/_lfs" 2>/dev/null && ok "zsh completion → $ZSH_DIR/_lfs"
     printf "${DIM}  (add \`fpath+=~/.zfunc; autoload -Uz compinit && compinit\` to ~/.zshrc)${RESET}\n"
   fi
 else
@@ -218,7 +233,7 @@ fi
 
 # ── summary ─────────────────────────────────────────────────────────────────
 header "done"
-printf "  ${BOLD}start${RESET}                 interactive menu
+printf "  ${BOLD}lfs${RESET}                 interactive menu
   ${BOLD}lfs <path>${RESET}          share immediately
   ${BOLD}lfs doctor${RESET}          check tools, firewall and network
   ${BOLD}lfs config show${RESET}     print the configuration

@@ -77,10 +77,13 @@ def test_theme_list(capsys):
 
 
 def test_completions(capsys):
+    """Each script must register completions for `lfs`, not the retired name."""
     for shell in ("fish", "bash", "powershell", "zsh"):
         assert main(["completions", shell]) == 0
         out = capsys.readouterr().out
-        assert "start" in out
+        assert "lfs" in out
+        # a script that still says `start` would never fire for the command
+        assert "start" not in out
         assert len(out) > 200
 
 

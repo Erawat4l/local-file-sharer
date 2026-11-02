@@ -17,7 +17,7 @@ saturates your Wi-Fi. Works on **Termux/Android**, **Linux**, **macOS** and **Wi
 [![Code style: ruff](https://img.shields.io/badge/style-ruff-a78bfa)](https://github.com/astral-sh/ruff)
 [![Downloads](https://img.shields.io/badge/downloads-16%20parallel%20connections-fbbf24)](#why-it-is-fast)
 
-<img src="docs/assets/demo.gif" alt="start — the banner shimmer, then the interactive menu" width="100%">
+<img src="docs/assets/demo.gif" alt="lfs — the banner, then the interactive menu" width="100%">
 
 </div>
 
@@ -129,8 +129,12 @@ scrollback, and a live dashboard with speed, ETA, progress, devices and total se
 pkg update && pkg install python git
 curl -fsSL https://raw.githubusercontent.com/Erawat4l/local-file-sharer/main/install.sh | bash
 termux-setup-storage   # once, so the picker can read /sdcard
-start
+lfs                    # ← the command is `lfs`, not `start`
 ```
+
+If `lfs` is not found immediately, open a new session (the installer adds
+`~/.local/bin` to PATH). `start` is **not** installed — it collides with other
+Android tooling, which is why the command was renamed.
 
 The installer also offers `aria2`, `zip`, `curl` and `wget`, and writes the fish
 function + completions when fish is present.
@@ -141,13 +145,17 @@ function + completions when fish is present.
 curl -fsSL https://raw.githubusercontent.com/Erawat4l/local-file-sharer/main/install.sh | bash
 ```
 
-Prefer doing it by hand?
+Prefer doing it by hand? It is **not on PyPI yet**, so point pip at the repo:
 
 ```bash
-pipx install local-file-sharer        # recommended (isolated)
+pipx install "local-file-sharer @ git+https://github.com/Erawat4l/local-file-sharer.git"
 # or
-python3 -m pip install --user local-file-sharer
+python3 -m pip install --user "local-file-sharer @ git+https://github.com/Erawat4l/local-file-sharer.git"
 ```
+
+On Debian/Ubuntu the system Python is "externally managed" (PEP 668); a
+`--user` install needs `--break-system-packages`, which the installer adds
+automatically. `pipx` avoids the question entirely and is recommended.
 
 Flags: `--dev` (editable install from a checkout), `--no-extras`, `--no-fish`,
 `--yes`, `--uninstall`.
@@ -162,15 +170,21 @@ The PowerShell installer:
 
 1. finds Python 3.9+ (or tells you exactly how to install it),
 2. installs with `pipx` (preferred) or `pip --user`,
-3. wires the **fish** function at `%APPDATA%\fish\functions\start.fish`,
-4. installs **`share.cmd`** as the fallback for `cmd.exe`/PowerShell, where
-   `lfs` is a built-in and cannot be replaced,
+3. wires the **fish** function at `%APPDATA%\fish\functions\lfs.fish` (if fish
+   is installed),
+4. puts **`lfs.cmd`** on your PATH, so `lfs` works in `cmd.exe` and PowerShell —
+   unlike `start`, `lfs` is not a shell built-in, so it can be a real command,
 5. registers PowerShell tab completion.
 
 ```text
-fish:        start                # the fish function shadows the built-in
-cmd.exe:     share                # start is a cmd built-in → share.cmd
-PowerShell:  share   or   local-file-sharer
+any shell:   lfs
+fish:        lfs                  # plus the function, so it behaves the same
+manual:      local-file-sharer    # the underlying entry point
+```
+
+If PowerShell blocks the script, use:
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 ```
 
 There is also a **standalone `local-file-sharer.exe`** attached to every tagged
@@ -192,9 +206,9 @@ lfs --help
 ## Quick start
 
 ```bash
-start                          # interactive menu
-start ~/Movies                 # share a folder in download mode
-start film.mkv episode.mp4     # share several files
+lfs                            # interactive menu
+lfs ~/Movies                   # share a folder in download mode
+lfs film.mkv episode.mp4       # share several files
 lfs --mode stream ~/Videos   # pick media, open the player
 lfs --mode torrent ~/Photos  # .torrent + magnet + tracker + webseed
 lfs doctor                   # check tools, firewall, network
@@ -371,7 +385,7 @@ lfs config set share.pin 1234
 ## Command reference
 
 ```text
-start [paths ...] [options]          share now (no paths → interactive menu)
+lfs [paths ...] [options]            share now (no paths → interactive menu)
 
   -m, --mode {download,serve,stream,torrent}
   -p, --port PORT            --pin [PIN]        --expire MINUTES
@@ -427,13 +441,13 @@ files and the clipboard. `--json` gives machine-readable output for CI.
 ## Shell integration & completions
 
 ```bash
-lfs completions fish        > ~/.config/fish/completions/start.fish
-lfs completions bash        > ~/.local/share/bash-completion/completions/start
+lfs completions fish        > ~/.config/fish/completions/lfs.fish
+lfs completions bash        > ~/.local/share/bash-completion/completions/lfs
 lfs completions powershell  # dot-source from $PROFILE (install.ps1 does it)
-lfs completions zsh         > ~/.zfunc/_start
+lfs completions zsh         > ~/.zfunc/_lfs
 ```
 
-`install.sh` also drops [`shell/fish/start.fish`](shell/fish/start.fish) into
+`install.sh` also drops [`shell/fish/lfs.fish`](shell/fish/lfs.fish) into
 `~/.config/fish/functions/`, so typing `lfs` always means *local-file-sharer*
 in fish, with `share` and `lfs` as aliases.
 
