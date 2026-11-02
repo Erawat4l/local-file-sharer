@@ -39,7 +39,13 @@ REPOSITORY_PAGE = f"https://github.com/{REPO_SLUG}"
 #: Where a non-PyPI install comes from. The package is not published, so every
 #: upgrade has to name the repository and (optionally) the branch it came from.
 GIT_URL = f"https://github.com/{REPO_SLUG}.git"
-DEFAULT_BRANCH = "main"
+#: ``main`` is not (yet) a Python project — it holds only a stub README — so
+#: installing from it fails with "neither 'setup.py' nor 'pyproject.toml'
+#: found". This is the branch that actually carries the package, and the one
+#: `lfs upgrade` falls back to when the current ref has nothing installable.
+DEFAULT_BRANCH = "arena/d7f4713b-local-file-sharer"
+#: Refs to try, in order, when no explicit ``--ref`` was given.
+BRANCH_CANDIDATES = (DEFAULT_BRANCH,)
 
 
 def installed_from_git() -> bool:
@@ -78,6 +84,50 @@ def git_spec(ref: str | None = None) -> str:
     return f"local-file-sharer @ git+{GIT_URL}@{ref or DEFAULT_BRANCH}"
 
 
+def ref_has_package(ref: str, *, timeout: float = 6.0) -> bool:
+    """Does *ref* contain a ``pyproject.toml``?
+
+    ``main`` in this repository is a 19-byte README, so installing from it
+    fails deep inside pip with "does not appear to be a Python project". Asking
+    the API first turns that into a sentence a user can act on, and lets
+    `lfs upgrade` pick a branch that works instead of erroring out.
+    """
+    api = f"https://api.github.com/repos/{REPO_SLUG}/contents/pyproject.toml?ref={ref}"
+    request = urllib.request.Request(
+        api,
+        headers={"Accept": "application/vnd.github+json", "User-Agent": f"local-file-sharer/{__version__}"},
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:  # noqa: S310
+            return response.status == 200
+    except urllib.error.HTTPError as exc:
+        # 404 is the answer we asked for: this ref has no package.
+        return exc.code != 404
+    except (urllib.error.URLError, TimeoutError, OSError):
+        # Offline: do not block the install on a check we cannot run.
+        return True
+
+
+def resolve_ref(ref: str | None = None) -> tuple[str, str]:
+    """Pick a branch that can actually be installed. Returns ``(ref, note)``."""
+    if ref:
+        # An explicit choice is respected, but say so if it cannot work —
+        # otherwise pip fails three screens later with its own wording.
+        if ref_has_package(ref):
+            return ref, ""
+        return ref, f"{ref} has no pyproject.toml — the install will fail"
+
+    wanted = installed_ref()
+    candidates = [wanted, *[b for b in BRANCH_CANDIDATES if b != wanted]]
+    for candidate in candidates:
+        if ref_has_package(candidate):
+            note = ""
+            if candidate != wanted:
+                note = f"{wanted} has no pyproject.toml — using {candidate}"
+            return candidate, note
+    return wanted, ""
+
+
 def upgrade_from_git(ref: str | None = None) -> int:
     """Install the newest code from GitHub, the only place this package lives.
 
@@ -86,7 +136,9 @@ def upgrade_from_git(ref: str | None = None) -> int:
     the current commit of the branch they installed from.
     """
     con = console()
-    target = ref or installed_ref()
+    target, note = resolve_ref(ref)
+    if note:
+        con.print(f"[lfs.warning]{note}[/]")
     spec = git_spec(target)
     kind = detect_installer()
     if kind == "pipx":
@@ -113,7 +165,10 @@ def upgrade_from_git(ref: str | None = None) -> int:
             except FileNotFoundError:
                 return 1
         if completed.returncode != 0:
-            con.print(f"[lfs.danger]upgrade failed[/]  see {REPO_SLUG} for manual steps")
+            con.print(f"[lfs.danger]upgrade failed[/]  see {REPOSITORY_PAGE} for manual steps")
+            con.print(
+                f"[lfs.muted]try a branch explicitly:[/] lfs upgrade --ref {DEFAULT_BRANCH}"
+            )
             return completed.returncode
     con.print("[lfs.success]updated[/]  restart `lfs` to use the new code")
     return 0
