@@ -15,6 +15,18 @@ def test_version_command(capsys):
     out = capsys.readouterr().out
     assert __version__ in out
     assert "python" in out
+    # a stale install must be distinguishable from a current one
+    assert "installed from" in out
+    assert "source " in out
+
+
+def test_version_flags_show_the_install_source(capsys):
+    """`-V` used to be argparse's version action and printed one line."""
+    for flag in ("-V", "--version"):
+        assert main([flag]) == 0
+        out = capsys.readouterr().out
+        assert __version__ in out
+        assert "installed from" in out
 
 
 def test_help_command(capsys):
@@ -119,7 +131,17 @@ def test_parser_help_mentions_modes(capsys):
 
 def test_command_parsers_exist():
     parsers = build_command_parsers()
-    for name in ("menu", "doctor", "config", "theme", "completions", "banner", "version", "help"):
+    for name in (
+        "menu",
+        "doctor",
+        "config",
+        "theme",
+        "completions",
+        "banner",
+        "upgrade",
+        "version",
+        "help",
+    ):
         assert name in parsers
 
 

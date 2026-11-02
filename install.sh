@@ -237,7 +237,7 @@ printf "  ${BOLD}lfs${RESET}                 interactive menu
   ${BOLD}lfs <path>${RESET}          share immediately
   ${BOLD}lfs doctor${RESET}          check tools, firewall and network
   ${BOLD}lfs config show${RESET}     print the configuration
-  ${BOLD}lfs --update${RESET}        self-update from GitHub
+  ${BOLD}lfs upgrade${RESET}         install the newest code from GitHub
 
 ${DIM}  config: ~/.config/${APP}/config.toml
   docs:   https://github.com/${REPO_SLUG}#readme${RESET}

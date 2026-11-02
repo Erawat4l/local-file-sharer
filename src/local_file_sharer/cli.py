@@ -107,7 +107,8 @@ def add_common_flags(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--interface", default="", help="prefer a network interface, e.g. wlan0")
     parser.add_argument("--debug", action="store_true", help="show the full traceback on errors")
     parser.add_argument("--json", action="store_true", help="machine-readable output where supported")
-    parser.add_argument("-V", "--version", action="version", version=f"{APP_NAME} {__version__}")
+    # handled in main() so the output can say where this copy was installed from
+    parser.add_argument("-V", "--version", action="store_true", help="print the version and exit")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -277,8 +278,21 @@ def _resolve_paths(raw: list[str]) -> list[Path]:
 
 
 def _print_version() -> None:
+    """Version, interpreter — and where this copy came from.
+
+    Without the last line a stale install is indistinguishable from a current
+    one: the user runs a command that a newer build removed, gets the old
+    behaviour, and has no way to tell which code they are running.
+    """
+    from .updater import installed_from_git, installed_ref  # noqa: PLC0415
+
     print(f"{APP_NAME} {__version__}")
     print(f"python {sys.version.split()[0]} · {platforms.platform_key()}")
+    if installed_from_git():
+        print(f"installed from git · ref {installed_ref()}")
+    else:
+        print("installed from a package (no git origin)")
+    print(f"source {Path(__file__).resolve().parent}")
 
 
 def _handle_error(exc: BaseException, *, debug: bool) -> int:
@@ -507,6 +521,10 @@ def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     if "--no-color" in argv:
         os.environ["NO_COLOR"] = "1"
+
+    if "-V" in argv or "--version" in argv:
+        _print_version()
+        return 0
 
     command, remaining = split_argv(argv)
     if command == "help":

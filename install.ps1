@@ -210,7 +210,7 @@ Write-Host @"
    menu         lfs
    doctor       lfs doctor
    config       lfs config show
-   update       lfs --update
+   update       lfs upgrade
 
    config: %APPDATA%\local-file-sharer\config.toml
    docs:   https://github.com/$RepoSlug#readme
