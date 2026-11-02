@@ -62,15 +62,29 @@ def home_dir() -> Path:
 
 
 def downloads_dir() -> Path:
-    candidates = [
-        home_dir() / "Downloads",
-        home_dir() / "storage" / "downloads",  # Termux default
+    """Where shared downloads land, and where Download mode starts.
+
+    On Android this must be ``/sdcard/Download`` — the folder the system Files
+    app shows. The shell's own home (/data/data/com.termux/files/home) is
+    invisible to every other app on the phone, so a file saved there looks lost
+    even though it exists. The old candidate list only contained Termux-home
+    paths, so Android never matched.
+    """
+    candidates: list[Path] = []
+    shared = sdcard_dir()
+    if shared is not None:
+        # Android spells it "Download" (singular); accept both spellings.
+        candidates += [shared / "Download", shared / "Downloads"]
+    candidates += [
         home_dir() / "Download",
+        home_dir() / "Downloads",
+        home_dir() / "storage" / "downloads",  # Termux default symlink
     ]
     for candidate in candidates:
-        if candidate.is_dir():
+        if _readable(candidate):
             return candidate
-    return home_dir()
+    shared = sdcard_dir()
+    return shared if shared is not None else home_dir()
 
 
 def _readable(path: Path) -> bool:
@@ -80,6 +94,21 @@ def _readable(path: Path) -> bool:
             return True
     except OSError:
         return False
+
+
+#: `/sdcard` is what every Android file manager calls internal storage, and
+#: what people type. It is a symlink to /storage/emulated/0 on stock Android but
+#: is not guaranteed to exist (some builds hide it, and it is missing entirely
+#: off Android), so it is tried as an alias, never assumed.
+SDCARD_ALIASES = (Path("/sdcard"), Path("/storage/emulated/0"))
+
+
+def sdcard_dir() -> Path | None:
+    """Internal shared storage, if this device exposes it. ``None`` off Android."""
+    for candidate in (*SDCARD_ALIASES, home_dir() / "storage"):
+        if _readable(candidate):
+            return candidate
+    return None
 
 
 def start_dir(remembered: Path | None = None) -> Path:
@@ -92,7 +121,10 @@ def start_dir(remembered: Path | None = None) -> Path:
     storage. Anything unreadable is skipped in favour of the real root.
     """
     candidates, seen = [], set()
-    for candidate in (remembered, storage_root() if TERMUX else None, home_dir()):
+    # storage_root() already returns home when there is no Android storage, so
+    # it needs no TERMUX gate here — and gating it meant a device that exposes
+    # /sdcard without Termux's env vars was ignored.
+    for candidate in (remembered, storage_root(), home_dir()):
         if candidate is None:
             continue
         try:
@@ -115,13 +147,11 @@ def storage_root() -> Path:
     picker opened on a folder that raised ``Permission denied: /`` the moment
     it tried to read it. Probe by listing instead of by ``is_dir()``.
     """
-    if TERMUX:
-        # `termux-setup-storage` creates ~/storage as a symlink to the same
-        # place; trying both means the picker finds shared storage whichever
-        # route the user's Android build exposes.
-        for shared in (Path("/storage/emulated/0"), home_dir() / "storage"):
-            if _readable(shared):
-                return shared
+    # Not gated on TERMUX: sdcard_dir() only reports paths it can actually
+    # list, so a plain Linux box with no /sdcard simply falls through.
+    shared = sdcard_dir()
+    if shared is not None:
+        return shared
     if WINDOWS:
         drive = os.environ.get("SYSTEMDRIVE", "C:")
         profile = home_dir()

@@ -1345,7 +1345,7 @@ def _entry_cards(manifest) -> list[str]:  # noqa: ANN001 - Manifest, imported la
         # the shared folder's own name is noise on every card; the rest is not
         label = entry.rel.split("/", 1)[-1] if "/" in entry.rel else entry.name
         cards.append(
-            f'<article class="card file" data-kind="file" data-id="{entry.file_id}" '
+            f'<article class="card file" data-kind="{_filter_kind(entry.path)}" data-id="{entry.file_id}" '
             f'data-name="{html.escape(label.lower())}">'
             f'<div class="card-icon">{_icon_for(entry)}</div>'
             f'<div class="card-main"><h3 title="{html.escape(label)}">'
@@ -1388,6 +1388,53 @@ def icon_svg(kind: str) -> str:
         'stroke="currentColor" stroke-width="1.6" stroke-linecap="round" '
         f'stroke-linejoin="round" aria-hidden="true">{path}</svg>'
     )
+
+
+#: Coarse buckets for the filter chips. ``kind_of`` is per-format ("pdf",
+#: "text", "audio"…); a person filtering wants six choices, not nine.
+_FILTER_GROUPS = {
+    "video": "video",
+    "audio": "audio",
+    "image": "image",
+    "pdf": "document",
+    "text": "document",
+}
+
+
+_ARCHIVE_SUFFIXES = {
+    ".zip",
+    ".7z",
+    ".rar",
+    ".tar",
+    ".gz",
+    ".bz2",
+    ".xz",
+    ".zst",
+    ".tgz",
+    ".apk",
+    ".ipa",
+    ".deb",
+    ".rpm",
+    ".iso",
+}
+_ARCHIVE_DOUBLE = (".tar.gz", ".tar.bz2", ".tar.xz", ".tar.zst")
+
+
+def _filter_kind(path: Path | str) -> str:
+    """Which chip filters this file: video / audio / image / document / archive / other."""
+    target = path if isinstance(path, Path) else Path(str(path))
+    kind = kind_of(target)
+    if kind in _FILTER_GROUPS:
+        return _FILTER_GROUPS[kind]
+    # No archive table exists; use a wider list than mimetypes knows, so
+    # .zip/.7z/.tar/.apk all land in one chip. Callers pass Path or str.
+    text = str(target).lower()
+    suffix = target.suffix.lower()
+    if target.name.count(".") > 1 and text.endswith(_ARCHIVE_DOUBLE):
+        return "archive"
+    if suffix in _ARCHIVE_SUFFIXES:
+        return "archive"
+    return "other"
 
 
 def _icon_for(entry: FileEntry) -> str:

@@ -76,7 +76,15 @@
       <h2>Shared files</h2>
       <span class="count">{{file_count}} items · {{total_size}}</span>
       <div class="spacer" style="flex:1"></div>
-      <input id="filter" type="search" placeholder="Filter files…" style="max-width:260px">
+      <input id="filter" type="search" placeholder="Search name or type — try mp4" style="max-width:260px">
+    </div>
+    <div class="chips" id="kind-filters" role="group" aria-label="Filter by type">
+      <button class="chip on" data-filter="all" type="button">All</button>
+      <button class="chip" data-filter="video" type="button">Video</button>
+      <button class="chip" data-filter="image" type="button">Images</button>
+      <button class="chip" data-filter="audio" type="button">Audio</button>
+      <button class="chip" data-filter="document" type="button">Documents</button>
+      <button class="chip" data-filter="archive" type="button">Archives</button>
     </div>
     <div class="grid" id="file-grid">
 {{files}}
@@ -197,16 +205,47 @@
   document.querySelectorAll('[data-copy]').forEach(btn =>
     btn.addEventListener('click', () => copy(btn.dataset.copy, 'Magnet link copied')));
 
-  // ── filter ──────────────────────────────────────────────────────────────
-  $('filter').addEventListener('input', (e) => {
-    const q = e.target.value.toLowerCase();
+  // ── search + type filter ────────────────────────────────────────────────
+  // Typing "mp4" must find clip.mp4 even though the card says "clip.mp4" and
+  // "video". Substring on the whole name already covers the extension, but
+  // people also search the other way round ("video"), so both the name and the
+  // type label are matched. Every term must match: "sad mp4" narrows.
+  const state = { q: '', kind: 'all' };
+  function textOf(el) {
+    return [
+      el.dataset.name || '',
+      (el.querySelector('h3') || {}).textContent || '',
+      el.dataset.kind || '',
+      (el.querySelector('p') || {}).textContent || '',
+    ].join(' ').toLowerCase();
+  }
+  function applyFilter() {
+    const terms = state.q.split(/\s+/).filter(Boolean);
     let shown = 0;
-    document.querySelectorAll('.card.file').forEach(el => {
-      const hit = el.querySelector('h3').textContent.toLowerCase().includes(q);
+    document.querySelectorAll('#file-grid .card').forEach(el => {
+      const hay = textOf(el);
+      const hitText = terms.every(t => hay.includes(t));
+      const hitKind = state.kind === 'all' || el.dataset.kind === state.kind;
+      const hit = hitText && hitKind;
       el.classList.toggle('hidden', !hit);
       if (hit) shown++;
     });
     $('empty').classList.toggle('hidden', shown !== 0);
+    $('empty').textContent = state.q || state.kind !== 'all'
+      ? 'No files match that.'
+      : 'This folder is empty.';
+  }
+  $('filter').addEventListener('input', (e) => {
+    state.q = e.target.value.toLowerCase().trim();
+    applyFilter();
+  });
+  document.querySelectorAll('#kind-filters .chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      state.kind = chip.dataset.filter;
+      document.querySelectorAll('#kind-filters .chip').forEach(c =>
+        c.classList.toggle('on', c === chip));
+      applyFilter();
+    });
   });
 
   // ── live stats (no full page reloads) ──────────────────────────────────

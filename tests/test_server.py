@@ -5,6 +5,7 @@ from __future__ import annotations
 import http.cookiejar
 import io
 import json
+import re
 import time
 import urllib.error
 import urllib.parse
@@ -872,5 +873,45 @@ def test_the_tracker_counts_exactly_what_it_sends(tmp_path, free_port):
         assert final["bytes_sent"] == size * 9, "concurrent sends must not lose bytes"
         assert final["requests"] == 9
         assert final["peak_speed"] >= 0
+    finally:
+        server.stop()
+
+
+@pytest.mark.parametrize(
+    "name,expected",
+    [
+        ("clip.mp4", "video"),
+        ("CLIP.MP4", "video"),
+        ("song.mp3", "audio"),
+        ("photo.jpg", "image"),
+        ("notes.pdf", "document"),
+        ("notes.md", "document"),
+        ("bundle.zip", "archive"),
+        ("bundle.tar.gz", "archive"),
+        ("app.apk", "archive"),
+        ("blob.bin", "other"),
+    ],
+)
+def test_filter_kind_buckets(name, expected):
+    """The web filter offers six chips, so file kinds collapse into six buckets."""
+    from local_file_sharer.transfer.http_handler import _filter_kind
+
+    assert _filter_kind(Path(name)) == expected
+    assert _filter_kind(name) == expected, "str callers must work too"
+
+
+def test_cards_carry_a_filter_kind(tmp_path, free_port):
+    """The chips filter on data-kind, so every card needs one."""
+    root = tmp_path / "mix"
+    root.mkdir()
+    for name in ("a.mp4", "b.jpg", "c.pdf", "d.zip", "e.bin"):
+        (root / name).write_bytes(b"x" * 10)
+    server = ShareServer(Manifest.build([root]), host="127.0.0.1", port=free_port)
+    server.start()
+    assert server.wait_until_ready(timeout=5)
+    try:
+        page = get(server, "/").read().decode()
+        kinds = set(re.findall(r'class="card file" data-kind="([a-z]+)"', page))
+        assert kinds == {"video", "image", "document", "archive", "other"}
     finally:
         server.stop()

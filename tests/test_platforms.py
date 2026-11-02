@@ -442,3 +442,50 @@ def test_start_dir_falls_back_to_home_when_nothing_is_readable(tmp_path, monkeyp
         assert platforms.start_dir(locked) == home
     finally:
         locked.chmod(0o755)
+
+
+def test_sdcard_is_found_through_either_route(tmp_path, monkeypatch):
+    """/sdcard is what people type; ~/storage is what termux-setup-storage makes."""
+    from local_file_sharer import platforms
+
+    shared = tmp_path / "sdcard"
+    (shared / "Download").mkdir(parents=True)
+    home = tmp_path / "home"
+    home.mkdir()
+
+    monkeypatch.setattr(platforms, "home_dir", lambda: home)
+
+    # stock Android: /sdcard exists
+    monkeypatch.setattr(platforms, "SDCARD_ALIASES", (shared,))
+    assert platforms.sdcard_dir() == shared
+
+    # some builds hide /sdcard but the ~/storage symlink is there
+    (home / "storage").symlink_to(shared)
+    monkeypatch.setattr(platforms, "SDCARD_ALIASES", (tmp_path / "nope",))
+    assert platforms.sdcard_dir() == home / "storage"
+
+
+def test_downloads_land_in_sdcard_download_not_the_shell_home(tmp_path, monkeypatch):
+    """The Termux home is invisible to the phone's Files app."""
+    from local_file_sharer import platforms
+
+    shared = tmp_path / "sdcard"
+    (shared / "Download").mkdir(parents=True)
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setattr(platforms, "home_dir", lambda: home)
+    monkeypatch.setattr(platforms, "SDCARD_ALIASES", (shared,))
+
+    assert platforms.downloads_dir() == shared / "Download"
+    assert platforms.start_dir() == shared
+
+
+def test_downloads_fall_back_when_there_is_no_android_storage(tmp_path, monkeypatch):
+    from local_file_sharer import platforms
+
+    home = tmp_path / "home"
+    (home / "Downloads").mkdir(parents=True)
+    monkeypatch.setattr(platforms, "home_dir", lambda: home)
+    monkeypatch.setattr(platforms, "SDCARD_ALIASES", (tmp_path / "nope",))
+
+    assert platforms.downloads_dir() == home / "Downloads"

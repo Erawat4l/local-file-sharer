@@ -7,8 +7,27 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Added
+
+- **The web has real search and type filters.** The box now matches anywhere in
+  the name *and* the type — `mp4` finds `holiday clip.mp4`, `MP4` matches too,
+  `video` finds it without knowing the extension — and every word must match,
+  so `sad mp4` narrows. A row of chips filters by Video, Images, Audio,
+  Documents and Archives; the empty state says which of the two hid everything.
+  File kinds collapse into those six buckets server-side (`data-kind`), because
+  one chip per format would be nine chips on a phone.
+
 ### Fixed
 
+- **Downloads go to `/sdcard/Download`, and the picker opens on `/sdcard`.**
+  The picker started wherever it happened to resolve, and the download folder
+  never considered Android storage at all — its candidate list was
+  Termux-home paths only, so every download landed in
+  `/data/data/com.termux/files/home`, which no other app on the phone can see.
+  `/sdcard` is now tried as an alias (some builds only expose `~/storage`), and
+  `downloads_dir()` prefers `<storage>/Download`. Neither is gated on `TERMUX`
+  any more: the probe just checks whether the folder can be listed, so a plain
+  Linux box falls through unchanged.
 - **Install instructions no longer return 404.** Every documented install
   command used `raw.githubusercontent.com`, which answers 404 to any
   unauthenticated request while the repository is private — including for files

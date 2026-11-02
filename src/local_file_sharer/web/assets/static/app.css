@@ -89,6 +89,13 @@ a:hover { color: #fff; border-bottom-color: #fff; }
   border: 1px solid var(--line); background: var(--panel-2); color: var(--text-dim);
 }
 .chip b { color: var(--text); font-weight: 600; }
+/* filter row: the chips are buttons, not links, so they need the resets that
+   an <a> gets for free */
+.chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 14px; }
+button.chip { font-family: inherit; cursor: pointer; transition: border-color 0.14s ease, color 0.14s ease, background 0.14s ease; }
+button.chip:hover { border-color: var(--line-strong); color: var(--text); }
+button.chip.on { background: #fff; border-color: #fff; color: #000; font-weight: 600; }
+button.chip:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
 .chip.accent { border-color: #fff; color: #fff; background: #121212; }
 .chip.warn { border-color: var(--line-strong); color: var(--text-dim); background: #121212; }
 .dot { width: 6px; height: 6px; border-radius: 50%; background: #fff; animation: pulse 2.4s ease-in-out infinite; }
@@ -149,7 +156,13 @@ a:hover { color: #fff; border-bottom-color: #fff; }
 }
 
 /* ── file cards ────────────────────────────────────────────────────────── */
-.section-head { display: flex; align-items: baseline; gap: 12px; margin: 0 0 14px; }
+.section-head { display: flex; align-items: baseline; gap: 12px; margin: 0 0 14px; flex-wrap: wrap; }
+/* the search box needs the full row on a phone: sharing the line with the
+   heading and the item count clipped its placeholder mid-word */
+@media (max-width: 520px) {
+  .section-head input[type="search"] { flex: 1 1 100%; max-width: none !important; order: 3; }
+  .section-head h2 { flex: 0 0 auto; }
+}
 .section-head h2 { font-size: 16px; margin: 0; letter-spacing: -0.01em; }
 .section-head .count { font-size: 12.5px; color: var(--text-faint); }
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
