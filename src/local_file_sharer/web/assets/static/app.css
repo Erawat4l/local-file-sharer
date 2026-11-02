@@ -230,17 +230,30 @@ svg.i { width: 1.05em; height: 1.05em; flex: 0 0 auto; vertical-align: -0.15em; 
   border-bottom: 1px solid var(--line); background: #0a0a0a;
 }
 .row {
-  display: grid; grid-template-columns: 1fr 120px 44px; gap: 12px; align-items: center;
+  /* icon · name · size · action. The server script prepends a checkbox to every
+     row at runtime, and the grid used to have three columns for four spans, so
+     each row wrapped onto two lines and the name was squeezed into the size
+     column — the "shattered" listing. Columns are explicit and the name takes
+     whatever is left. */
+  display: grid; grid-template-columns: 16px 20px minmax(0, 1fr) auto 20px;
+  gap: 10px; align-items: center;
   padding: 11px 18px; color: var(--text); border-bottom: 1px solid #1a1a1a;
   transition: background 0.12s ease;
 }
+.row > .pick { margin: 0; }
+/* the server script tags every row it adds a checkbox to */
+.row:not(.has-pick) { grid-template-columns: 20px minmax(0, 1fr) auto 20px; }
 .row:last-child { border-bottom: 0; }
 .row:hover { background: #141414; color: #fff; }
 .row-icon { font-size: 17px; }
 .row-name { display: flex; align-items: center; gap: 10px; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 14px; }
-.row-size { font-family: var(--mono); font-size: 12.5px; color: var(--text-dim); text-align: right; }
+.row-size { font-family: var(--mono); font-size: 12.5px; color: var(--text-dim); text-align: right; white-space: nowrap; }
 .row-get { text-align: right; color: var(--accent); font-size: 16px; }
-@media (max-width: 620px) { .list-head, .row { grid-template-columns: 1fr 76px 32px; } }
+@media (max-width: 620px) {
+  .row { grid-template-columns: 16px 18px minmax(0, 1fr) auto 16px; gap: 8px; padding: 11px 12px; }
+  .row:not(.has-pick) { grid-template-columns: 18px minmax(0, 1fr) auto 16px; }
+  .list-head { grid-template-columns: minmax(0, 1fr) 76px 32px; padding: 11px 12px; }
+}
 
 /* ── inputs ────────────────────────────────────────────────────────────── */
 input[type="search"], input[type="text"], input[type="password"] {
@@ -288,3 +301,14 @@ kbd {
 @media (prefers-reduced-motion: reduce) {
   * { animation: none !important; transition: none !important; }
 }
+
+/* ── paging ────────────────────────────────────────────────────────────── */
+/* A 17,000-file folder used to render every card at once. Pages keep the
+   response small and the page scrollable. */
+.pager {
+  display: flex; align-items: center; justify-content: center; gap: 14px;
+  margin: 18px 0 4px; flex-wrap: wrap;
+}
+.pager .pager-count { font-size: 12.5px; color: var(--text-dim); }
+.pager .btn.disabled { opacity: 0.4; cursor: default; }
+.row.folder .row-name { font-weight: 600; }

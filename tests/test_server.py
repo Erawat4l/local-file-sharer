@@ -98,8 +98,13 @@ def test_a_folder_card_opens_that_folder(server):
     # /d/<id> still serves the whole folder item, not just the sub-folder
     manifest = json.load(get(server, "/api/manifest"))
     folder = next(item for item in manifest["items"] if item["kind"] == "folder")
+    # /d/<id> shows that folder's own level: its loose files and one card for
+    # each sub-folder. It must NOT flatten three.txt out of 2024 — that is what
+    # turned big shares into thousands of loose rows on one page.
     full = get(server, "/d/" + folder["id"]).read().decode()
-    assert "one.jpg" in full and "three.txt" in full
+    assert "one.jpg" in full
+    assert "2024" in full
+    assert "three.txt" not in full
 
 
 def test_browse_rejects_an_unknown_folder(server):
@@ -194,7 +199,9 @@ def test_folder_browser(server):
     folder = next(i for i in payload["items"] if i["kind"] == "folder")
     body = get(server, f"/d/{folder['id']}").read().decode()
     assert "one.jpg" in body
-    assert "three.txt" in body
+    # three.txt lives one level down in 2024/, so it is behind that folder card
+    assert "three.txt" not in body
+    assert "/browse/2024" in body
     zipped = get(server, f"/zip/{folder['id']}").read()
     assert zipfile.ZipFile(io.BytesIO(zipped)).testzip() is None
 
@@ -915,3 +922,74 @@ def test_cards_carry_a_filter_kind(tmp_path, free_port):
         assert kinds == {"video", "image", "document", "archive", "other"}
     finally:
         server.stop()
+
+
+def test_nested_files_never_appear_at_their_grandparent_level(tmp_path, free_port):
+    """The bug that made big shares unreadable.
+
+    A 17,000-file phone was rendered as 17,001 flat cards on one page because
+    every file inside every sub-folder was listed at the root. Each level must
+    show only its own children.
+    """
+    root = tmp_path / "phone"
+    deep = root / "DCIM" / "Camera"
+    deep.mkdir(parents=True)
+    for i in range(5):
+        (deep / f"IMG_{i}.jpg").write_bytes(b"x" * 10)
+    (root / "notes.txt").write_text("hi", encoding="utf-8")
+    server = ShareServer(Manifest.build([root]), host="127.0.0.1", port=free_port)
+    server.start()
+    assert server.wait_until_ready(timeout=5)
+    try:
+        top = get(server, "/").read().decode()
+        # the folder is a card; none of the five photos leak to the root
+        assert 'class="card folder"' in top
+        assert 'data-name="dcim"' in top.lower()
+        for i in range(5):
+            assert f"IMG_{i}.jpg" not in top
+        # drilling in shows the next level only
+        dcim = get(server, "/browse/DCIM").read().decode()
+        assert "Camera/" in dcim
+        assert "IMG_0.jpg" not in dcim
+        camera = get(server, "/browse/DCIM/Camera").read().decode()
+        assert "IMG_0.jpg" in camera
+    finally:
+        server.stop()
+
+
+def test_a_huge_folder_is_paged(tmp_path, free_port):
+    """A folder with 150 files returns one page of 60, not all 150 at once."""
+    root = tmp_path / "many"
+    root.mkdir()
+    for i in range(150):
+        (root / f"f{i:03d}.txt").write_text("x", encoding="utf-8")
+    server = ShareServer(Manifest.build([root]), host="127.0.0.1", port=free_port)
+    server.start()
+    assert server.wait_until_ready(timeout=5)
+    try:
+        first = get(server, "/").read().decode()
+        assert first.count('class="card file"') == 60
+        assert "page 1 of 3" in first
+        assert 'href="?p=2"' in first
+        second = get(server, "/?p=2").read().decode()
+        assert second.count('class="card file"') == 60
+        last = get(server, "/?p=3").read().decode()
+        assert last.count('class="card file"') == 30
+        assert "f149.txt" in last
+        # a page past the end clamps instead of 500ing or showing nothing
+        assert get(server, "/?p=999").read().decode().count('class="card file"') == 30
+    finally:
+        server.stop()
+
+
+def test_empty_folder_message_is_hidden_when_there_are_files(server):
+    """The "this folder is empty" note must not sit under a populated list.
+
+    The flag was inverted, so every folder that had contents also printed
+    "This folder is empty — or the filter matched nothing." right underneath
+    them, which read as a broken page.
+    """
+    payload = json.load(get(server, "/api/manifest"))
+    folder = next(i for i in payload["items"] if i["kind"] == "folder")
+    body = get(server, f"/d/{folder['id']}").read().decode()
+    assert re.search(r'<div id="empty" class="hidden', body), "empty note must be hidden"

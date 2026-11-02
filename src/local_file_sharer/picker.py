@@ -214,11 +214,18 @@ def list_entries(
         readable = True
         link = False
         try:
-            st = item.stat(follow_symlinks=True)
+            # one stat, not two: the second call was just for the symlink bit
+            st = item.stat(follow_symlinks=False)
             size = st.st_size
             mtime = st.st_mtime
-            link = stat.S_ISLNK(item.stat(follow_symlinks=False).st_mode)
-            readable = os.access(path, os.R_OK) if not is_dir else _dir_readable(path)
+            link = stat.S_ISLNK(st.st_mode)
+            # A folder's readability used to be probed with a second scandir()
+            # of it. On Android storage (FUSE, /sdcard) that is a real read per
+            # folder per listing, and the picker lists on every navigate — it
+            # was the bulk of the "CLI is laggy" feeling. The stat above already
+            # proved the entry is reachable, and entering a folder that turns
+            # out to be unreadable raises PickerError with a useful hint.
+            readable = os.access(path, os.R_OK)
         except OSError:
             readable = False
         entries.append(
@@ -244,15 +251,6 @@ def _is_hidden_win(item: os.DirEntry) -> bool:
     except (AttributeError, OSError):
         return False
     return bool(attrs & stat.FILE_ATTRIBUTE_HIDDEN)
-
-
-def _dir_readable(path: Path) -> bool:
-    try:
-        with os.scandir(path) as scan:
-            next(iter(scan), None)
-        return True
-    except OSError:
-        return False
 
 
 # ── Fuzzy search ─────────────────────────────────────────────────────────────

@@ -186,3 +186,53 @@ def test_going_up_into_a_locked_folder_keeps_the_picker_open(tmp_path):
     # and a readable folder still navigates normally
     assert enter_dir(state, outer) is True
     assert state.cwd == outer
+
+
+def test_listing_does_not_scan_each_subfolder(tmp_path, monkeypatch):
+    """Listing N folders must not list each of them again.
+
+    Building a row used to probe every directory with a second ``scandir`` to
+    decide whether it was readable. On Android storage that is a real read per
+    folder per listing, and the picker lists on every navigation — it was most
+    of the "the CLI is laggy" feeling.
+    """
+    import os
+
+    root = tmp_path / "many"
+    root.mkdir()
+    for i in range(25):
+        (root / f"dir{i}").mkdir()
+
+    scans: list[str] = []
+    real = os.scandir
+
+    def counting_scandir(path="."):
+        scans.append(str(path))
+        return real(path)
+
+    monkeypatch.setattr(os, "scandir", counting_scandir)
+    entries = list_entries(root)
+    monkeypatch.undo()
+
+    assert len(entries) == 25
+    # exactly one scan: the folder being listed
+    assert len(scans) == 1, f"expected 1 scandir, got {len(scans)}: {scans[:3]}"
+
+
+def test_unreadable_folder_is_still_flagged(tmp_path):
+    """The red 'locked' cue survives the speed fix — it just costs no I/O."""
+    import os
+
+    root = tmp_path / "perm"
+    locked = root / "locked"
+    locked.mkdir(parents=True)
+    (root / "open").mkdir()
+    locked.chmod(0o000)
+    try:
+        if os.access(locked, os.R_OK):  # running as root: the mode is ignored
+            pytest.skip("permissions are not enforced for this user")
+        by_name = {e.name: e for e in list_entries(root)}
+        assert by_name["locked"].readable is False
+        assert by_name["open"].readable is True
+    finally:
+        locked.chmod(0o755)

@@ -213,3 +213,37 @@ def test_home_and_storage_dirs_exist():
     assert platforms.home_dir().exists()
     assert isinstance(platforms.storage_root(), Path)
     assert isinstance(platforms.downloads_dir(), Path)
+
+
+def test_tailscale_status_is_cached_between_menu_renders(monkeypatch):
+    """The menu re-renders after every keypress; it must not spawn tailscale each time.
+
+    ``tailscale status --json`` costs hundreds of milliseconds on a phone, and
+    the status line is redrawn constantly. Five seconds of staleness is free.
+    """
+    from local_file_sharer import network, platforms
+
+    calls: list[list[str]] = []
+
+    def fake_find(name, *a, **k):
+        return "/usr/bin/tailscale" if name == "tailscale" else None
+
+    def fake_run(cmd, **k):
+        calls.append(list(cmd))
+        return 0, "{}", ""
+
+    monkeypatch.setattr(platforms, "find_tool", fake_find)
+    monkeypatch.setattr(network, "run_quiet", fake_run)
+    network._tailscale_cache = None
+
+    network.tailscale_status(fresh=True)
+    after_first = len(calls)
+    assert after_first >= 1
+
+    for _ in range(20):
+        network.tailscale_status()
+    assert len(calls) == after_first, "cached reads must not spawn a subprocess"
+
+    network.tailscale_status(fresh=True)
+    assert len(calls) > after_first
+    network._tailscale_cache = None

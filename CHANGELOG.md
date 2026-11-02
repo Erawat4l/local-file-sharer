@@ -7,6 +7,45 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Fixed
+
+- **The web page shows folders instead of every file at once.** A share of a
+  phone was rendering *all* nested files on the front page — 17,001 cards in a
+  single response (~10 MB of HTML, 50,000+ DOM nodes), which is why the listing
+  looked shattered and would not settle. Each level now renders only its own
+  children: one card per sub-folder (with its file count and size) plus the
+  files that actually sit in that folder. The same 17,001-file tree is now a
+  4.1 KB page with 7 cards.
+- **Large folders are paged** (60 cards per page, `?p=N`) with prev/next links,
+  so a folder holding thousands of files stays fast to open and to scroll
+  instead of dumping everything at the browser. A page past the end clamps to
+  the last page.
+- **The broken row layout.** Rows emit four cells into what was a three-column
+  grid, and the page script prepends a checkbox as a fifth, so names were
+  squeezed into the size column and every row wrapped onto two lines. Columns
+  are explicit now, the name takes the remaining space, and full folder names
+  are visible again instead of being cut to "Cam" / "Scre".
+- **"This folder is empty" no longer appears under a populated listing.** The
+  flag was inverted, so every non-empty folder showed the empty-state note.
+- **Share links under a shared folder point at the right place.** Card links and
+  folder-zip URLs were built from the level's display name, which would have
+  asked for `/folder/<share>/<sub>` instead of `/folder/<sub>`.
+
+### Performance
+
+- **The picker no longer re-scans every sub-folder it lists.** Building a row
+  probed each directory with a second `scandir` to decide whether it was
+  readable — an extra real read per folder, on every navigation, on Android
+  storage where reads are slow. Readability now comes from the `stat` already
+  being taken. Measured with FUSE-like latency: **520 ms → 140 ms** to list 120
+  folders. The red "locked folder" cue is unchanged.
+- **One `stat` per entry instead of two** in the picker (the second was only
+  fetching the symlink bit).
+- **`tailscale status` is cached for 5 s.** The menu redraws after every
+  keypress and each redraw shelled out to `tailscale version` and
+  `tailscale status --json` — around 800 ms per screen on a phone. Cached
+  re-renders: **800 ms → 0 ms**; `doctor` and explicit checks still ask fresh.
+
 ### Documented
 
 - **Audio tracks and subtitles in the web player** — no, not today, and the

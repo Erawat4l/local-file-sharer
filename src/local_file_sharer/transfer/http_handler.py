@@ -534,6 +534,9 @@ class ShareRequestHandler(BaseHTTPRequestHandler):
         )
 
     # ── pages ──────────────────────────────────────────────────────────────
+    def _query(self) -> dict[str, list[str]]:
+        return urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
+
     def page_index(self) -> None:
         """Route the landing page according to the share mode."""
         mode = self.ctx.manifest.mode
@@ -554,7 +557,10 @@ class ShareRequestHandler(BaseHTTPRequestHandler):
         # Folder-first: a share of ~/Photos should show "Photos", not 400 JPEGs.
         # Cards are grouped by the top-level name under the shared root, so each
         # folder gets one entry with its own download button (a folder zip).
-        cards = _entry_cards(self.ctx.manifest)
+        page = _page_number(self._query())
+        cards, total_items, pages = _entry_cards(
+            self.ctx.manifest, level=_shared_level(self.ctx.manifest), page=page
+        )
         torrent = self.ctx.torrent
         torrent_links = ""
         if torrent is not None:
@@ -565,6 +571,7 @@ class ShareRequestHandler(BaseHTTPRequestHandler):
         body = (
             template.replace("{{title}}", html.escape(self.ctx.manifest.title))
             .replace("{{files}}", "\n".join(cards))
+            .replace("{{pager}}", _pager_html(page, pages, total_items, base="?"))
             .replace("{{torrent_links}}", torrent_links)
             .replace("{{file_count}}", str(self.ctx.manifest.file_count))
             .replace("{{total_size}}", human_size(self.ctx.manifest.total_bytes))
@@ -623,7 +630,8 @@ class ShareRequestHandler(BaseHTTPRequestHandler):
             .replace("{{can_upload}}", "true" if self.ctx.allow_upload else "false")
             .replace("{{search}}", html.escape(search))
             .replace("{{mode}}", self.ctx.manifest.mode)
-            .replace("{{empty_class}}", "" if rows else "hidden")
+            # shown only when there is nothing to show
+            .replace("{{empty_class}}", "hidden" if rows else "")
             .replace("{{upload_section}}", self._upload_section())
         )
         self.send_html(body)
@@ -669,11 +677,44 @@ class ShareRequestHandler(BaseHTTPRequestHandler):
             return
         patterns = query.get("q") or []
         search = patterns[0] if patterns else ""
-        entries = [f for f in item.files if not sub or f.rel.startswith(f"{item.name}/{sub}")]
+        prefix = f"{item.name}/{sub}/" if sub else f"{item.name}/"
+        rest: list[tuple[str, FileEntry]] = []
+        for f in item.files:
+            if not f.rel.startswith(prefix):
+                continue
+            tail = f.rel[len(prefix) :]
+            rest.append((tail, f))
         if search:
             lowered = search.lower()
-            entries = [f for f in entries if lowered in f.rel.lower()]
-        rows = "\n".join(self._browser_row(f, base=f"/d/{item.item_id}") for f in entries)
+            rest = [(tail, f) for tail, f in rest if lowered in tail.lower()]
+        # Split into this level's sub-folders and this level's files. Files
+        # deeper down belong to the sub-folder cards and are not listed here —
+        # flattening them produced a 17,001-row page that would not scroll.
+        subfolders = sorted({tail.split("/")[0] for tail, _ in rest if "/" in tail}, key=str.lower)
+        here = [(tail, f) for tail, f in rest if "/" not in tail]
+        here.sort(key=lambda pair: pair[0].lower())
+        page = _page_number(query)
+        slots = [("folder", n) for n in subfolders] + [("file", i) for i in range(len(here))]
+        pages = max(1, (len(slots) + PAGE_SIZE - 1) // PAGE_SIZE)
+        page = max(1, min(page, pages))
+        window = slots[(page - 1) * PAGE_SIZE : page * PAGE_SIZE]
+        parts: list[str] = []
+        for kind, key in window:
+            if kind == "folder":
+                trail = f"{sub}/{key}" if sub else key
+                depth = sum(1 for f in item.files if f.rel.startswith(f"{item.name}/{trail}/"))
+                size = sum(f.size for f in item.files if f.rel.startswith(f"{item.name}/{trail}/"))
+                parts.append(
+                    f'<a class="row folder" href="/browse/{urllib.parse.quote(trail)}">'
+                    f'<span class="row-icon">{icon_svg("folder")}</span>'
+                    f'<span class="row-name">{html.escape(key)}/</span>'
+                    f'<span class="row-size">{depth} files · {human_size(size)}</span>'
+                    f'<span class="row-get">→</span></a>'
+                )
+            else:
+                parts.append(self._browser_row(here[key][1], base=f"/d/{item.item_id}"))
+        rows = "\n".join(parts)
+        entries = here or subfolders
         breadcrumbs = self._breadcrumbs(item, sub)
         body = (
             template.replace("{{title}}", html.escape(item.name))
@@ -690,7 +731,8 @@ class ShareRequestHandler(BaseHTTPRequestHandler):
             .replace("{{can_upload}}", "true" if self.ctx.allow_upload else "false")
             .replace("{{search}}", html.escape(search))
             .replace("{{mode}}", self.ctx.manifest.mode)
-            .replace("{{empty_class}}", "" if entries else "hidden")
+            .replace("{{empty_class}}", "hidden" if entries else "")
+            .replace("{{pager}}", _pager_html(page, pages, len(slots), base=f"/d/{item.item_id}?"))
             .replace("{{upload_section}}", self._upload_section())
         )
         self.send_html(body)
@@ -1308,42 +1350,146 @@ def _top_level_group(entry: FileEntry) -> str:
     return parts[1] if len(parts) > 2 else ""
 
 
-def _entry_cards(manifest) -> list[str]:  # noqa: ANN001 - Manifest, imported lazily
-    """One card per sub-folder of the share, then one card per file in it.
+def _inside_item(rel: str, items) -> str | None:  # noqa: ANN001
+    """Strip a path's leading shared-item name (``Photos/a.jpg`` → ``a.jpg``).
 
-    A share is usually one folder full of sub-folders, so its sub-folders are
-    what the page shows: each is a single card with a file count and a zip
-    button. Files sitting directly in the shared folder are listed one by one.
+    A folder share wraps every file in ``<item name>/``; a file shared on its
+    own has no wrapper and is simply its own name. Returns ``None`` when the
+    path belongs to no item, which should not happen.
     """
+    head, _, tail = rel.partition("/")
+    for item in items:
+        if item.name == head:
+            return tail if tail else item.name
+        if not item.is_dir and item.name == rel:
+            return rel
+    return None
+
+
+def _page_number(query: dict[str, list[str]]) -> int:
+    """``?p=3`` → 3, and anything silly → 1."""
+    try:
+        return max(1, int((query.get("p") or ["1"])[0]))
+    except (TypeError, ValueError):
+        return 1
+
+
+def _shared_level(manifest, page: int = 0) -> str:  # noqa: ANN001
+    """The folder the front page represents.
+
+    A share of a single folder ("Photos") should list what is *inside* Photos,
+    not a single card named Photos. Two or more items are shown from the shared
+    root, so the top level is ``""``.
+    """
+    items = manifest.items
+    if len(items) == 1 and items[0].is_dir:
+        return items[0].name
+    return ""
+
+
+def _pager_html(page: int, pages: int, total: int, *, base: str) -> str:
+    """Prev / page N of M / Next, or nothing when everything fits."""
+    if pages <= 1:
+        return ""
+    # "/browse/Huge?" already ends in a separator; appending "?p=" would give
+    # "/browse/Huge?&p=1".
+    # "/browse/Huge?" is already separated, so it needs nothing; "?p=1" and
+    # "?q=x&p=1" both follow the same rule.
+    sep = "" if base.endswith(("?", "&")) else ("&" if "?" in base else "?")
+    prev_link = (
+        f'<a class="btn ghost sm" href="{base}{sep}p={page - 1}" rel="prev">← Previous</a>'
+        if page > 1
+        else '<span class="btn ghost sm disabled">← Previous</span>'
+    )
+    next_link = (
+        f'<a class="btn ghost sm" href="{base}{sep}p={page + 1}" rel="next">Next →</a>'
+        if page < pages
+        else '<span class="btn ghost sm disabled">Next →</span>'
+    )
+    return (
+        f'<nav class="pager" aria-label="Pages">{prev_link}'
+        f'<span class="pager-count">page {page} of {pages}'
+        f'<span class="muted"> · {total} items</span></span>{next_link}</nav>'
+    )
+
+
+#: How many cards one page shows. A 17,000-file share used to render 17,000
+#: cards in one response (~9 MB of HTML, tens of thousands of DOM nodes), which
+#: is why the page looked shattered and took seconds to become usable. Paging
+#: keeps every response small no matter how big the folder behind it is.
+PAGE_SIZE = 60
+
+
+def _entry_cards(manifest, *, level: str = "", page: int = 1) -> tuple[list[str], int, int]:  # noqa: ANN001
+    """Cards for ONE level of the share, plus ``(total, pages)``.
+
+    ``level`` is the path inside the share that is currently open (``""`` for
+    the top). Only two things belong on screen:
+
+    * the immediate sub-folders of ``level``, one card each, and
+    * the files sitting directly in ``level``.
+
+    Files buried deeper are deliberately NOT listed: showing them flat at the
+    root is what turned a normal phone share into 17,001 loose cards and made
+    the page impossible to read or scroll.
+    """
+    # ``level`` arrives as the shared folder's own name ("share") for the front
+    # page. Paths inside a share (links, zips, browsing) are relative to the
+    # item, so that name is stripped: the card for share/photos points at
+    # /folder/photos. A nested level ("share/DCIM") keeps only "DCIM".
+    items = manifest.items
+    root_name = items[0].name if len(items) == 1 and items[0].is_dir else ""
+    if root_name and (level == root_name or level.startswith(f"{root_name}/")):
+        level = level[len(root_name) :].lstrip("/")
+    prefix = f"{level}/" if level else ""
+
+    folders: dict[str, list[FileEntry]] = {}
     loose: list[FileEntry] = []
-    groups: dict[str, list[FileEntry]] = {}
     for entry in manifest.iter_files():
-        group = _top_level_group(entry)
-        if group:
-            groups.setdefault(group, []).append(entry)
+        inner = _inside_item(entry.rel, items)
+        if inner is None:
+            continue
+        if prefix:
+            if not inner.startswith(prefix):
+                continue
+            inner = inner[len(prefix) :]
+        if not inner:
+            continue
+        parts = inner.split("/")
+        if len(parts) > 1:
+            folders.setdefault(parts[0], []).append(entry)
         else:
             loose.append(entry)
 
+    folder_names = sorted(folders, key=str.lower)
+    loose.sort(key=lambda e: e.rel.split("/")[-1].lower())
+    slots: list[tuple[str, str]] = [("folder", n) for n in folder_names]
+    slots += [("file", str(i)) for i in range(len(loose))]
+    total_items = len(slots)
+    pages = max(1, (total_items + PAGE_SIZE - 1) // PAGE_SIZE)
+    page = max(1, min(page, pages))
+    window = slots[(page - 1) * PAGE_SIZE : page * PAGE_SIZE]
+    window_folders = [key for kind, key in window if kind == "folder"]
+    window_loose = [loose[int(key)] for kind, key in window if kind == "file"]
+
     cards: list[str] = []
-    for name in sorted(groups, key=str.lower):
-        members = groups[name]
-        total = sum(entry.size for entry in members)
+    for name in window_folders:
+        members = folders[name]
         count = len(members)
+        size = sum(entry.size for entry in members)
         label = f"{count} file{'' if count == 1 else 's'}"
-        # the name opens the folder; the zip button downloads it in one go
         cards.append(
             f'<article class="card folder" data-kind="folder" data-name="{html.escape(name.lower())}">'
             f'<div class="card-icon">{icon_svg("folder")}</div>'
-            f'<a class="card-main" href="/browse/{urllib.parse.quote(name)}">'
+            f'<a class="card-main" href="/browse/{urllib.parse.quote(prefix + name)}">'
             f'<h3 title="{html.escape(name)}">{html.escape(name)}</h3>'
-            f"<p>{label} · {human_size(total)}</p></a>"
+            f"<p>{label} · {human_size(size)}</p></a>"
             f'<div class="card-actions">'
-            f'<a class="btn" href="/folder/{urllib.parse.quote(name)}" download>{DOWNLOAD_ZIP_LABEL}</a>'
+            f'<a class="btn" href="/folder/{urllib.parse.quote(prefix + name)}" download>{DOWNLOAD_ZIP_LABEL}</a>'
             f"</div></article>"
         )
-    for entry in sorted(loose, key=lambda e: e.rel.lower()):
-        # the shared folder's own name is noise on every card; the rest is not
-        label = entry.rel.split("/", 1)[-1] if "/" in entry.rel else entry.name
+    for entry in window_loose:
+        label = entry.rel.split("/")[-1]
         cards.append(
             f'<article class="card file" data-kind="{_filter_kind(entry.path)}" data-id="{entry.file_id}" '
             f'data-name="{html.escape(label.lower())}">'
@@ -1356,7 +1502,7 @@ def _entry_cards(manifest) -> list[str]:  # noqa: ANN001 - Manifest, imported la
             f'<a class="btn btn-ghost" href="/s/{entry.file_id}">Stream</a>'
             f"</div></article>"
         )
-    return cards
+    return cards, total_items, pages
 
 
 #: Monochrome file glyphs. Emoji render as tofu boxes on a phone without a

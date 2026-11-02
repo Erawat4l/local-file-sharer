@@ -165,8 +165,33 @@ class TailscaleStatus:
         return f"{self.ipv4} · {self.best_host}"
 
 
-def tailscale_status() -> TailscaleStatus:
-    """Parse ``tailscale status --json``; never raises."""
+#: Cached ``tailscale_status``. The menu calls this on every render — and it
+#: re-renders after every keypress — while the lookup spawns up to two
+#: subprocesses (``version`` then ``status --json``). On a phone that is ~800 ms
+#: per screen, which is exactly the "CLI is too laggy" complaint. The state of a
+#: VPN changes on a human timescale, so a few seconds of staleness is free.
+TAILSCALE_TTL = 5.0
+_tailscale_cache: tuple[float, TailscaleStatus] | None = None
+
+
+def tailscale_status(*, fresh: bool = False) -> TailscaleStatus:
+    """Parse ``tailscale status --json``; never raises.
+
+    Cached for :data:`TAILSCALE_TTL` seconds. Pass ``fresh=True`` (doctor,
+    config changes) to bypass the cache.
+    """
+    global _tailscale_cache
+    now = time.monotonic()
+    if not fresh and _tailscale_cache is not None:
+        stamp, cached = _tailscale_cache
+        if now - stamp < TAILSCALE_TTL:
+            return cached
+    status = _tailscale_status_uncached()
+    _tailscale_cache = (now, status)
+    return status
+
+
+def _tailscale_status_uncached() -> TailscaleStatus:
     exe = platforms.find_tool("tailscale")
     status = TailscaleStatus(installed=bool(exe))
     if not exe:
