@@ -53,16 +53,45 @@ class KeyHint:
         return self.render()
 
 
-def footer_keys(pairs: Sequence[tuple[str, str]]) -> Text:
-    """A single wrapped line of ``key label`` hints."""
+def footer_keys(pairs: Sequence[tuple[str, str]], *, width: int | None = None) -> RenderableType:
+    """``key label`` hints, wrapped between pairs — never inside one.
+
+    A single Text lets Rich soft-wrap mid-phrase, which produced ``h`` at the
+    end of one line and ``home`` alone on the next. Each row is its own grid
+    whose column count matches the pairs it holds (a grid with a spare column
+    squeezes every cell and truncates the labels instead), so labels stay whole
+    and a pair that does not fit moves to the next row.
+    """
     theme = current_theme()
-    out = Text()
-    for index, (key, label) in enumerate(pairs):
-        if index:
-            out.append("  ", style=theme.faint)
+    available = max(16, (width or screen_width()) - 4)
+
+    def cell(key: str, label: str) -> Text:
+        out = Text(no_wrap=True, overflow="ellipsis")
         out.append(f" {key} ", style=theme.key)
-        out.append(f"{label}", style=theme.faint)
-    return out
+        out.append(label, style=theme.faint)
+        return out
+
+    def cell_width(key: str, label: str) -> int:
+        return len(key) + len(label) + 4  # " key " + label
+
+    rows: list[list[tuple[str, str]]] = [[]]
+    used = 0
+    for key, label in pairs:
+        need = cell_width(key, label) + 2
+        if rows[-1] and used + need > available:
+            rows.append([])
+            used = 0
+        rows[-1].append((key, label))
+        used += need
+
+    renderable: list[RenderableType] = []
+    for row in rows:
+        grid = Table.grid(padding=(0, 2))
+        for _ in row:
+            grid.add_column(no_wrap=True)
+        grid.add_row(*[cell(key, label) for key, label in row])
+        renderable.append(grid)
+    return Group(*renderable) if len(renderable) > 1 else renderable[0]
 
 
 def empty_state(icon: str, title: str, hint: str = "") -> Panel:

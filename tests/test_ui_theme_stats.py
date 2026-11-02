@@ -380,3 +380,42 @@ def test_wrap_command_leaves_a_short_command_alone():
     from local_file_sharer.ui.console import wrap_command
 
     assert wrap_command("lfs doctor", width=80) == ["   lfs doctor"]
+
+
+# ── picker layout on a phone-width terminal ─────────────────────────────────
+def _render_lines(renderable, width: int) -> list[str]:
+    import io
+
+    from rich.console import Console
+
+    buffer = io.StringIO()
+    console = Console(file=buffer, width=width, force_terminal=False, legacy_windows=False)
+    console.print(renderable)
+    return buffer.getvalue().splitlines()
+
+
+@pytest.mark.parametrize("width", [40, 48, 60, 80])
+def test_footer_hints_never_truncate_a_label(width):
+    """`Space pi…` tells the user nothing; whole pairs or none."""
+    from local_file_sharer.ui.components import footer_keys
+
+    hints = [("j/k", "move"), ("Space", "pick"), ("Enter", "open"), ("s", "share"), ("q", "quit")]
+    lines = _render_lines(footer_keys(hints, width=width), width)
+    text = "\n".join(lines)
+    for _key, label in hints:
+        assert label in text, f"{label!r} was truncated or dropped at {width} cols"
+    assert "…" not in text
+
+
+@pytest.mark.parametrize("width", [40, 48, 60, 80])
+def test_picker_rows_and_hints_fit_the_width(width, tmp_path):
+    """Nothing the picker prints may be wider than the terminal."""
+    from local_file_sharer.ui.picker_ui import PickerState, render
+
+    for index in range(6):
+        (tmp_path / f"file-{index}.txt").write_text("x", encoding="utf-8")
+    state = PickerState(cwd=tmp_path)
+    state.reload(icons=True)
+    lines = _render_lines(render(state, width=width, height=30), width)
+    over = [line for line in lines if len(line) > width]
+    assert not over, f"lines wider than {width}: {[line[:60] for line in over]}"

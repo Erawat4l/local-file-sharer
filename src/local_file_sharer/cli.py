@@ -93,7 +93,13 @@ def add_common_flags(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--theme", choices=("dark", "light", "mono"), default=None, help="colour theme")
     parser.add_argument("--no-anim", action="store_true", help="static banner (no shimmer)")
     parser.add_argument(
-        "--icons", dest="icons", action="store_true", default=None, help="emoji icons in the picker"
+        "--menu",
+        dest="no_picker",
+        action="store_true",
+        help="open the text menu instead of the arrow-key picker",
+    )
+    parser.add_argument(
+        "--icons", dest="icons", action="store_true", default=None, help="glyph icons in the picker"
     )
     parser.add_argument("--no-icons", dest="icons", action="store_false", help="plain names in the picker")
     parser.add_argument("--no-color", action="store_true", help="disable colour (same as NO_COLOR=1)")
@@ -291,9 +297,42 @@ def _handle_error(exc: BaseException, *, debug: bool) -> int:
 # Commands
 # ─────────────────────────────────────────────────────────────────────────────
 def cmd_menu(cfg: Config, state: State, args: argparse.Namespace) -> int:
-    from .menu import run_menu
+    """Bare `lfs`: straight into the file picker, the way the README shows it.
 
-    return run_menu(config=cfg, state=state, animate=cfg.animate_banner and not args.no_anim)
+    A menu that first asks "what would you like to do?" in line mode means
+    typing a digit and pressing Enter before any arrow key does anything, which
+    is not what a terminal UI is for. Unless the user asked for the menu (or has
+    no real terminal), go straight to the arrow-key picker and share whatever
+    is chosen.
+    """
+    from rich.text import Text  # noqa: PLC0415
+
+    from .menu import MenuContext, render_menu, run_menu, share_paths  # noqa: PLC0415
+    from .ui.console import console as make_console  # noqa: PLC0415
+    from .ui.console import current_theme
+
+    animate = cfg.animate_banner and not args.no_anim
+    con = make_console()
+    if not con.is_terminal or getattr(args, "no_picker", False):
+        return run_menu(config=cfg, state=state, animate=animate)
+
+    from .ui.picker_ui import run_picker  # noqa: PLC0415
+
+    ctx = MenuContext(config=cfg, state=state, animate=animate)
+    con.print(render_menu(ctx))
+    con.print(
+        Text(
+            " opening the picker — j/k or arrows move · Space pick · s share · q menu",
+            style=current_theme().info,
+        )
+    )
+    start = state.last_dir or platforms.storage_root()
+    result = run_picker(start, icons=cfg.icons, page_size=cfg.ui.page_size)
+    if result.cancelled or not result.paths:
+        # nothing picked: fall back to the menu rather than exiting silently
+        return run_menu(config=cfg, state=state, animate=False)
+    share_paths(ctx, result.paths)
+    return 0
 
 
 def cmd_share(cfg: Config, state: State, args: argparse.Namespace, paths: list[Path]) -> int:

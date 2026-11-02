@@ -9,6 +9,7 @@ scrollback stays readable on a phone.
 from __future__ import annotations
 
 import time
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -149,15 +150,11 @@ def render_menu(ctx: MenuContext) -> Group:
     return Group(*blocks)
 
 
-def _pick_and_share(ctx: MenuContext, mode: str) -> None:
+def share_paths(ctx: MenuContext, paths: Sequence[Path], mode: str = "download") -> None:
+    """Show the selection summary and run the share — shared by both entry points."""
     theme = current_theme()
     con = console()
-    start = ctx.state.last_dir or platforms.storage_root()
-    result = run_picker(start, icons=ctx.config.icons, animate=False, page_size=ctx.config.ui.page_size)
-    if result.cancelled or not result.paths:
-        con.print(Text(" nothing selected", style=theme.faint))
-        return
-    summary = analyze(result.paths)
+    summary = analyze(paths)
     con.print(divider(width=min(screen_width() - 2, 70)))
     con.print(
         info_panel(
@@ -173,7 +170,7 @@ def _pick_and_share(ctx: MenuContext, mode: str) -> None:
     pin = ask_pin(ctx.config)
     expire = ask_expiry(ctx.config)
     request = ShareRequest(
-        paths=result.paths,
+        paths=list(paths),
         mode=mode,
         port=ctx.config.network.port,
         pin=pin,
@@ -187,6 +184,16 @@ def _pick_and_share(ctx: MenuContext, mode: str) -> None:
         con.print(error_panel(exc.message, hints=exc.all_hints(), detail=exc.detail or "", title=exc.title))
     except KeyboardInterrupt:
         con.print(Text(" stopped", style=theme.warning))
+
+
+def _pick_and_share(ctx: MenuContext, mode: str) -> None:
+    theme = current_theme()
+    start = ctx.state.last_dir or platforms.storage_root()
+    result = run_picker(start, icons=ctx.config.icons, animate=False, page_size=ctx.config.ui.page_size)
+    if result.cancelled or not result.paths:
+        console().print(Text(" nothing selected", style=theme.faint))
+        return
+    share_paths(ctx, result.paths, mode)
 
 
 def _recent(ctx: MenuContext) -> None:

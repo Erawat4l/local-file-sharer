@@ -30,6 +30,27 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Fixed
 
+- **Arrow keys did nothing in the picker.** `_read_key()` read stdin through
+  Python's buffered text stream, which swallows the whole `ESC [ B` into its
+  own buffer and hands back one character — so the follow-up `select()` on the
+  fd saw nothing pending and the code decided a lone ESC had been pressed. The
+  cursor never moved on Linux, Termux or macOS. Bytes are now read unbuffered
+  with `os.read()` in cbreak mode, and the tail of the sequence is collected
+  with a timeout long enough for a split one (ssh, tmux, Termux's pty). All
+  eight arrow/PgUp/PgDn/Home/End keys are covered by a PTY test that fails on
+  the old code.
+- **`lfs` opened a prompt, not the picker.** A bare `lfs` printed the menu and
+  asked "what would you like to do?" in line mode, so nothing responded to an
+  arrow key until you typed `1` and pressed Enter. It now goes straight to the
+  file picker, and falls back to the menu only when the picker is cancelled.
+  `lfs --menu` asks for the menu explicitly.
+- **Mangled footer and header.** Key hints were one `Text`, so Rich soft-wrapped
+  them mid-phrase — `h` ended one line and `home` sat alone on the next, and a
+  narrow terminal truncated labels to `Space pi…`. Hints now wrap whole pairs
+  onto their own rows, ordered most-useful-first so a narrow screen drops a
+  complete pair rather than a fragment, and the picker's item counter moves
+  under the title instead of colliding with it below 62 columns.
+
 - **Scrolling**: the player forced `height: 100vh` on a grid and the page set
   `min-height: 100%` on `html`, which pinned the document and made long pages
   unscrollable on a phone. The document now owns the scroll (and uses `100dvh`).

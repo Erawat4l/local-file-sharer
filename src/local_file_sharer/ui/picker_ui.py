@@ -187,7 +187,7 @@ def _row(index: int, entry: Entry, state: PickerState, width: int, *, active: bo
     text.append(" " * pad_width)
     text.append(size.rjust(10), style=theme.muted if entry.is_dir else theme.faint)
     if entry.link:
-        text.append(" ↗️", style=theme.info)
+        text.append(" ^", style=theme.info)
     return text
 
 
@@ -203,7 +203,7 @@ def _selection_bar(state: PickerState, width: int) -> RenderableType:
     chips = [
         stat_chip("-", f"{summary.files}", theme.accent),
         stat_chip("d", f"{summary.folders}", theme.info),
-        stat_chip("💾", summary.size_text, theme.success),
+        stat_chip("=", summary.size_text, theme.success),
         stat_chip(
             "ok" if summary.shareable else "!",
             summary.status_text(),
@@ -226,20 +226,24 @@ def _search_box(state: PickerState) -> Text:
     return Text("")
 
 
-def _footer() -> RenderableType:
-    return footer_keys(
-        [
-            ("↑↓", "move"),
-            ("Space", "pick"),
-            ("Enter", "open"),
-            ("a", "all"),
-            ("s", "share"),
-            ("/", "search"),
-            ("f", "fav"),
-            ("h", "home"),
-            ("q", "quit"),
-        ]
-    )
+def _footer(width: int | None = None) -> RenderableType:
+    """Key hints, most useful first, so a narrow terminal drops whole pairs.
+
+    Truncating a label ("Space pi…") is worse than omitting the pair: the user
+    cannot tell what the key does either way, but the stub looks broken.
+    """
+    hints = [
+        ("j/k", "move"),
+        ("Space", "pick"),
+        ("Enter", "open"),
+        ("s", "share"),
+        ("a", "all"),
+        ("/", "search"),
+        ("f", "fav"),
+        ("h", "home"),
+        ("q", "quit"),
+    ]
+    return footer_keys(hints, width=width)
 
 
 def render(state: PickerState, *, width: int | None = None, height: int | None = None) -> RenderableType:
@@ -260,13 +264,18 @@ def render(state: PickerState, *, width: int | None = None, height: int | None =
     if not visible:
         lines.append(Text("   (empty folder — press h to go up)", style=theme.faint))
 
-    header = Table.grid(expand=True)
-    header.add_column(justify="left")
-    header.add_column(justify="right")
-    header.add_row(
-        banner.mini_header(theme, mode="picker", detail=str(state.cwd.name or state.cwd)),
-        Text(f"{len(visible)} items · {state.offset + 1}-{state.offset + len(window)}", style=theme.faint),
+    mini = banner.mini_header(theme, mode="picker", detail=str(state.cwd.name or state.cwd))
+    counter = Text(
+        f"{len(visible)} items · {state.offset + 1}-{state.offset + len(window)}", style=theme.faint
     )
+    if width >= 62:
+        header: RenderableType = Table.grid(expand=True)
+        header.add_column(justify="left")
+        header.add_column(justify="right")
+        header.add_row(mini, counter)
+    else:
+        # side by side they collide and the product name loses characters
+        header = Group(mini, counter)
 
     body: list[RenderableType] = [
         header,
@@ -279,7 +288,7 @@ def render(state: PickerState, *, width: int | None = None, height: int | None =
     if search.plain.strip():
         body.append(search)
     body.append(_selection_bar(state, width))
-    body.append(_footer())
+    body.append(_footer(width))
     if state.message and not state.selected:
         body.append(Text(state.message, style=theme.faint))
 
@@ -322,6 +331,7 @@ def _read_key() -> str:
         if char == "\x08":
             return "BACKSPACE"
         return char
+    import select  # noqa: PLC0415
     import sys  # noqa: PLC0415
     import termios  # noqa: PLC0415
     import tty  # noqa: PLC0415
@@ -330,30 +340,25 @@ def _read_key() -> str:
     old = termios.tcgetattr(fd)
     try:
         tty.setcbreak(fd)
-        char = sys.stdin.read(1)
+        char = _read_byte(fd)
         if char != "\x1b":
             return _normalise(char)
-        # Escape sequence: read the rest without blocking for long.
-        termios.tcsetattr(fd, termios.TCSADRAIN, old)
-        import select  # noqa: PLC0415
-
-        ready, _, _ = select.select([sys.stdin], [], [], 0.02)
-        if not ready:
+        # An arrow key arrives as ESC [ A. Two separate bugs used to tear that
+        # into ESC, "[", "B" — three keypresses that move the cursor nowhere:
+        #   1. stdin was read through Python's *buffered* text stream, which
+        #      swallows the whole sequence into its own buffer and returns one
+        #      character; select() on the fd then sees nothing pending, so the
+        #      code concluded the user had pressed a lone ESC.
+        #   2. termios was switched back to cooked mode before collecting the
+        #      tail, handing the remaining bytes to the line discipline.
+        # So the tail is read with unbuffered os.read() while still in cbreak.
+        rest = _read_escape_tail(fd, select)
+        if not rest or rest[0] not in ("[", "O") or len(rest) < 2:
             return "ESC"
-        tty.setcbreak(fd)
-        rest = sys.stdin.read(1)
-        if rest not in ("[", "O"):
-            return "ESC"
-        code = sys.stdin.read(1)
-        if code.isdigit():
-            # e.g. \x1b[5~ or \x1b[6~
-            termios.tcsetattr(fd, termios.TCSADRAIN, old)
-            import select as _select  # noqa: PLC0415
-
-            ready, _, _ = _select.select([sys.stdin], [], [], 0.02)
-            if ready:
-                tty.setcbreak(fd)
-                sys.stdin.read(1)
+        code = rest[1]
+        if code.isdigit() and len(rest) < 3:
+            # \x1b[5~ / \x1b[6~: the code is followed by a tilde
+            rest += _read_escape_tail(fd, select, expect=1)
         return {
             "A": "UP",
             "B": "DOWN",
@@ -368,8 +373,53 @@ def _read_key() -> str:
             "3": "DELETE",
         }.get(code, "")
     finally:
-        if not platforms.WINDOWS:
-            termios.tcsetattr(fd, termios.TCSADRAIN, old)
+        termios.tcsetattr(fd, termios.TCSADRAIN, old)
+
+
+def _read_byte(fd: int) -> str:
+    """Read exactly one byte from *fd*, bypassing Python's buffered stdin."""
+    import os  # noqa: PLC0415
+    import sys  # noqa: PLC0415
+
+    data = os.read(fd, 1)
+    if not data:
+        raise EOFError
+    encoding = getattr(sys.stdin, "encoding", None) or "utf-8"
+    return data.decode(encoding, "replace")
+
+
+def _read_escape_tail(fd: int, select_module, *, expect: int = 2, timeout: float = 0.35) -> str:  # noqa: ANN001
+    """Collect the rest of an escape sequence while still in cbreak mode.
+
+    Reads with os.read() so bytes already buffered inside Python's TextIOWrapper
+    are never missed, and waits long enough that a sequence split by ssh, tmux
+    or Termux's pty is still assembled. A genuine lone ESC sends nothing to
+    follow it, so it resolves after *timeout*.
+    """
+    import os  # noqa: PLC0415
+    import sys  # noqa: PLC0415
+
+    encoding = getattr(sys.stdin, "encoding", None) or "utf-8"
+    out = ""
+    remaining = timeout
+    while len(out) < expect and remaining > 0:
+        started = _monotonic()
+        ready, _, _ = select_module.select([fd], [], [], remaining)
+        if not ready:
+            break
+        try:
+            data = os.read(fd, expect - len(out))
+        except OSError:
+            break
+        if not data:
+            break
+        out += data.decode(encoding, "replace")
+        remaining -= _monotonic() - started
+    return out
+
+
+def _monotonic() -> float:
+    return time.monotonic()
 
 
 def _normalise(char: str) -> str:
