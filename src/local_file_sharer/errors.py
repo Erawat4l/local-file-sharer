@@ -69,7 +69,7 @@ class PickerError(SharerError):
 
 class UpdateError(SharerError):
     title = "Update failed"
-    default_hint = "Update manually with `pipx upgrade local-file-sharer`."
+    default_hint = "Update manually with `lfs upgrade`."
 
 
 class TorrentError(SharerError):

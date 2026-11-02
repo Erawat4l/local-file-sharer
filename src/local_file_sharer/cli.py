@@ -64,6 +64,7 @@ SUBCOMMAND_NAMES = (
     "completions",
     "completion",
     "banner",
+    "upgrade",
     "version",
     "help",
 )
@@ -172,6 +173,18 @@ def build_command_parsers() -> dict[str, argparse.ArgumentParser]:
     theme.add_argument("name", nargs="?", choices=("dark", "light", "mono", "list", "next"), default=None)
     theme.add_argument("--preview", action="store_true", help="show a colour preview")
     parsers["theme"] = theme
+
+    upgrade = argparse.ArgumentParser(
+        prog="lfs upgrade",
+        parents=[common],
+        description="install the newest code from GitHub (the package is not on PyPI)",
+    )
+    upgrade.add_argument(
+        "--ref",
+        default=None,
+        help="branch or tag to install (default: the one this copy came from)",
+    )
+    parsers["upgrade"] = upgrade
 
     completions = argparse.ArgumentParser(
         prog="lfs completions", parents=[common], description="print a shell completion script"
@@ -333,6 +346,12 @@ def cmd_menu(cfg: Config, state: State, args: argparse.Namespace) -> int:
         return run_menu(config=cfg, state=state, animate=False)
     share_paths(ctx, result.paths)
     return 0
+
+
+def cmd_upgrade(cfg: Config, state: State, args: argparse.Namespace) -> int:
+    from .updater import upgrade_from_git  # noqa: PLC0415
+
+    return upgrade_from_git(getattr(args, "ref", None))
 
 
 def cmd_share(cfg: Config, state: State, args: argparse.Namespace, paths: list[Path]) -> int:
@@ -518,6 +537,7 @@ def main(argv: list[str] | None = None) -> int:
                 "completions": cmd_completions,
                 "completion": cmd_completions,
                 "banner": cmd_banner,
+                "upgrade": cmd_upgrade,
             }[command]
             return handler(cfg, state, args)
         except KeyboardInterrupt:

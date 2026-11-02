@@ -2,7 +2,7 @@
 
 Strategy, best first:
 
-1. **pipx** (the recommended install) → ``pipx upgrade local-file-sharer``
+1. **pipx** (the recommended install) → ``lfs upgrade`` (installs from GitHub)
 2. **pip** in the current environment → ``python -m pip install --upgrade``
 3. **standalone Windows .exe** → download the release asset next to the current
    executable and print the swap instructions (never overwrite a running exe).
@@ -34,6 +34,89 @@ from .ui.console import console
 
 API_LATEST = f"https://api.github.com/repos/{REPO_SLUG}/releases/latest"
 RELEASES_PAGE = f"https://github.com/{REPO_SLUG}/releases/latest"
+REPOSITORY_PAGE = f"https://github.com/{REPO_SLUG}"
+
+#: Where a non-PyPI install comes from. The package is not published, so every
+#: upgrade has to name the repository and (optionally) the branch it came from.
+GIT_URL = f"https://github.com/{REPO_SLUG}.git"
+DEFAULT_BRANCH = "main"
+
+
+def installed_from_git() -> bool:
+    """Is this copy a ``git+https://…`` install rather than a release?"""
+    try:
+        import importlib.metadata as md  # noqa: PLC0415
+
+        direct = md.distribution("local-file-sharer").read_text("direct_url.json")
+    except Exception:  # noqa: BLE001 - metadata is best effort
+        return False
+    if not direct:
+        return False
+    return "vcs_info" in direct or "git+" in direct
+
+
+def installed_ref() -> str:
+    """The branch or tag a git install came from, else ``main``."""
+    try:
+        import importlib.metadata as md  # noqa: PLC0415
+
+        direct = md.distribution("local-file-sharer").read_text("direct_url.json") or ""
+        payload = json.loads(direct)
+        vcs = payload.get("vcs_info") or {}
+        if isinstance(vcs, dict) and vcs.get("requested_revision"):
+            return str(vcs["requested_revision"])
+        url = str(payload.get("url") or "")
+        if "@" in url:
+            return url.rsplit("@", 1)[1]
+    except Exception:  # noqa: BLE001
+        pass
+    return DEFAULT_BRANCH
+
+
+def git_spec(ref: str | None = None) -> str:
+    """A pip requirement that installs this project from GitHub."""
+    return f"local-file-sharer @ git+{GIT_URL}@{ref or DEFAULT_BRANCH}"
+
+
+def upgrade_from_git(ref: str | None = None) -> int:
+    """Install the newest code from GitHub, the only place this package lives.
+
+    ``lfs --update`` looks for a GitHub *release*, and there are none yet, so it
+    can only report ``404``. This does the thing the user actually wants: pull
+    the current commit of the branch they installed from.
+    """
+    con = console()
+    target = ref or installed_ref()
+    spec = git_spec(target)
+    kind = detect_installer()
+    if kind == "pipx":
+        cmd = ["pipx", "install", "--force", spec]
+    elif kind == "exe":
+        con.print(f"[lfs.warning]this is a standalone build — download the new one from {RELEASES_PAGE}[/]")
+        return 1
+    else:
+        cmd = [sys.executable, "-m", "pip", "install", "--upgrade", spec]
+    con.print(f"[lfs.muted]from[/]  [lfs.primary]{target}[/]  [lfs.faint]({GIT_URL})[/]")
+    con.print(f"[lfs.muted]running:[/] {' '.join(cmd)}")
+    try:
+        completed = subprocess.run(cmd, check=False)
+    except FileNotFoundError:
+        con.print("[lfs.danger]could not run pip — install it, or re-run install.sh[/]")
+        return 1
+    if completed.returncode != 0:
+        if kind != "pipx":
+            # Debian/Ubuntu block --user installs without this (PEP 668)
+            retry = [*cmd, "--break-system-packages"]
+            con.print("[lfs.warning]retrying with --break-system-packages[/]")
+            try:
+                completed = subprocess.run(retry, check=False)
+            except FileNotFoundError:
+                return 1
+        if completed.returncode != 0:
+            con.print(f"[lfs.danger]upgrade failed[/]  see {REPO_SLUG} for manual steps")
+            return completed.returncode
+    con.print("[lfs.success]updated[/]  restart `lfs` to use the new code")
+    return 0
 
 
 def parse_version(text: str) -> tuple[int, ...]:
@@ -104,7 +187,7 @@ def fetch_latest(*, timeout: float = 6.0) -> ReleaseInfo:
             f"GitHub returned HTTP {exc.code}",
             hints=[
                 "Check your internet connection",
-                "Or update manually: pipx upgrade local-file-sharer",
+                "Or update manually: lfs upgrade",
                 f"Releases: {RELEASES_PAGE}",
             ],
         ) from exc
@@ -113,7 +196,7 @@ def fetch_latest(*, timeout: float = 6.0) -> ReleaseInfo:
             f"Could not reach GitHub: {exc}",
             hints=[
                 "Are you online? Tailscale/Cloudflare do not affect pip",
-                f"Or update manually: pipx upgrade local-file-sharer ({RELEASES_PAGE})",
+                f"Or update manually: lfs upgrade ({REPOSITORY_PAGE})",
             ],
         ) from exc
     return ReleaseInfo(
@@ -189,9 +272,17 @@ def run_update(*, check_only: bool = False, yes: bool = False, channel: str = "s
     try:
         release = fetch_latest()
     except UpdateError as exc:
-        con.print(f"[lfs.danger]{exc.message}[/]")
+        # No releases are published yet, so `--update` cannot compare versions.
+        # Point at the thing that does work instead of a bare HTTP 404.
+        con.print(f"[lfs.warning]{exc.message}[/]")
         for hint in exc.all_hints():
             con.print(f"  • {hint}")
+        if installed_from_git():
+            con.print(
+                f"[lfs.info]this copy came from git ({installed_ref()}); update it with:  lfs upgrade[/]"
+            )
+        else:
+            con.print("[lfs.info]update with:  lfs upgrade   (or re-run install.sh)[/]")
         return 1
     con.print(
         f"[lfs.muted]latest release[/]   [lfs.primary]{release.version}[/]  [lfs.faint]({release.published[:10]})[/]"

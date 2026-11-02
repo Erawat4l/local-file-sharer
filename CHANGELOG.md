@@ -9,6 +9,16 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Added
 
+- **`lfs upgrade`**: installs the newest code from GitHub, from the same branch
+  this copy came from (`--ref` overrides). This is the update command that
+  works: the package is not on PyPI and the repository has no release tags, so
+  `lfs --update` — which compares against a GitHub *release* — could only ever
+  report `404`, and the "update manually with `pipx upgrade local-file-sharer`"
+  hints pointed at a package PyPI does not have. `--update` now says so and
+  points at `lfs upgrade`. It uses `pipx install --force` or
+  `pip install --upgrade` (retrying with `--break-system-packages` on
+  Debian/Ubuntu) and refuses to replace a standalone `.exe`.
+
 - **Media player**: a seek preview shows the time under the cursor before you
   commit, volume and position are remembered across reloads, tapping the
   picture toggles playback, and ↑/↓ adjust volume.

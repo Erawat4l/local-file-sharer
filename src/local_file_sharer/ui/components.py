@@ -280,7 +280,7 @@ HELP_MAIN = (
   [bold]lfs config show[/]     print the effective configuration
   [bold]lfs theme mono[/]      switch theme (dark / light / mono)
   [bold]lfs completions bash[/] print a shell completion script
-  [bold]lfs --update[/]        self-update from GitHub
+  [bold]lfs upgrade[/]         install the newest code from GitHub
 
 See the README for the full reference: """
     + REPO_URL

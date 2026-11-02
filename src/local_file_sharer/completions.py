@@ -13,6 +13,7 @@ SUBCOMMANDS = {
     "doctor": "check dependencies, firewall and network",
     "config": "show / init / get / set / edit the configuration",
     "theme": "switch between dark, light and mono",
+    "upgrade": "install the newest code from GitHub",
     "completions": "print a shell completion script",
     "banner": "preview the animated banner",
     "menu": "open the interactive menu (default)",
@@ -42,7 +43,7 @@ FLAGS = [
     (None, "--icons", "emoji icons in the picker"),
     (None, "--no-icons", "plain names in the picker"),
     (None, "--debug", "show tracebacks"),
-    (None, "--update", "self-update from GitHub"),
+    (None, "--update", "self-update from a GitHub release (needs a release)"),
 ]
 
 FISH = """\

@@ -113,7 +113,7 @@ scrollback, and a live dashboard with speed, ETA, progress, devices and total se
 | **Convenience** | fuzzy picker, recent files, favourite folders, one-key clipboard copy of links and one-liners |
 | **Safety** | optional PIN/password, auto-expiring links, upload toggle, gitignored per-machine secrets |
 | **Settings** | `~/.config/local-file-sharer/config.toml` (`%APPDATA%` on Windows) with env overrides |
-| **Maintenance** | `lfs doctor`, `lfs --update`, friendly errors with fixes instead of tracebacks |
+| **Maintenance** | `lfs doctor`, `lfs upgrade`, friendly errors with fixes instead of tracebacks |
 | **Shells** | completions for **fish**, **bash**, **PowerShell** and **zsh**; `lfs` function for fish incl. Windows |
 
 ---
@@ -188,7 +188,7 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 ```
 
 There is also a **standalone `local-file-sharer.exe`** attached to every tagged
-release — no Python required. `lfs --update` swaps it for you when running the
+release — no Python required. `lfs upgrade` replaces it with the newest build when running the
 frozen build.
 
 ### From source
@@ -203,6 +203,25 @@ lfs --help
 
 ---
 
+## Updating
+
+```bash
+lfs upgrade
+```
+
+The package is not on PyPI and has no release tags yet, so `lfs --update`
+(which compares against a GitHub *release*) can only report `404`. `lfs upgrade`
+installs the current code from the branch this copy came from:
+
+```bash
+lfs upgrade                              # same branch you installed from
+lfs upgrade --ref main                   # a specific branch or tag
+```
+
+It uses `pipx install --force` for pipx installs, `pip install --upgrade` for
+plain ones (retrying with `--break-system-packages` on Debian/Ubuntu), and
+refuses to touch a standalone `.exe` — download that from Releases instead.
+
 ## Quick start
 
 ```bash
@@ -213,7 +232,7 @@ lfs --mode stream ~/Videos   # pick media, open the player
 lfs --mode torrent ~/Photos  # .torrent + magnet + tracker + webseed
 lfs doctor                   # check tools, firewall, network
 lfs config show              # effective configuration
-lfs --update                 # self-update from GitHub
+lfs upgrade                  # install the newest code from GitHub
 ```
 
 <div align="center"><img src="docs/assets/cli-menu.png" width="100%" alt="interactive menu"></div>
@@ -402,7 +421,8 @@ lfs theme   dark|light|mono|next|list [--preview]
 lfs completions fish|bash|powershell|zsh
 lfs banner  [--loop]           preview the animated banner
 lfs version | help
-lfs --update | --check-update
+lfs upgrade [--ref BRANCH]   # update from GitHub (no PyPI, no releases needed)
+lfs --check-update           # compare against a GitHub release, if one exists
 ```
 
 ---
@@ -572,7 +592,7 @@ local-file-sharer/
 │   ├── platforms.py         OS matrix: sendfile, drives, tools, clipboard
 │   ├── network.py           LAN/public IP, Tailscale, Cloudflare, firewall
 │   ├── doctor.py            diagnostics
-│   ├── updater.py           `lfs --update` from GitHub releases
+│   ├── updater.py           `lfs upgrade` from GitHub, `--update` for releases
 │   ├── completions.py       fish/bash/PowerShell/zsh scripts
 │   ├── qr.py                terminal + SVG + PNG QR rendering
 │   ├── transfer/
