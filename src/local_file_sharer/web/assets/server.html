@@ -86,6 +86,21 @@
     clearTimeout(window.__t); window.__t = setTimeout(() => t.classList.remove('show'), 1800); };
   const selected = new Set();
 
+  // The href of a folder row is its browse page, an HTML document. Downloading
+  // that saved Camera.html; the real archive lives at data-dl. Files point both
+  // at /f/<id>.
+  const downloadUrl = (row) => row.dataset.dl || row.getAttribute('href');
+  const fileName = (row) => row.dataset.name || '';
+
+  function saveRow(row) {
+    const a = document.createElement('a');
+    a.href = downloadUrl(row);
+    a.download = fileName(row);
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  }
+
   document.querySelectorAll('.row').forEach(row => {
     const cb = document.createElement('input');
     cb.type = 'checkbox';
@@ -93,14 +108,26 @@
     cb.style.cssText = 'accent-color:#f5f5f5;width:16px;height:16px;margin-right:2px';
     cb.addEventListener('click', (e) => e.stopPropagation());
     cb.addEventListener('change', () => {
-      if (cb.checked) selected.add(row.href); else selected.delete(row.href);
+      if (cb.checked) selected.add(row); else selected.delete(row);
       updateButton();
     });
     row.classList.add('has-pick');
     row.prepend(cb);
+    // A folder has two jobs: open it, and download it as a zip. The name opens
+    // it (that is what a folder name means everywhere else); the ↓ cell on the
+    // right downloads it. A file row downloads wherever you click.
     row.addEventListener('click', (e) => {
-      if (e.target === cb) return;
-      // plain click = download; the ↓ cell is the same link
+      if (e.target.closest('.pick') || e.target === cb) return;
+      if (e.target.closest('.row-get')) {
+        // the ↓ cell is the download button for both files and folders
+        e.preventDefault();
+        e.stopPropagation();
+        saveRow(row);
+        return;
+      }
+      if (row.classList.contains('folder')) return;   // the name opens the folder
+      e.preventDefault();
+      saveRow(row);
     });
   });
 
@@ -116,21 +143,21 @@
     rows.forEach(row => {
       const cb = row.querySelector('.pick');
       cb.checked = !all;
-      if (!all) selected.add(row.href); else selected.delete(row.href);
+      if (!all) selected.add(row); else selected.delete(row);
     });
     updateButton();
     $('select-all').textContent = all ? 'Select all' : 'Clear';
   });
 
   $('download-selected').addEventListener('click', () => {
-    const urls = Array.from(selected);
-    if (!urls.length) return;
+    const rows = Array.from(selected);
+    if (!rows.length) return;
     let i = 0;
     const next = () => {
-      if (i >= urls.length) { toast('Queued ' + urls.length + ' downloads'); return; }
-      const a = document.createElement('a');
-      a.href = urls[i]; a.download = ''; document.body.appendChild(a); a.click(); a.remove();
-      i += 1; setTimeout(next, 320);
+      if (i >= rows.length) { toast('Queued ' + rows.length + ' downloads'); return; }
+      saveRow(rows[i]);
+      i += 1;
+      setTimeout(next, 320);
     };
     next();
   });

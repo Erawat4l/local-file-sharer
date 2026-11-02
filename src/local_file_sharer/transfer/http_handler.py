@@ -705,11 +705,16 @@ class ShareRequestHandler(BaseHTTPRequestHandler):
                 depth = sum(1 for f in item.files if f.rel.startswith(f"{item.name}/{trail}/"))
                 size = sum(f.size for f in item.files if f.rel.startswith(f"{item.name}/{trail}/"))
                 parts.append(
-                    f'<a class="row folder" href="/browse/{urllib.parse.quote(trail)}">'
+                    # data-dl is what "Download selected" must fetch. The href
+                    # is the browse page (an HTML document); handing that to a
+                    # download saved Camera.html instead of Camera.zip.
+                    f'<a class="row folder" href="/browse/{urllib.parse.quote(trail)}" '
+                    f'data-dl="/folder/{urllib.parse.quote(trail)}" data-name="{html.escape(key)}">'
                     f'<span class="row-icon">{icon_svg("folder")}</span>'
                     f'<span class="row-name">{html.escape(key)}/</span>'
                     f'<span class="row-size">{depth} files · {human_size(size)}</span>'
-                    f'<span class="row-get">→</span></a>'
+                    f'<span class="row-get" role="button" tabindex="0" '
+                    f'aria-label="Download {html.escape(key)} as a zip">{icon_svg("download")}</span></a>'
                 )
             else:
                 parts.append(self._browser_row(here[key][1], base=f"/d/{item.item_id}"))
@@ -756,11 +761,13 @@ class ShareRequestHandler(BaseHTTPRequestHandler):
         size = entry.size_text
         icon = _icon_for(entry)
         return (
-            f'<a class="row" href="/f/{entry.file_id}" data-kind="{kind}">'
+            f'<a class="row" href="/f/{entry.file_id}" data-kind="{kind}" '
+            f'data-dl="/f/{entry.file_id}" data-name="{html.escape(entry.rel.split("/")[-1])}">'
             f'<span class="row-icon">{icon}</span>'
             f'<span class="row-name" title="{html.escape(entry.rel)}">{html.escape(entry.rel.split("/")[-1])}</span>'
             f'<span class="row-size">{size}</span>'
-            f'<span class="row-get" aria-label="Download">{icon_svg("download")}</span>'
+            f'<span class="row-get" role="button" tabindex="0" '
+            f'aria-label="Download {html.escape(entry.rel.split("/")[-1])}">{icon_svg("download")}</span>'
             f"</a>"
         )
 
@@ -1479,26 +1486,29 @@ def _entry_cards(manifest, *, level: str = "", page: int = 1) -> tuple[list[str]
         size = sum(entry.size for entry in members)
         label = f"{count} file{'' if count == 1 else 's'}"
         cards.append(
-            f'<article class="card folder" data-kind="folder" data-name="{html.escape(name.lower())}">'
+            f'<article class="card folder" data-kind="folder" data-name="{html.escape(name.lower())}" '
+            f'data-dl="/folder/{urllib.parse.quote(prefix + name)}" data-filename="{html.escape(name)}.zip">'
             f'<div class="card-icon">{icon_svg("folder")}</div>'
             f'<a class="card-main" href="/browse/{urllib.parse.quote(prefix + name)}">'
             f'<h3 title="{html.escape(name)}">{html.escape(name)}</h3>'
             f"<p>{label} · {human_size(size)}</p></a>"
             f'<div class="card-actions">'
-            f'<a class="btn" href="/folder/{urllib.parse.quote(prefix + name)}" download>{DOWNLOAD_ZIP_LABEL}</a>'
+            f'<a class="btn" href="/folder/{urllib.parse.quote(prefix + name)}" '
+            f'download="{html.escape(name)}.zip">{DOWNLOAD_ZIP_LABEL}</a>'
             f"</div></article>"
         )
     for entry in window_loose:
         label = entry.rel.split("/")[-1]
         cards.append(
             f'<article class="card file" data-kind="{_filter_kind(entry.path)}" data-id="{entry.file_id}" '
-            f'data-name="{html.escape(label.lower())}">'
+            f'data-name="{html.escape(label.lower())}" '
+            f'data-dl="/f/{entry.file_id}" data-filename="{html.escape(label)}">'
             f'<div class="card-icon">{_icon_for(entry)}</div>'
             f'<div class="card-main"><h3 title="{html.escape(label)}">'
             f"{html.escape(label)}</h3>"
             f"<p>{entry.size_text} · {html.escape(kind_of(entry.path))}</p></div>"
             f'<div class="card-actions">'
-            f'<a class="btn btn-ghost" href="/f/{entry.file_id}" download>Download</a>'
+            f'<a class="btn btn-ghost" href="/f/{entry.file_id}" download="{html.escape(label)}">Download</a>'
             f'<a class="btn btn-ghost" href="/s/{entry.file_id}">Stream</a>'
             f"</div></article>"
         )

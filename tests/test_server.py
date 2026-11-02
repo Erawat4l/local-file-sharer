@@ -993,3 +993,54 @@ def test_empty_folder_message_is_hidden_when_there_are_files(server):
     folder = next(i for i in payload["items"] if i["kind"] == "folder")
     body = get(server, f"/d/{folder['id']}").read().decode()
     assert re.search(r'<div id="empty" class="hidden', body), "empty note must be hidden"
+
+
+def test_folder_rows_carry_a_download_target_not_the_browse_page(tmp_path, free_port):
+    """ "Download selected" must not save HTML.
+
+    A folder row's href is its browse page — an HTML document. Selecting rows
+    and pressing Download used to fetch exactly that, so the user ended up with
+    ``Camera.html`` instead of ``Camera.zip``. Every row therefore advertises
+    its real download URL in ``data-dl``.
+    """
+    root = tmp_path / "phone"
+    (root / "DCIM" / "Camera").mkdir(parents=True)
+    (root / "DCIM" / "Camera" / "a.jpg").write_bytes(b"x" * 10)
+    server = ShareServer(Manifest.build([root]), host="127.0.0.1", port=free_port)
+    server.start()
+    assert server.wait_until_ready(timeout=5)
+    try:
+        body = get(server, "/browse/DCIM").read().decode()
+        folder_row = re.search(r'<a class="row folder"[^>]*>', body).group(0)
+        # the href is a page for humans …
+        assert 'href="/browse/DCIM/Camera"' in folder_row
+        # … and data-dl is the archive for downloads
+        assert 'data-dl="/folder/DCIM/Camera"' in folder_row
+        # the row says what it will be called, so the browser cannot guess .html
+        assert 'data-name="Camera"' in folder_row
+
+        # and the advertised URL really is a zip
+        response = get(server, "/folder/DCIM/Camera")
+        assert response.headers["Content-Type"] == "application/zip"
+        assert response.read(2) == b"PK"
+    finally:
+        server.stop()
+
+
+def test_file_rows_carry_their_own_download_target(tmp_path, free_port):
+    root = tmp_path / "files"
+    root.mkdir()
+    (root / "holiday.jpg").write_bytes(b"\xff\xd8" + b"x" * 40)
+    server = ShareServer(Manifest.build([root]), host="127.0.0.1", port=free_port)
+    server.start()
+    assert server.wait_until_ready(timeout=5)
+    try:
+        body = get(server, "/").read().decode()
+        card = re.search(r'<article class="card file"[^>]*>', body).group(0)
+        file_id = re.search(r'data-id="([a-f0-9]+)"', card).group(1)
+        assert f'data-dl="/f/{file_id}"' in card
+        assert 'data-filename="holiday.jpg"' in card
+        # the visible button names the file too, so no page can be saved by mistake
+        assert 'download="holiday.jpg"' in body
+    finally:
+        server.stop()

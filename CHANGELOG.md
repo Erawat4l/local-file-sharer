@@ -9,6 +9,15 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Fixed
 
+- **Downloading a folder no longer saves an HTML page.** "Download selected"
+  fetched each row's `href`, and on a folder listing that href is the browse
+  page — so selecting three folders saved `Camera.html`, `Screenshots.html` and
+  `WhatsApp Images.html` instead of the archives. Rows and cards now carry the
+  real download URL in `data-dl` and its filename in `data-filename`, so the
+  browser cannot fall back to `.html`. Verified in a browser: folder zips,
+  file rows, grid cards and "Download selected" all save real content, with
+  zero HTML files. The folder name still opens the folder; the ↓ cell downloads
+  it.
 - **The web page shows folders instead of every file at once.** A share of a
   phone was rendering *all* nested files on the front page — 17,001 cards in a
   single response (~10 MB of HTML, 50,000+ DOM nodes), which is why the listing
