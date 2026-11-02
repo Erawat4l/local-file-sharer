@@ -7,6 +7,22 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Documented
+
+- **Audio tracks and subtitles in the web player** — no, not today, and the
+  reason is the browser, not the app. Measured: a real MKV and MP4 carrying two
+  AAC tracks and two SubRip tracks play, but Chromium reports
+  `audioTracks`/`videoTracks` as `undefined` and `textTracks` as 0. Chrome never
+  implemented those collections; Firefox gates them behind
+  `media.track.enabled`; Safari exposes them. There is no standard way for a
+  page to list a file's tracks. `docs/MULTI-TRACK-AUDIO-SUBS.md` records the
+  measurement, the three implementation routes with their real costs (sidecar
+  subtitles as WebVTT is the cheap one and gives a native picker; ffmpeg remux
+  gives audio switching but needs its own menu; MSE demux in JS is 1.5k–3k
+  lines and wrong for a phone), and the Termux caveats.
+- **`doctor` no longer claims ffmpeg does "media remuxing".** It is detected but
+  never called, so the line now says "not used yet".
+
 ### Added
 
 - **The web has real search and type filters.** The box now matches anywhere in

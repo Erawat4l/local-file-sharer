@@ -167,7 +167,10 @@ def check_tools() -> list[Check]:
         "zip": ("zip/unzip helpers", False),
         "curl": ("one-liner downloads", False),
         "wget": ("one-liner downloads", False),
-        "ffmpeg": ("media remuxing (optional)", False),
+        # Not used by the server yet: the web player cannot switch audio or
+        # embedded subtitles (see docs/MULTI-TRACK-AUDIO-SUBS.md). Listing it as
+        # "media remuxing" told people a feature existed that does not.
+        "ffmpeg": ("media remuxing (not used yet)", False),
     }
     for tool, (purpose, required) in optional.items():
         path = platforms.find_tool(tool)
