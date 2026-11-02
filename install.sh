@@ -2,7 +2,14 @@
 # ─────────────────────────────────────────────────────────────────────────────
 #  local-file-sharer · one-line installer for Termux, Linux and macOS
 #
-#    curl -fsSL https://raw.githubusercontent.com/Erawat4l/local-file-sharer/arena/d7f4713b-local-file-sharer/install.sh | bash
+#    pipx install "local-file-sharer @ git+https://github.com/Erawat4l/local-file-sharer.git@arena/d7f4713b-local-file-sharer"
+#
+#    …or run this script directly. NOTE: the raw file host 404s while the
+#    repository is private, so `curl …/raw.githubusercontent.com/… | bash` fails
+#    with "curl: (22) … error: 404". Read it through the API instead
+#    (authenticated):
+#
+#    gh api "repos/Erawat4l/local-file-sharer/contents/install.sh?ref=arena/d7f4713b-local-file-sharer" -H "Accept: application/vnd.github.raw" | bash
 #
 #  What it does
 #    1. detects Termux / Linux / macOS and the Python version

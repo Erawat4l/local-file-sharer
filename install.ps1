@@ -16,7 +16,12 @@
       5. registers tab-completion for PowerShell
 
 .EXAMPLE
-    $env:LFS_BRANCH='arena/d7f4713b-local-file-sharer'; irm https://raw.githubusercontent.com/Erawat4l/local-file-sharer/arena/d7f4713b-local-file-sharer/install.ps1 | iex
+    pipx install "local-file-sharer @ git+https://github.com/Erawat4l/local-file-sharer.git@arena/d7f4713b-local-file-sharer"
+
+.NOTES
+    The raw file host returns 404 while this repository is private. `irm` on a
+    raw URL therefore fails even though the file exists; read it through the
+    authenticated API, or use the pipx command above.
 
 .EXAMPLE
     .\install.ps1 -Dev -NoExtras

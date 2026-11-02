@@ -127,10 +127,14 @@ scrollback, and a live dashboard with speed, ETA, progress, devices and total se
 
 ```bash
 pkg update && pkg install python git
-curl -fsSL https://raw.githubusercontent.com/Erawat4l/local-file-sharer/main/install.sh | bash
+pipx install "local-file-sharer @ git+https://github.com/Erawat4l/local-file-sharer.git@arena/d7f4713b-local-file-sharer"
 termux-setup-storage   # once, so the picker can read /sdcard
 lfs                    # ← the command is `lfs`, not `start`
 ```
+
+`pipx` is installed by `pkg install pipx` if it is missing. The installer script
+also works, but it has to be read through the API rather than the raw file host
+(see [Installing from source](#installing-from-source)).
 
 If `lfs` is not found immediately, open a new session (the installer adds
 `~/.local/bin` to PATH). `start` is **not** installed — it collides with other
@@ -142,15 +146,15 @@ function + completions when fish is present.
 ### Linux / macOS
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Erawat4l/local-file-sharer/main/install.sh | bash
+pipx install "local-file-sharer @ git+https://github.com/Erawat4l/local-file-sharer.git@arena/d7f4713b-local-file-sharer"
 ```
 
 Prefer doing it by hand? It is **not on PyPI yet**, so point pip at the repo:
 
 ```bash
-pipx install "local-file-sharer @ git+https://github.com/Erawat4l/local-file-sharer.git"
+pipx install "local-file-sharer @ git+https://github.com/Erawat4l/local-file-sharer.git@arena/d7f4713b-local-file-sharer"
 # or
-python3 -m pip install --user "local-file-sharer @ git+https://github.com/Erawat4l/local-file-sharer.git"
+python3 -m pip install --user "local-file-sharer @ git+https://github.com/Erawat4l/local-file-sharer.git@arena/d7f4713b-local-file-sharer"
 ```
 
 On Debian/Ubuntu the system Python is "externally managed" (PEP 668); a
@@ -160,10 +164,29 @@ automatically. `pipx` avoids the question entirely and is recommended.
 Flags: `--dev` (editable install from a checkout), `--no-extras`, `--no-fish`,
 `--yes`, `--uninstall`.
 
+### Installing from source
+
+`git+https://…` installs work unauthenticated. The one-line `curl … | bash`
+installer does **not**, because this repository is private: the file host
+(`raw.githubusercontent.com`) answers 404 to any unauthenticated request,
+including one for a file that exists. That 404 means "not readable without a
+token", not "wrong path".
+
+To run the installer anyway, read it through the API with an authenticated
+`gh`:
+
+```bash
+gh api "repos/Erawat4l/local-file-sharer/contents/install.sh?ref=arena/d7f4713b-local-file-sharer" \
+       -H "Accept: application/vnd.github.raw" | bash
+```
+
+Setting the repository to public makes the plain `curl` form work as printed at
+the top of `install.sh`.
+
 ### Windows
 
 ```powershell
-irm https://raw.githubusercontent.com/Erawat4l/local-file-sharer/main/install.ps1 | iex
+pipx install "local-file-sharer @ git+https://github.com/Erawat4l/local-file-sharer.git@arena/d7f4713b-local-file-sharer"
 ```
 
 The PowerShell installer:

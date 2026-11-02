@@ -9,6 +9,16 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Fixed
 
+- **Install instructions no longer return 404.** Every documented install
+  command used `raw.githubusercontent.com`, which answers 404 to any
+  unauthenticated request while the repository is private — including for files
+  that exist, and including `main`. `curl … | bash` therefore failed with
+  `curl: (22) … error: 404` before it ever reached the script. The README now
+  leads with `pipx install "local-file-sharer @ git+https://…@<branch>"`, which
+  works without a token (verified with a stripped environment and no
+  credential helper), and documents the authenticated
+  `gh api … -H "Accept: application/vnd.github.raw" | bash` form for running
+  the installer itself. Both installer headers say the same.
 - **`lfs upgrade` / `lfs update` can actually install.** The default branch was
   `main`, and `main` in this repository holds nothing but a 19-byte README — no
   `pyproject.toml`. So every upgrade ran `pip install git+…@main` and died with
