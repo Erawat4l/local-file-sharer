@@ -48,6 +48,8 @@ VENV="$HERE/.venv"
 PY="$VENV/bin/python"
 LFS="$VENV/bin/lfs"
 BRANCH="${LFS_BRANCH:-arena/d7f4713b-local-file-sharer}"
+OWNER="Erawat4l"          # ends with a lowercase L, not a digit
+REPO="local-file-sharer"
 
 # ── tiny output helpers ─────────────────────────────────────────────────────
 if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
@@ -155,10 +157,32 @@ case "${1:-}" in
     setup)    setup; say ""; ok "ready — run ./run"; exit 0 ;;
     upgrade)
         setup
-        step "pulling $BRANCH"
-        git -C "$HERE" pull --ff-only || die "git pull failed — resolve it, then run ./run"
-        rm -f "$VENV/.lfs-stamp"
-        setup
+        # This directory may be a git clone, or a copy unpacked by
+        # install-lfs.py. Only the first can `git pull`; the second used to hit
+        # "not a git repository" and die, which made the documented upgrade
+        # path impossible for anyone who used the installer.
+        if [ -d "$HERE/.git" ]; then
+            step "pulling $BRANCH"
+            git -C "$HERE" pull --ff-only || die "git pull failed — resolve it, then run ./run"
+            rm -f "$VENV/.lfs-stamp"
+            setup
+            ok "upgraded — run ./run"
+            exit 0
+        fi
+        # No history to pull. All that has to change is the package itself, so
+        # reinstall it in place: pip fetches the same branch, and because the
+        # install is editable the code that runs is the code just fetched.
+        step "this copy was not cloned with git, so there is nothing to pull"
+        step "reinstalling from $BRANCH instead"
+        "$PY" -m pip install --quiet --upgrade --force-reinstall --no-deps \
+            "local-file-sharer @ git+https://github.com/$OWNER/$REPO.git@$BRANCH" \
+            2>/tmp/lfs-upgrade-error.$$ || {
+                msg=$(cat /tmp/lfs-upgrade-error.$$ 2>/dev/null || true)
+                rm -f /tmp/lfs-upgrade-error.$$
+                printf '%s\n' "$msg" >&2
+                die "upgrade failed — see above. Nothing was changed."
+            }
+        rm -f /tmp/lfs-upgrade-error.$$
         ok "upgraded — run ./run"
         exit 0 ;;
     doctor)   setup; exec "$LFS" doctor ;;

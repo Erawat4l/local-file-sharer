@@ -123,6 +123,14 @@ scrollback, and a live dashboard with speed, ETA, progress, devices and total se
 > Requirements: **Python 3.9+**. Everything else is optional (`aria2c`,
 > `tailscale`, `cloudflared` unlock extra features).
 
+> **Two ways in, and they are not the same.** With a login (a `git` clone, or
+> the one file, which you can only download while logged in) everything works.
+> Without one — a friend, a borrowed laptop, a phone with no token — this
+> repository is **private**, so there is nothing to download and nothing to
+> clone. That is a repository setting, not an app limitation: making it public
+> is the switch that opens it to everyone, and `install-lfs.py` then works for
+> any visitor. See [What a new person needs](#what-a-new-person-needs).
+
 ### One file (no git, no URL to type)
 
 Download `install-lfs.py` and run it:
@@ -166,6 +174,10 @@ it is `rm -rf .venv`, and every run after the first goes straight to the app.
 Because the install is editable, a plain `git pull` is enough to update: the
 next `./run` sees the new commit and reinstalls itself. You can also symlink it
 onto your PATH (`ln -s ~/lfs/run ~/bin/lfs`) and use `lfs` from anywhere.
+
+`./run upgrade` handles both kinds of checkout: a git clone gets `git pull`,
+and a copy unpacked from `install-lfs.py` — which has no history to pull —
+reinstalls the package in place instead of failing.
 
 ### Termux (Android)
 
@@ -269,6 +281,33 @@ lfs --help
 ```
 
 ---
+
+## What a new person needs
+
+Short version: **make the repository public, then the one file is enough.**
+
+```bash
+# what a stranger does once the repo is public
+curl -LO https://github.com/Erawat4l/local-file-sharer/raw/arena/d7f4713b-local-file-sharer/install-lfs.py
+python3 install-lfs.py
+```
+
+That is it. No git, no Python packaging knowledge, no token. It unpacks to
+`~/local-file-sharer`, creates a virtualenv there, and starts the app.
+
+While the repository is private, none of that works for anyone but you,
+because GitHub refuses every download and every clone without a credential —
+and answers "Repository not found", which reads as if the project does not
+exist. The three ways to give someone access are:
+
+| Approach | What the other person does | Catch |
+|---|---|---|
+| **Make the repo public** (recommended) | the two commands above | none — this is one setting |
+| Add them as a collaborator | log in to GitHub first | you must add each person by name |
+| Hand them `install-lfs.py` directly | `python3 install-lfs.py` | the file must reach them (USB, chat, a local share) |
+
+The last row is real: the file carries the entire source, so it needs no
+network access to GitHub at all — only PyPI, for `rich` and `qrcode`.
 
 ## Updating
 
