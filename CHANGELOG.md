@@ -7,6 +7,13 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Fixed
+- `lfs upgrade` installed nothing, silently, on every run after the first. pip
+  compared version numbers, every commit of this package reports the same one,
+  so it called the requirement already satisfied and exited 0. The install is
+  now forced, and the recorded commit is compared before and after so a no-op
+  is reported as "nothing changed" instead of "upgraded".
+
 ### Changed
 
 - **`lfs upgrade` is a progress bar, not a wall of pip output.** It used to hand
