@@ -332,3 +332,23 @@ def test_a_healthy_python_is_not_flagged(checkout):
     source = (checkout / "run").read_text(encoding="utf-8")
     assert "return 1   # imports fine" in source
     assert "return 0       # broken" in source
+
+
+def test_install_links_this_checkout_and_warns_about_a_stale_one(checkout, tmp_path):
+    """The reported symptom: `lfs` showed 5 menu entries, `./run` showed 12.
+
+    A copy installed weeks ago was earlier on PATH. `run` never used it — it
+    always runs .venv/bin/lfs — so the two disagreed, and the old one did not
+    even know the `configure` command. `./run install` exists to fix that, and
+    it must say when another lfs still shadows it.
+    """
+    source = (checkout / "run").read_text(encoding="utf-8")
+    assert "another lfs is earlier on PATH" in source
+    assert "install|link" in source
+
+
+def test_a_stale_lfs_is_not_used_by_run(checkout):
+    """`run` must exec its own venv, never whatever `lfs` resolves to."""
+    source = (checkout / "run").read_text(encoding="utf-8")
+    assert 'exec "$LFS"' in source
+    assert 'exec lfs' not in source

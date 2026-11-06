@@ -37,24 +37,28 @@ from .ui.picker_ui import run_picker
 # The menu is five numbered choices, not twelve. Everything a user needs to
 # share a file is in those five; settings, doctor, theme and update live behind
 # `?` so the screen answers one question instead of listing a control panel.
-# Icons are single-cell: a double-width emoji shifted every row on a phone.
+# Icons are the ones in docs/assets/demo.gif: real colour emoji, which are two
+# cells wide. Each has a single-cell fallback for terminals that draw them one
+# cell or not at all — an icon that is the wrong width shifts every row after
+# it, which is why these were avoided for a while. ``icon_for`` picks per
+# terminal, so alignment is never a gamble.
 ACTIONS = [
-    ("1", "Download", "download", "↓", "forced download · resumable · folders auto-zip"),
-    ("2", "Serve", "serve", "◇", "web file browser for this device or the whole folder"),
-    ("3", "Stream", "stream", "▶", "media player with instant seeking"),
-    ("4", "Torrent", "torrent", "⤓", ".torrent + magnet · built-in tracker + webseed"),
+    ("1", "Download", "download", "📥", "↓", "forced download · resumable · folders auto-zip"),
+    ("2", "Serve", "serve", "🌐", "◇", "web file browser for this device or the whole folder"),
+    ("3", "Stream", "stream", "▶️", "▶", "media player with instant seeking"),
+    ("4", "Torrent", "torrent", "🌱", "⤓", ".torrent + magnet · built-in tracker + webseed"),
 ]
 
 #: Shown by `?` — the same actions plus the maintenance commands.
 EXTRA_ACTIONS = [
-    ("r", "Recent", "recent", "◷", "re-share a recently shared file"),
-    ("f", "Favourites", "favorites", "★", "jump to a favourite folder"),
-    ("c", "Config", "config", "⚙", "edit settings, theme and PIN"),
-    ("d", "Doctor", "doctor", "✚", "check dependencies, firewall and network"),
-    ("t", "Theme", "theme", "◑", "switch dark / light / mono"),
-    ("u", "Update", "update", "↑", "install the newest code from GitHub"),
-    ("?", "Help", "help", "?", "keys, one-liners and troubleshooting"),
-    ("q", "Quit", "quit", "⏻", "leave the menu"),
+    ("r", "Recent", "recent", "🕐", "◷", "re-share a recently shared file"),
+    ("f", "Favourites", "favorites", "⭐", "★", "jump to a favourite folder"),
+    ("c", "Config", "config", "⚙️", "⚙", "edit settings, theme and PIN"),
+    ("d", "Doctor", "doctor", "🩺", "✚", "check dependencies, firewall and network"),
+    ("t", "Theme", "theme", "🎨", "◑", "switch dark / light / mono"),
+    ("u", "Update", "update", "⬆️", "↑", "install the newest code from GitHub"),
+    ("?", "Help", "help", "❓", "?", "keys, one-liners and troubleshooting"),
+    ("q", "Quit", "quit", "⏏️", "⏻", "leave the menu"),
 ]
 
 #: The menu is grouped like the design: what you came to do, then the two
@@ -65,7 +69,8 @@ SECTIONS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("SETTINGS", ("c", "d", "t", "u", "?", "q")),
 )
 _BY_KEY = {
-    key: (key, label, action, icon, desc) for key, label, action, icon, desc in ACTIONS + EXTRA_ACTIONS
+    key: (key, label, action, icon, plain, desc)
+    for key, label, action, icon, plain, desc in ACTIONS + EXTRA_ACTIONS
 }
 
 ALL_ACTIONS = ACTIONS + EXTRA_ACTIONS
@@ -101,6 +106,20 @@ def _status_lines(config: Config) -> list[tuple[str, str]]:
 _STATE: State | None = None
 
 
+def icon_for(emoji: str, plain: str) -> str:
+    """The emoji when it is known to be two cells wide, else the glyph.
+
+    A terminal whose font draws U+1F4E5 one cell (or not at all) would shift the
+    name column by one character on that row only. ``LFS_ASCII_ICONS=1`` forces
+    the plain set for anyone who sees that happen.
+    """
+    import os  # noqa: PLC0415 - only needed here
+
+    if os.environ.get("LFS_ASCII_ICONS") or os.environ.get("NO_COLOR"):
+        return plain
+    return emoji
+
+
 def _state_totals(config: Config) -> str:
     if _STATE is None:
         return "—"
@@ -118,7 +137,10 @@ def render_menu(ctx: MenuContext) -> Group:
     name = f" {APP_NAME}  v{__version__}"
     right_text = f"{time.strftime('%H:%M')} · {platforms.hostname()}"
     head = Text()
-    head.append(" LFS ", style=f"bold black on {theme.accent}")
+    # The gif's badge is a cyan block with dark letters. theme.accent is
+    # "bold bright_cyan", which is a foreground style, so the background has to
+    # be named explicitly or the chip renders as plain text.
+    head.append(" LFS ", style=f"bold black on {theme.accent_name}")
     if len(name) + 8 + len(right_text) <= width:
         # wide enough for one line: name on the left, clock on the right
         padding = max(1, width - len(name) - len(right_text) - 8)
@@ -155,10 +177,10 @@ def render_menu(ctx: MenuContext) -> Group:
         table.add_column(width=name_width + 1, no_wrap=True)
         table.add_column(overflow="ellipsis", no_wrap=True)
         for key in keys:
-            _key, label, _action, icon, desc = _BY_KEY[key]
+            _key, label, _action, icon, plain, desc = _BY_KEY[key]
             table.add_row(
                 Text(key, style=theme.key),
-                Text(icon, style=theme.secondary),
+                Text(icon_for(icon, plain), style=theme.secondary),
                 Text(label, style=theme.secondary),
                 Text(desc if show_desc else "", style=theme.faint),
             )

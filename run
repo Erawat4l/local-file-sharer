@@ -19,6 +19,7 @@
 #    ./run setup        set up only (useful in a script)
 #    ./run upgrade      git pull, then re-run setup
 #    ./run doctor       set up, then run `lfs doctor`
+#    ./run install      put THIS checkout's lfs on PATH (fixes a stale one)
 #    ./run --help       this text
 #    ./run <anything>   passed straight to lfs, e.g. ./run ~/Downloads --mode serve
 #
@@ -444,6 +445,31 @@ case "${1:-}" in
         ok "upgraded — run ./run"
         exit 0 ;;
     doctor)   setup; exec "$LFS" doctor ;;
+    install|link)
+        # Put THIS checkout's lfs on PATH. The usual cause of "the menu is
+        # different from the screenshot" is an older `lfs` from a previous
+        # install shadowing this one, which `./run` never uses -- it always
+        # runs .venv/bin/lfs.
+        setup
+        bin_dir="${PREFIX:-$HOME}/bin"
+        mkdir -p "$bin_dir"
+        ln -sf "$LFS" "$bin_dir/lfs"
+        ok "linked $bin_dir/lfs → $LFS"
+        case ":$PATH:" in
+            *":$bin_dir:"*) : ;;
+            *) warn "$bin_dir is not on PATH — add it: export PATH=\"$bin_dir:\$PATH\"" ;;
+        esac
+        say ""
+        say "  this copy:  $("$LFS" --version 2>/dev/null | head -1)"
+        if command -v lfs >/dev/null 2>&1; then
+            other=$(command -v lfs)
+            if [ "$(readlink -f "$other" 2>/dev/null || echo "$other")" != \
+               "$(readlink -f "$LFS" 2>/dev/null || echo "$LFS")" ]; then
+                warn "another lfs is earlier on PATH: $other"
+                say "  that one is older; use ./run, or remove it and open a new shell"
+            fi
+        fi
+        exit 0 ;;
     "")       setup; exec "$LFS" ;;
     *)        setup; exec "$LFS" "$@" ;;
 esac
