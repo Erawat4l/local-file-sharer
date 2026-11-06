@@ -155,16 +155,16 @@ def uninstall():
             try:
                 if os.path.realpath(link) == os.path.realpath(binary) or target in os.path.realpath(link):
                     os.unlink(link)
-                    say(f"  removed {link}")
+                    say(f"  removed {{link}}")
                     removed_any = True
             except OSError as exc:
-                say(f"  could not remove {link}: {exc}")
+                say(f"  could not remove {{link}}: {{exc}}")
 
     if os.path.isdir(target):
         # a shutdown helper, not a self-delete: the folder may be the one this
         # process is running from, and that cannot be rmtree'd safely
-        if run(["/bin/sh", "-c", f'sleep 1; rm -rf "{target}"']) == 0:
-            say(f"  removed {target}")
+        if run(["/bin/sh", "-c", f'sleep 1; rm -rf "{{target}}"']) == 0:
+            say(f"  removed {{target}}")
             removed_any = True
 
     if removed_any:
