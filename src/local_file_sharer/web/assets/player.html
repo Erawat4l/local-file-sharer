@@ -23,21 +23,33 @@
   /* 100dvh follows mobile browser chrome instead of hiding behind it; the
      grid may still grow past the viewport, so the page is allowed to scroll. */
   .shell{display:grid;grid-template-columns:minmax(0,1fr) 330px;
-    grid-template-rows:100dvh;gap:0}
+    grid-template-rows:100dvh auto;gap:0}
+  .understage{grid-column:1;grid-row:2}
   html{height:auto;min-height:100%}
   /* The document scrolls, not the body: a body that is its own scroll
      container with a 100dvh min-height swallows touch drags on Android. */
   html{overflow-y:auto;-webkit-overflow-scrolling:touch}
   body{min-height:100dvh;overflow-x:clip}
   @media (max-width:980px){
-    .shell{grid-template-columns:1fr;grid-template-rows:auto}
-    /* no forced full height: a 2.39:1 film would sit in a tall black column */
+    /* The stage keeps a full screen even stacked; the playlist scrolls below
+       it. It used to collapse to the picture's height, which left the film as
+       a modest card with the page's furniture either side of it. */
+    .shell{grid-template-columns:1fr;grid-template-rows:100dvh auto}
     .stage{min-height:0}
   }
 
   /* ── stage ── */
-  .stage{position:relative;display:flex;flex-direction:column;min-width:0;padding:18px 22px 0}
-  .topline{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+  /* The picture is the page. The stage is a single grid cell, the video fills
+     every pixel of it, and the title and controls are laid on top with a
+     scrim. Rows of furniture used to be subtracted from the height before the
+     video was sized, so "fullscreen" showed a letterboxed strip inside a card.
+     Tapping the picture still hides the chrome (see .is-playing rules). */
+  .stage{position:relative;display:grid;grid-template-areas:"stage";
+    height:100dvh;min-width:0;padding:0;overflow:hidden}
+  .topline{grid-area:stage;align-self:start;z-index:3;display:flex;align-items:center;
+    gap:12px;flex-wrap:wrap;margin:0;
+    padding:max(10px, env(safe-area-inset-top)) 20px 30px;
+    background:linear-gradient(#000000d9,#0000)}
   .logo{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;font-family:var(--mono);font-size:13px;
     background:#111;border:1px solid var(--line);color:var(--text)}
   .title{font-weight:650;font-size:15px;letter-spacing:-.01em;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -55,10 +67,15 @@
   }
   .spacer{flex:1}
 
-  .video-wrap{position:relative;flex:0 1 auto;min-height:0;border-radius:18px;overflow:hidden;
-    background:#000;border:1px solid var(--line);box-shadow:0 30px 80px -40px rgba(0,0,0,.95)}
+  .video-wrap{grid-area:stage;position:relative;z-index:1;width:100%;height:100%;
+    min-height:0;margin:0;overflow:hidden;background:#000;
+    border:0;border-radius:0;box-shadow:none}
   video,audio{width:100%;height:100%;display:block;background:#000}
-  video{object-fit:contain}
+  /* cover, not contain: the film fills the screen edge to edge. `contain`
+     letterboxes it into a strip, which is the thing being complained about.
+     The fit button switches to the whole picture when someone wants it. */
+  video{object-fit:cover}
+  .video-wrap.fit-whole video{object-fit:contain}
 
   /* A fullscreen element is sized by the browser, so drop the padding, the
      rounded card and the forced 100dvh row that make it look boxed in. A
@@ -67,16 +84,48 @@
   /* Android Chrome still exposes the prefixed pseudo-class, so the unprefixed
      rules alone left the stage padded, rounded and boxed in after the button
      was pressed -- the video did expand, but inside a card. Both spellings. */
+  /* Fullscreen is the picture, with the chrome floating over it.
+
+     Before this, three rows of furniture (title bar, controls card, help
+     text) took their height out of the film: on a 915px-tall phone the top
+     line, the controls and their gaps claimed roughly a third of the screen
+     before the video was sized at all. A fullscreen player must give the
+     screen to the picture -- so the stage stops being a column and becomes a
+     stack, the video fills it, and the title and controls sit on top of the
+     film with a scrim, exactly like YouTube. They still fade out while
+     playing, which was already built. */
   .stage:fullscreen,.stage:-webkit-full-screen{padding:0;background:#000;
-    display:flex;flex-direction:column;width:100vw;height:100vh}
+    display:grid;grid-template-areas:"stage";width:100vw;height:100vh;
+    overflow:hidden}
   .stage:fullscreen::backdrop,.stage:-webkit-full-screen::backdrop{background:#000}
   .stage:fullscreen .topline,.stage:-webkit-full-screen .topline{
-    padding:12px 18px;margin:0;background:linear-gradient(#000,#0000)}
+    grid-area:stage;align-self:start;z-index:3;
+    padding:max(10px, env(safe-area-inset-top)) 18px 26px;margin:0;
+    background:linear-gradient(#000000cc,#0000)}
+  /* In fullscreen the picture must FILL the screen, not keep the card's shape.
+
+     The frame is sized from the file's ratio so that it hugs the picture in
+     the page, which is right inline and wrong here: a 16:9 film on a portrait
+     phone became a 412x232 strip -- a quarter of the screen -- with the rest
+     of the display black. "Fullscreen" that shows a quarter of the screen is
+     not fullscreen. So the frame becomes the whole screen and the video
+     object-fits inside it, centred. A landscape phone then gets the film edge
+     to edge, and a portrait phone gets it as large as the width allows with
+     the controls over the black -- the same thing every phone player does. */
+  /* the picture takes the whole cell; everything else floats above it */
   .stage:fullscreen .video-wrap,.stage:-webkit-full-screen .video-wrap{
-    flex:1;min-height:0;width:auto;max-width:none;max-height:none;margin:0;
+    grid-area:stage;z-index:1;
+    width:100%;height:100%;max-width:none;max-height:none;margin:0;
     border:0;border-radius:0;box-shadow:none;aspect-ratio:auto}
+  .stage:fullscreen video,.stage:-webkit-full-screen video{
+    width:100%;height:100%}
+  /* in fullscreen there is no understage to hide, and no room for it either */
+  .stage:fullscreen .understage,.stage:-webkit-full-screen .understage{display:none}
+
   .stage:fullscreen .controls,.stage:-webkit-full-screen .controls{
-    padding-bottom:max(10px, env(safe-area-inset-bottom))}
+    grid-area:stage;align-self:end;z-index:3;margin:0;border:0;
+    border-radius:0;background:linear-gradient(#0000,#000000e0);
+    padding:34px 16px max(10px, env(safe-area-inset-bottom))}
   /* fullscreen: keep the picture and the controls, drop the help text */
   .stage:fullscreen .understage,.stage:-webkit-full-screen .understage{display:none}
   /* controls fade away while playing, exactly like a desktop player */
@@ -121,8 +170,10 @@
   .artwork p{margin:6px 0 0;color:var(--faint);font-family:var(--mono);font-size:12px}
 
   /* custom controls */
-  .controls{margin-top:14px;padding:14px 16px;border-radius:16px;border:1px solid var(--line);
-    background:rgba(10,10,10,.82);backdrop-filter:blur(16px);display:grid;gap:10px}
+  .controls{grid-area:stage;align-self:end;z-index:3;margin:0;border:0;
+    border-radius:0;display:grid;gap:10px;
+    padding:40px 20px max(12px, env(safe-area-inset-bottom));
+    background:linear-gradient(#0000,#000000e6)}
   .seekrow{display:flex;align-items:center;gap:10px;min-width:0}
   .seekrow .t{flex:0 0 auto;font-variant-numeric:tabular-nums}
   /* the slider stretches, but the tooltip is anchored to it, not the row */
@@ -188,6 +239,8 @@
   .round.primary .i{width:24px;height:24px;fill:currentColor;stroke:none}
   .round .i .solid{fill:currentColor;stroke:none}
   .round .i.off{display:none}
+  #fit svg{fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round}
+  #fit svg .solid{stroke-width:2.4}
   .round .glyph{position:absolute;font-size:8.5px;font-weight:700;letter-spacing:0;
     bottom:9px;left:50%;transform:translateX(-50%);pointer-events:none}
   /* the speed chip keeps its gauge logo and prints the rate in the corner */
@@ -199,35 +252,21 @@
   @media (max-width:700px){ #vol{display:none} }   /* the mute button is enough */
   #rate b{font-size:12.5px;font-weight:650;font-variant-numeric:tabular-nums}
 
-  /* ── the stage takes the video's own shape ────────────────────────────────
-     A fixed tall box letterboxes a wide film into a black band, and a portrait
-     clip into a thin strip. aspect-ratio is set from the file's metadata so the
-     frame fits the picture: landscape films get a wide stage, vertical shorts
-     get a tall one. */
-  /* The frame is exactly the picture, never bigger.
+  /* ── the stage is the screen, whatever shape the file is ─────────────────
+     The frame no longer takes its shape from the file. Sizing it from the
+     ratio is what produced a film-shaped card floating in a mostly empty
+     screen; a player fills the screen whatever shape the file is. --ar is
+     still set by fitStageTo() and still reported in the details panel, it
+     just no longer decides the layout. */
 
-     It used to be `width:100%` with a `max-height`, which does not do that:
-     the width wins, so the box stays the full column width and only its height
-     is clamped. A 2.39:1 film then sat letterboxed inside a wide black card —
-     on a landscape phone that was a small picture floating in a mostly empty
-     screen. Sizing the WIDTH from the tallest the box may be (`--maxh * ar`)
-     and capping it at the column means the two agree, so the picture fills the
-     frame edge to edge and the frame hugs the picture.
-
-     --ar is written by fitStageTo() from the file's real dimensions; the 16/9
-     default is only used before the metadata arrives. */
-  .video-wrap{--maxh:calc(100dvh - 210px);
-    width:min(100%, calc(var(--maxh) * var(--ar, 1.7777)));
-    aspect-ratio:var(--ar, 16 / 9);
-    max-height:var(--maxh);flex:0 1 auto;margin:0 auto}
-
-  /* A tall short is allowed to use more of the height, and never wider than
-     the column. No class may set its own ratio: the inline one from the file
-     is the only truth, or the two disagree and the frame is the wrong shape. */
-  .video-wrap.portrait,.video-wrap.square{--maxh:calc(100dvh - 230px);max-width:100%}
-
-  .understage{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:14px 2px 20px;
-    color:var(--faint);font-size:12.5px}
+  /* the keyboard hints are page furniture, so they belong to the page and not
+     to the picture: they sit above the playlist on wide screens and below the
+     stage on a phone, never taking height out of the video */
+  .understage{display:flex;gap:10px;align-items:center;flex-wrap:wrap;
+    padding:10px 20px;color:var(--faint);font-size:12.5px}
+  @media (max-width:980px){
+    .understage{order:2;grid-column:1/-1}
+  }
   @media (max-width:560px){
     .understage span:last-child{display:none} /* keyboard hints are noise on a phone */
   }
@@ -355,6 +394,11 @@
               <path d="M12 4v10"/><path d="m7.5 10.5 4.5 4 4.5-4"/><path d="M5 19h14"/></svg>
           </a>
         </div>
+        <button class="round" id="fit" aria-label="Fill the screen" title="Fill the screen">
+          <svg class="i" viewBox="0 0 24 24" aria-hidden="true">
+            <rect x="3" y="5" width="18" height="14" rx="2.5"/>
+            <path d="M7 12h10M12 8v8" class="solid"/></svg>
+        </button>
         <button class="round" id="full" aria-label="Fullscreen" title="Fullscreen">
           <svg class="i" id="full-on" viewBox="0 0 24 24" aria-hidden="true">
             <path d="M4 9V4h5"/><path d="M20 9V4h-5"/><path d="M4 15v5h5"/><path d="M20 15v5h-5"/></svg>
@@ -364,12 +408,12 @@
       </div>
     </div>
 
-    <div class="understage">
-      <span>Streaming with HTTP Range — seek anywhere instantly.</span>
-      <span class="spacer" style="flex:1"></span>
-      <span><kbd>space</kbd> play · <kbd>←</kbd><kbd>→</kbd> ±10s · <kbd>f</kbd> fullscreen · <kbd>m</kbd> mute</span>
-    </div>
   </main>
+  <div class="understage">
+    <span>Streaming with HTTP Range — seek anywhere instantly.</span>
+    <span class="spacer" style="flex:1"></span>
+    <span><kbd>space</kbd> play · <kbd>←</kbd><kbd>→</kbd> ±10s · <kbd>f</kbd> fullscreen · <kbd>m</kbd> mute</span>
+  </div>
 
   <aside>
     <h3>Playlist · {{playlist_count}}</h3>
@@ -621,7 +665,10 @@
     stage.classList.add('show-controls');
     clearTimeout(hideTimer);
   });
-  document.addEventListener('fullscreenchange', () => { userHidden = false; showControls(); });
+  document.addEventListener('fullscreenchange', () => {
+    if (!document.fullscreenElement) unlockLandscape();
+    userHidden = false; showControls();
+  });
 
   // ── the stage matches the picture, not a fixed 16:9 box ───────────────────
   // A 2.39:1 film in a 16:9 box leaves black bands; a 9:16 short in the same
@@ -651,8 +698,11 @@
   window.addEventListener('beforeunload', () => {
     if (v.duration) localStorage.setItem('lfs-pos:' + location.pathname, String(v.currentTime));
   });
-  // a resume prompt is friendlier than silently jumping mid-file
+  // volume keys. Placed here on purpose: this handler runs before the one at
+  // the bottom of the file, and a second `f` binding there would toggle
+  // fullscreen twice per press -- on and straight back off.
   addEventListener('keydown', (e) => {
+    if (e.target.tagName === 'INPUT') return;
     if (e.key === 'ArrowUp') { v.volume = Math.min(1, v.volume + 0.05); document.getElementById('vol').value = v.volume * 100; }
     if (e.key === 'ArrowDown') { v.volume = Math.max(0, v.volume - 0.05); document.getElementById('vol').value = v.volume * 100; }
   });
@@ -691,18 +741,46 @@
     // button's text would delete the element the label lives in
     document.getElementById('rate-label').textContent = rates[rateIdx] + '\u00d7';
   });
+  // Turning the phone is what makes a film fill a phone screen. A 16:9 film in
+  // a portrait 412x915 viewport is 412x232 -- 25% of the display -- and no
+  // amount of CSS fixes that without cropping the sides off or letterboxing a
+  // column. Landscape is the only orientation where the picture can be both
+  // complete and full. Every phone player does this; browsers just will not do
+  // it on their own.
+  const lockLandscape = async () => {
+    try {
+      if (screen.orientation?.lock && document.fullscreenElement) {
+        await screen.orientation.lock('landscape');
+      }
+    } catch (err) {
+      // Android honours this; iOS Safari has no orientation API at all, and a
+      // browser may refuse when it does not consider us fullscreen yet.
+      // Silently ignore: the picture is still as large as the width allows.
+    }
+  };
+  const unlockLandscape = () => {
+    try { screen.orientation?.unlock?.(); } catch (err) { /* nothing to undo */ }
+  };
+
   // Fullscreen the stage (video + controls), not just the video, so the seek
   // bar and volume stay reachable. iOS Safari has no element fullscreen for
   // anything but <video>, so fall back to its native player.
   const goFullscreen = async () => {
     if (document.fullscreenElement || document.webkitFullscreenElement) {
+      unlockLandscape();
       await (document.exitFullscreen?.() ?? document.webkitExitFullscreen?.());
       return;
     }
+    // A landscape film wants a landscape screen. A vertical short does not:
+    // rotating for it would turn a 720x1280 clip into a letterboxed strip.
+    const r = v.videoWidth && v.videoHeight ? v.videoWidth / v.videoHeight : 16 / 9;
     try {
-      if (stage.requestFullscreen) await stage.requestFullscreen();
-      else if (stage.webkitRequestFullscreen) stage.webkitRequestFullscreen();
-      else if (v.webkitEnterFullscreen) v.webkitEnterFullscreen();
+      if (stage.requestFullscreen) {
+        await stage.requestFullscreen();
+        if (r > 1.15) await lockLandscape();
+      } else if (stage.webkitRequestFullscreen) {
+        stage.webkitRequestFullscreen();
+      } else if (v.webkitEnterFullscreen) v.webkitEnterFullscreen();
       else toast('Fullscreen is not available in this browser');
     } catch (err) {
       // some browsers refuse a request made from a keyboard shortcut or a
@@ -711,6 +789,20 @@
     }
   };
   document.getElementById('full').addEventListener('click', goFullscreen);
+
+  // Cover crops a film whose shape differs from the screen's; contain shrinks
+  // it until every pixel of the picture is visible. Filling the screen is the
+  // default, but nobody should be stuck with cropped subtitles, so the choice
+  // is one tap away and remembered.
+  const wrap = stage.querySelector('.video-wrap');
+  const applyFit = (whole) => {
+    wrap.classList.toggle('fit-whole', whole);
+    document.getElementById('fit').classList.toggle('on', whole);
+    try { localStorage.setItem('lfs-fit', whole ? 'whole' : 'fill'); } catch (e) {}
+  };
+  applyFit(localStorage.getItem('lfs-fit') === 'whole');
+  document.getElementById('fit').addEventListener('click', () =>
+    applyFit(!wrap.classList.contains('fit-whole')));
   // double-click the picture to toggle, like every desktop player
   v.addEventListener('dblclick', goFullscreen);
   // No click-to-pause on the picture: a tap is "show/hide the controls", which
@@ -718,6 +810,7 @@
   // dismiss the controls stopped playback instead — that was the complaint.
   document.addEventListener('webkitfullscreenchange', () => {
     const on = Boolean(document.fullscreenElement || document.webkitFullscreenElement);
+    if (!on) unlockLandscape();
     stage.classList.toggle('is-fullscreen', on);
     document.getElementById('full-on').classList.toggle('off', on);
     document.getElementById('full-off').classList.toggle('off', !on);
@@ -733,7 +826,8 @@
     if (e.code === 'Space') { e.preventDefault(); v.paused ? v.play() : v.pause(); }
     if (e.code === 'ArrowRight') v.currentTime = Math.min(v.duration || 1e9, v.currentTime + 10);
     if (e.code === 'ArrowLeft') v.currentTime = Math.max(0, v.currentTime - 10);
-    if (e.key === 'f') goFullscreen();
+    if (e.key === 'f' || e.key === 'F') goFullscreen();
+    if (e.key === 'c' || e.key === 'C') document.getElementById('fit').click();
     if (e.key === 'm') { v.muted = !v.muted; }
   });
 

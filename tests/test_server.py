@@ -1285,33 +1285,55 @@ def _player_css() -> str:
     return player[player.index("<style>") : player.index("</style>")]
 
 
-def test_the_player_sizes_the_frame_from_the_picture_not_a_fixed_column():
-    """A full-width frame with only a max-height letterboxes the film.
+def test_the_player_fills_the_screen_instead_of_hugging_the_picture():
+    """The picture is the page, not a card floating in one.
 
-    ``width:100%`` wins over the cap, so the box stayed as wide as the column
-    and the picture sat inside it with black bars -- on a landscape phone the
-    film was a small rectangle in a mostly empty screen. The width must be
-    derived from the aspect ratio so the frame hugs the picture.
+    An earlier round sized the frame from the file's aspect ratio so it would
+    "hug the picture". On a phone that produced a 16:9 film as a 412x232 strip
+    -- a quarter of the display -- with the page's furniture around it. A
+    player must give the screen to the video, so the stage is one full-height
+    cell and the video object-fits inside it.
     """
     css = _player_css()
-    block = next(
-        (m.group(1) for m in re.finditer(r"\.video-wrap\{([^}]*)\}", css, re.S)
-         if "--maxh" in m.group(1)),
-        "",
+
+    stage = re.search(r"\n  \.stage\{([^}]*)\}", css)
+    assert stage is not None
+    flat = stage.group(1).replace(" ", "").replace("\n", "")
+    assert "height:100dvh" in flat, "the stage must be a full screen tall"
+    assert "grid-template-areas" in flat, "the picture and its chrome must share one cell"
+    assert "calc(" not in flat, "no fixed chrome height may be subtracted"
+
+    # the video covers the cell; `contain` letterboxes it into a strip
+    assert re.search(r"video\{[^}]*object-fit:cover", css), (
+        "the picture must fill the screen, not sit letterboxed inside it"
     )
-    assert block, "no .video-wrap rule defines --maxh"
-    assert "var(--ar" in block, "the frame is not sized from the file's ratio"
-    squeezed = block.replace(" ", "")
-    assert "width:min(100%,calc(var(--maxh)" in squeezed, (
-        "the frame must be the smaller of the column and maxh*ratio"
+    # ...and the whole picture is one tap away for anyone who wants it
+    squeezed = " ".join(css.split())
+    assert ".video-wrap.fit-whole video{object-fit:contain}" in squeezed, (
+        "cropping must be undoable in one tap"
     )
-    # no class may impose its own ratio: the inline one from fitStageTo wins
-    for shape in ("portrait", "square"):
-        rule = re.search(rf"\.video-wrap\.{shape}\{{([^}}]*)\}}", css)
-        if rule:
-            assert "aspect-ratio" not in rule.group(1), (
-                f".{shape} sets a ratio that fights the file's real one"
-            )
+
+
+def test_the_old_height_reserve_is_gone():
+    """`calc(100dvh - 210px)` was the number that made a phone show a strip.
+
+    It has to stay gone: re-adding a reserve anywhere silently reintroduces the
+    card-in-a-page layout this replaced.
+    """
+    css = _player_css()
+    assert "--maxh" not in css
+    assert "100dvh - 210px" not in css
+    assert "100dvh - 230px" not in css
+
+
+def test_the_layout_has_a_single_fullscreen_and_a_fit_toggle():
+    """`f` must be bound once: two handlers toggle fullscreen on and off."""
+    from local_file_sharer.transfer.server import load_assets
+
+    player = load_assets()["player.html"]
+    assert player.count("e.key === 'f'") == 1, "two `f` handlers cancel each other"
+    assert 'id="fit"' in player, "the whole-picture toggle must exist"
+    assert "lfs-fit" in player, "the fit choice is remembered between visits"
 
 
 def test_the_player_has_fullscreen_rules_for_the_prefixed_pseudo_class():
