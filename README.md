@@ -161,16 +161,21 @@ cd local-file-sharer
 ./run
 ```
 
-On **Termux** install Python first — `run` finds it, but cannot install it:
+On **Termux** install Python and pip first — `run` finds them, but cannot
+install them:
 
 ```bash
-pkg install python
+pkg install python python-pip
 ```
 
-Then the same three lines. Two Termux quirks are handled for you: it has no
-`/tmp` (`run` keeps its error output in `.lfs-tmp` inside the checkout), and its
-Python ships pip without `ensurepip`, so `run` borrows the system pip to build
-the virtualenv instead of failing with `No module named pip`.
+Termux keeps pip in its own package: `python` has the `venv` module but no pip
+and no `ensurepip`, so a virtualenv made by it cannot install anything. With
+`python-pip` present, `run` builds the venv with `--system-site-packages` so it
+can borrow that pip and install into itself.
+
+Termux also has no `/tmp` — `run` keeps its error output in `.lfs-tmp` inside
+the checkout — and if pip is missing anyway, `run` offers to install
+`python-pip` for you (skip that with `LFS_NO_AUTOINSTALL=1`).
 
 The first `./run` creates a `.venv` inside the checkout, installs rich and
 qrcode into it, and starts `lfs`. Nothing is installed system-wide, so removing
@@ -195,13 +200,15 @@ reinstalls the package in place instead of failing.
 ### Termux (Android)
 
 ```bash
-pkg update && pkg install python git
+pkg update && pkg install python python-pip git
 pipx install "local-file-sharer @ git+https://github.com/Erawat4l/local-file-sharer.git"
 termux-setup-storage   # once, so the picker can read /sdcard
 lfs                    # ← the command is `lfs`, not `start`
 ```
 
-`pipx` is installed by `pkg install pipx` if it is missing. `install.sh` also
+`python-pip` is not optional here: Termux's `python` package provides the
+`venv` module but neither pip nor `ensurepip`, so `pipx` has nothing to work
+with. `pipx` itself comes from `pkg install pipx` if it is missing. `install.sh` also
 works, but while the repository is private it has to be read through the API
 rather than the raw file host (see [Installing from source](#installing-from-source)).
 
