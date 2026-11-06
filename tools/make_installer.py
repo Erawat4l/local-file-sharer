@@ -130,16 +130,27 @@ def uninstall():
     """
     removed_any = False
 
-    # 1. pipx, if it made one
-    if have("pipx"):
-        if run(["pipx", "uninstall", "local-file-sharer"]) == 0:
-            removed_any = True
+    # 1. pipx, if it made one. `have` only says the tool exists, so ask it
+    #    whether this package is actually one of its venvs first -- otherwise
+    #    every uninstall prints "not installed" noise about someone else's
+    #    tooling.
+    if have("pipx") and run(["pipx", "list", "--short"]) is not None:
+        listing = subprocess.run(["pipx", "list", "--short"], capture_output=True, text=True)  # noqa: S603
+        if "local-file-sharer" in (listing.stdout or ""):
+            if run(["pipx", "uninstall", "local-file-sharer"]) == 0:
+                removed_any = True
 
     # 2. pip, if it made one
     if have("pip"):
         for flags in (["--user"], [], ["--break-system-packages"]):
-            if run([sys.executable, "-m", "pip", "uninstall", "-y", *flags, "local-file-sharer"]) == 0:
-                removed_any = True
+            probe = subprocess.run(  # noqa: S603
+                [sys.executable, "-m", "pip", "show", "local-file-sharer"],
+                capture_output=True,
+                text=True,
+            )
+            if probe.returncode == 0:
+                if run([sys.executable, "-m", "pip", "uninstall", "-y", *flags, "local-file-sharer"]) == 0:
+                    removed_any = True
                 break
 
     # 3. the checked-out tree this installer unpacks, and every symlink to it
