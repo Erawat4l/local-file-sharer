@@ -93,6 +93,18 @@ def main() -> None:
     frames.append(menu_frame)
     frames.append(menu_frame)
 
+    # Record the menu as text beside the gif. A gif is pixels: nothing in a
+    # diff or a test can read it, so this one silently advertised
+    # "start <path>" and "switch dark / light / neon" for months after the
+    # program said "lfs <path>" and "light / mono". The test renders the menu
+    # with these same console settings and compares, so the animation cannot
+    # drift again. (Rich swaps emoji for text when not a terminal, which would
+    # otherwise make the recording depend on how it was captured.)
+    plain = Console(file=io.StringIO(), width=WIDTH, force_terminal=False,
+                    emoji=True, highlight=False, soft_wrap=False, color_system=None)
+    plain.print(menu.render_menu(ctx))
+    (ASSETS / "demo-menu.txt").write_text(plain.file.getvalue(), encoding="utf-8")
+
     durations = [70] * 14 + [400, 60, 900, 2200]
     OUT.parent.mkdir(parents=True, exist_ok=True)
     frames[0].save(

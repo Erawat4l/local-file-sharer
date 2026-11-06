@@ -26,10 +26,24 @@ uses clip-paths resvg ignores, and cannot draw emoji.
 
 ## Regenerating
 
+Any change to a menu label, a description or a theme name makes every terminal
+asset stale, and nothing about a `.gif` shows up in a diff — `demo.gif` once
+advertised ``start <path>`` and ``switch dark / light / neon`` long after the
+program said ``lfs <path>`` and ``light / mono``. So:
+
 ```bash
 python -m venv .venv && . .venv/bin/activate
 pip install -e ".[dev]" pillow resvg-py fonttools
+
+python tools/screenshots/demo_gif.py     # gif + docs/assets/demo-menu.txt
+python tools/screenshots/cli_shots.py    # the cli-*.png screenshots
+python tools/screenshots/check_assets.py # tofu, leaking paths, missing files
 ```
+
+`demo_gif.py` also writes the menu it drew as plain text next to the gif, and
+`tests/test_screenshots.py` re-renders the menu and compares the two. That test
+fails when the code changes and the assets were not regenerated, which is the
+only way to catch this without a human looking at a picture.
 
 Fonts (not committed — they are large and separately licensed under the OFL):
 
