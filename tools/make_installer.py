@@ -120,13 +120,57 @@ def check():
 
 
 def uninstall():
+    """Remove every trace this file may have left.
+
+    The old version ran `pip uninstall` and printed "the `lfs` command is
+    gone", which was often untrue: this installer creates a directory beside
+    the user with a symlink on PATH, and pip never knows about either. Removing
+    pip's copy of a package it did not install is also a no-op, so the message
+    was optimistic at best.
+    """
+    removed_any = False
+
+    # 1. pipx, if it made one
     if have("pipx"):
-        run(["pipx", "uninstall", "local-file-sharer"])
+        if run(["pipx", "uninstall", "local-file-sharer"]) == 0:
+            removed_any = True
+
+    # 2. pip, if it made one
     if have("pip"):
-        for flags in (["--user"], []):
+        for flags in (["--user"], [], ["--break-system-packages"]):
             if run([sys.executable, "-m", "pip", "uninstall", "-y", *flags, "local-file-sharer"]) == 0:
+                removed_any = True
                 break
-    say("  removed. the `lfs` command is gone.")
+
+    # 3. the checked-out tree this installer unpacks, and every symlink to it
+    home = os.path.expanduser("~")
+    target = os.path.join(home, "local-file-sharer")
+    binary = os.path.join(target, ".venv", "bin", "lfs")
+    for bindir in (os.path.join(os.environ.get("PREFIX", ""), "bin"), os.path.join(home, ".local", "bin"),
+                   os.path.join(home, "bin")):
+        if not bindir.strip(os.sep):
+            continue
+        link = os.path.join(bindir, "lfs")
+        if os.path.islink(link):
+            try:
+                if os.path.realpath(link) == os.path.realpath(binary) or target in os.path.realpath(link):
+                    os.unlink(link)
+                    say(f"  removed {link}")
+                    removed_any = True
+            except OSError as exc:
+                say(f"  could not remove {link}: {exc}")
+
+    if os.path.isdir(target):
+        # a shutdown helper, not a self-delete: the folder may be the one this
+        # process is running from, and that cannot be rmtree'd safely
+        if run(["/bin/sh", "-c", f'sleep 1; rm -rf "{target}"']) == 0:
+            say(f"  removed {target}")
+            removed_any = True
+
+    if removed_any:
+        say("  removed. the `lfs` command is gone; your files were not touched.")
+        return 0
+    say("  nothing to remove — no lfs install was found here.")
     return 0
 
 

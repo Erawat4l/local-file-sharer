@@ -30,11 +30,6 @@ from pathlib import Path
 from . import platforms
 from .updater import find_duplicates, is_pipx_install
 
-#: Names the app writes into a directory that mean "this is ours to delete".
-_CHECKOUT_MARKERS = ("pyproject.toml", "run", "setup")
-#: Files/directories inside a checkout that are generated, not source.
-_GENERATED = (".venv", ".lfs-tmp", "*.egg-info", "__pycache__")
-
 
 @dataclass
 class Step:
@@ -65,22 +60,23 @@ class Plan:
 def _is_checkout(path: Path) -> bool:
     """Is *path* a local-file-sharer checkout we created, or someone's folder?
 
-    Deleting a directory tree is the one genuinely dangerous thing here. The
-    test is deliberately narrow: a pyproject.toml naming this project, or the
-    run/setup pair every checkout ships. A directory failing this is never
-    removed, whatever it is called.
+    Deleting a directory tree is the one genuinely dangerous thing here, so
+    the test is the *package*, not the file names: a `pyproject.toml` that
+    names this project, plus the src directory that actually holds it. "A
+    folder containing a file called run" is not evidence -- plenty of projects
+    have one -- and treating it as evidence would delete somebody's work.
     """
     if not path.is_dir():
         return False
     pyproject = path / "pyproject.toml"
-    if pyproject.is_file():
-        try:
-            text = pyproject.read_text(encoding="utf-8", errors="replace")
-        except OSError:
-            text = ""
-        if "local-file-sharer" in text or "local_file_sharer" in text:
-            return True
-    return all((path / name).exists() for name in ("run", "setup"))
+    package = path / "src" / "local_file_sharer"
+    if not pyproject.is_file() or not package.is_dir():
+        return False
+    try:
+        text = pyproject.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return False
+    return "local-file-sharer" in text or "local_file_sharer" in text
 
 
 def running_from(path: Path) -> bool:
@@ -95,10 +91,7 @@ def running_from(path: Path) -> bool:
     except OSError:
         return False
     target = path.resolve()
-    for root in (here, base):
-        if root == target or root.is_relative_to(target):
-            return True
-    return False
+    return any(root == target or root.is_relative_to(target) for root in (here, base))
 
 
 def _path_entries(name: str) -> list[str]:

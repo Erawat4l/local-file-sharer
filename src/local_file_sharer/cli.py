@@ -134,6 +134,8 @@ def build_parser() -> argparse.ArgumentParser:
             "  lfs config show         print the effective configuration\n"
             "  lfs theme mono          switch theme (dark / light / mono)\n"
             "  lfs completions fish    print a shell completion script\n"
+            "  lfs upgrade             update to the newest build\n"
+            "  lfs uninstall           remove lfs from this device (--dry-run first)\n"
             "  lfs --update            self-update from GitHub\n"
             f"\nmore: {REPO_URL}"
         ),
@@ -698,8 +700,8 @@ def cmd_doctor(cfg: Config, state: State, args: argparse.Namespace) -> int:
 
 def cmd_uninstall(cfg: Config, state: State, args: argparse.Namespace) -> int:
     """Remove lfs from the device. Prints the plan first, then asks."""
-    from .uninstall import make_plan, uninstall  # noqa: PLC0415
     from .ui.console import console  # noqa: PLC0415
+    from .uninstall import make_plan, uninstall  # noqa: PLC0415
 
     dry_run = bool(getattr(args, "dry_run", False))
     purge = bool(getattr(args, "purge_data", False))

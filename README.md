@@ -42,6 +42,7 @@ saturates your Wi-Fi. Works on **Termux/Android**, **Linux**, **macOS** and **Wi
 - [Share modes](#share-modes)
 - [Network outputs](#network-outputs)
 - [One-liners for every device](#one-liners-for-every-device)
+- [Uninstalling](#uninstalling)
 - [Configuration](#configuration)
 - [Command reference](#command-reference)
 - [Diagnostics](#diagnostics)
@@ -460,6 +461,42 @@ lfs upgrade --ref main                   # a specific branch or tag
 It uses `pipx install --force` for pipx installs, `pip install --upgrade` for
 plain ones (retrying with `--break-system-packages` on Debian/Ubuntu), and
 refuses to touch a standalone `.exe` — download that from Releases instead.
+
+## Uninstalling
+
+```bash
+lfs uninstall --dry-run     # list exactly what would go, change nothing
+lfs uninstall               # asks once, then removes it
+```
+
+It removes what `lfs` created and nothing else: the launchers on `PATH`, the
+checkout, and the config. **Your files are never touched**, and they are not
+even in scope — only paths this app wrote are ever deleted.
+
+| Flag | Effect |
+|---|---|
+| `--dry-run` | print the plan and stop |
+| `--purge-data` | also remove history, recents and the share counter (default: kept) |
+| `--keep-checkout` | remove the command but leave the folder, so a reinstall is instant |
+| `-y`, `--yes` | skip the confirmation |
+
+Two details that matter, and both were bugs before they were fixed:
+
+* **Every launcher goes, not just the current one.** A device can have several
+  `lfs` binaries — the same shadowing that made an upgrade look like it did
+  nothing. Removing one would have left the others answering.
+* **The checkout is removed after the command exits**, by a detached
+  `sh -c 'sleep 1; rm -rf …'`. A virtualenv cannot delete itself while its own
+  Python is importing from it: the first attempt died with
+  `ModuleNotFoundError` halfway through.
+
+A `pipx` install is delegated rather than deleted — `lfs uninstall` prints
+`pipx uninstall local-file-sharer` and leaves it to you, because removing a
+pipx shim by hand strands its virtualenv.
+
+If a directory does not look like a local-file-sharer checkout (a `pyproject.toml`
+naming this project **and** `src/local_file_sharer`), it is kept and named in the
+output. A folder that merely contains a file called `run` is not deleted.
 
 ## Quick start
 
