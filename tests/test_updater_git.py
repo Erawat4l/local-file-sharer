@@ -57,15 +57,12 @@ def test_installed_ref_falls_back_to_main(monkeypatch):
 def test_upgrade_from_git_builds_a_pipx_command(monkeypatch):
     seen = {}
 
-    class Result:
-        returncode = 0
-
-    def fake_run(cmd, check=False):
+    def fake_run(cmd, **kw):
         seen["cmd"] = cmd
-        return Result()
+        return 0, []
 
     monkeypatch.setattr(updater, "detect_installer", lambda: "pipx")
-    monkeypatch.setattr(updater.subprocess, "run", fake_run)
+    monkeypatch.setattr(updater, "run_with_progress", fake_run)
     assert updater.upgrade_from_git("some-branch") == 0
     assert seen["cmd"][:2] == ["pipx", "install"]
     assert seen["cmd"][-1].endswith("@some-branch")
@@ -74,11 +71,12 @@ def test_upgrade_from_git_builds_a_pipx_command(monkeypatch):
 def test_upgrade_from_git_uses_pip_for_plain_installs(monkeypatch):
     seen = {}
 
-    class Result:
-        returncode = 0
+    def fake_run(cmd, **kw):
+        seen["cmd"] = cmd
+        return 0, []
 
     monkeypatch.setattr(updater, "detect_installer", lambda: "pip")
-    monkeypatch.setattr(updater.subprocess, "run", lambda cmd, check=False: seen.update(cmd=cmd) or Result())
+    monkeypatch.setattr(updater, "run_with_progress", fake_run)
     assert updater.upgrade_from_git("main") == 0
     assert seen["cmd"][1:4] == ["-m", "pip", "install"]
     assert "--upgrade" in seen["cmd"]
@@ -144,14 +142,11 @@ def test_upgrade_from_git_uses_the_resolved_ref(monkeypatch):
     """`lfs upgrade` must install the branch resolve_ref picked, not `main`."""
     seen = {}
 
-    class Done:
-        returncode = 0
-
-    def fake_run(cmd, check=False, **_kw):
+    def fake_run(cmd, **_kw):
         seen["cmd"] = cmd
-        return Done()
+        return 0, []
 
-    monkeypatch.setattr(updater.subprocess, "run", fake_run)
+    monkeypatch.setattr(updater, "run_with_progress", fake_run)
     monkeypatch.setattr(updater, "detect_installer", lambda: "pipx")
     monkeypatch.setattr(updater, "installed_ref", lambda: "main")
     monkeypatch.setattr(updater, "ref_has_package", lambda ref, **kw: ref != "main")
@@ -159,3 +154,58 @@ def test_upgrade_from_git_uses_the_resolved_ref(monkeypatch):
     assert updater.upgrade_from_git(None) == 0
     assert updater.DEFAULT_BRANCH in " ".join(seen["cmd"])
     assert "@main" not in " ".join(seen["cmd"])
+
+
+# ── quiet upgrades with a progress bar ───────────────────────────────────────
+def test_upgrade_runs_pip_quietly_and_reports_a_bar(capsys, monkeypatch):
+    """`lfs upgrade` must not hand the terminal to pip.
+
+    pip prints a wall of resolve/clone/build chatter. The upgrade now captures
+    it, draws one progress bar and only shows the captured text on failure.
+    """
+    from local_file_sharer import updater
+
+    calls: list[list[str]] = []
+
+    def fake_run(cmd, *, con=None, title="upgrading"):
+        calls.append(list(cmd))
+        return 0, ["Successfully installed local-file-sharer-1.0.0"]
+
+    monkeypatch.setattr(updater, "detect_installer", lambda: "pip")
+    monkeypatch.setattr(updater, "resolve_ref", lambda ref=None: ("arena/x", ""))
+    monkeypatch.setattr(updater, "run_with_progress", fake_run)
+    assert updater.upgrade_from_git() == 0
+    assert calls and "pip" in " ".join(calls[0])
+
+
+def test_the_command_line_is_never_printed(monkeypatch, capsys):
+    """It used to echo `python -m pip install ...`, which is noise to a user."""
+    from local_file_sharer import updater
+
+    monkeypatch.setattr(updater, "detect_installer", lambda: "pip")
+    monkeypatch.setattr(updater, "resolve_ref", lambda ref=None: ("arena/x", ""))
+    monkeypatch.setattr(updater, "run_with_progress", lambda cmd, **kw: (0, []))
+    updater.upgrade_from_git()
+    # render what the user sees through a recording console
+    import io
+
+    from rich.console import Console
+
+    buf = io.StringIO()
+    monkeypatch.setattr(updater, "console", lambda: Console(file=buf, width=80, force_terminal=False))
+    updater.upgrade_from_git()
+    out = buf.getvalue()
+    assert "running:" not in out
+    assert "-m pip install" not in out
+
+
+def test_a_failed_upgrade_shows_the_reason():
+    """Silence on failure is worse than noise: print pip's tail."""
+    from local_file_sharer import updater
+
+    assert updater._phase_for("", "resolve") == "resolve"
+    assert updater._phase_for("  Cloning https://github.com/x/y.git", "resolve") == "clone"
+    assert updater._phase_for("  Preparing metadata (pyproject.toml)", "clone") == "build"
+    assert updater._phase_for("Installing collected packages: x", "build") == "install"
+    assert updater._phase_for("Successfully installed x-1.0", "install") == "install"
+    assert updater._phase_for("garbage", "install") == "install"

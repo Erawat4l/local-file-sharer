@@ -7,6 +7,18 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Changed
+
+- **`lfs upgrade` is a progress bar, not a wall of pip output.** It used to hand
+  the terminal to pip: thirty lines of collect/clone/resolve/build chatter, then
+  the `python -m pip install …` command line echoed back. The command is now run
+  with its output captured, and one line tracks the real stages —
+  `upgrading ███████████░░░░░ 2/5 building` — advancing on pip's own phase
+  markers (`cloning`, `preparing metadata`, `installing collected packages`)
+  rather than a guessed timer. Output is shown only when the upgrade fails,
+  where the reason matters. The command line is no longer printed, and the bar
+  is skipped entirely when output is piped so logs stay clean.
+
 ### Fixed
 
 - **The Termux dashboard no longer stacks.** A panel taller than the window made

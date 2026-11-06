@@ -128,6 +128,124 @@ def resolve_ref(ref: str | None = None) -> tuple[str, str]:
     return wanted, ""
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Quiet upgrades with a progress bar
+# ─────────────────────────────────────────────────────────────────────────────
+#: Steps an upgrade passes through, in order. They are reported by watching pip's
+#: own stderr markers rather than guessed from a timer, so the bar advances when
+#: something actually happened.
+UPGRADE_STEPS: tuple[tuple[str, str], ...] = (
+    ("resolve", "contacting GitHub"),
+    ("clone", "cloning"),
+    ("build", "building"),
+    ("install", "installing"),
+    ("done", "done"),
+)
+
+#: pip prints these lines as it moves between phases.
+_PHASE_MARKERS: tuple[tuple[str, str], ...] = (
+    ("cloning", "clone"),
+    ("running command git clone", "clone"),
+    ("installing build dependencies", "build"),
+    ("getting requirements", "build"),
+    ("preparing metadata", "build"),
+    ("building wheel", "build"),
+    ("successfully built", "install"),
+    ("installing collected packages", "install"),
+    ("successfully installed", "install"),
+)
+
+
+def _phase_for(line: str, current: str) -> str:
+    lowered = line.lower()
+    for marker, phase in _PHASE_MARKERS:
+        if marker in lowered:
+            return phase
+    return current
+
+
+def run_with_progress(cmd: list[str], *, con=None, title: str = "upgrading") -> tuple[int, list[str]]:
+    """Run *cmd* quietly and draw a progress bar in its place.
+
+    pip is chatty: ``lfs upgrade`` used to hand the terminal to pip, which
+    printed thirty lines of resolve/download/build chatter and then the command
+    line it was running. People asked for a bar, so pip's output is captured,
+    the bar advances on the phase markers inside it, and the captured text is
+    only shown when something fails — where it is genuinely useful.
+
+    Returns ``(returncode, output_lines)``.
+    """
+    from rich.live import Live  # noqa: PLC0415 - only needed on this path
+    from rich.text import Text  # noqa: PLC0415
+
+    from .fmt import bar  # noqa: PLC0415
+    from .ui.console import current_theme, screen_width  # noqa: PLC0415
+
+    con = con or console()
+    theme = current_theme()
+    collected: list[str] = []
+    state = {"phase": "resolve"}
+
+    def render() -> Text:
+        order = [key for key, _ in UPGRADE_STEPS]
+        labels = dict(UPGRADE_STEPS)
+        index = order.index(state["phase"]) if state["phase"] in order else 0
+        done = index + (1 if state["phase"] == "done" else 0)
+        total = len(order)
+        width = max(10, min(28, screen_width(60) - 34))
+        line = Text()
+        line.append(f"  {title}  ", style=theme.primary)
+        line.append(bar(done, total, width), style=theme.accent)
+        line.append(f"  {done}/{total}  ", style=theme.muted)
+        line.append(labels.get(state["phase"], ""), style=theme.faint)
+        return line
+
+    # Never let a pip prompt block forever in a non-tty: it would hang a phone.
+    env = dict(os.environ, PIP_DISABLE_PIP_VERSION_CHECK="1", PIP_PROGRESS_BAR="off")
+    try:
+        process = subprocess.Popen(  # noqa: S603
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+            env=env,
+        )
+    except FileNotFoundError:
+        return 127, ["command not found: " + " ".join(cmd)]
+
+    assert process.stdout is not None
+    if con.is_terminal:
+        with Live(render(), console=con, refresh_per_second=8, transient=True) as live:
+            for line in process.stdout:
+                stripped = line.rstrip()
+                if stripped:
+                    collected.append(stripped)
+                state["phase"] = _phase_for(stripped, state["phase"])
+                live.update(render(), refresh=True)
+            code = process.wait()
+            state["phase"] = "done" if code == 0 else state["phase"]
+            live.update(render(), refresh=True)
+    else:
+        for line in process.stdout:
+            stripped = line.rstrip()
+            if stripped:
+                collected.append(stripped)
+            state["phase"] = _phase_for(stripped, state["phase"])
+        code = process.wait()
+    return code, collected
+
+
+def _show_failure(con, lines: list[str], *, limit: int = 14) -> None:  # noqa: ANN001
+    """Print the tail of a failed pip run: that is where the reason lives."""
+    if not lines:
+        return
+    tail = lines[-limit:]
+    con.print("[lfs.muted]last lines from pip:[/]")
+    for line in tail:
+        con.print(f"  [lfs.faint]{line[:160]}[/]")
+
+
 def upgrade_from_git(ref: str | None = None) -> int:
     """Install the newest code from GitHub, the only place this package lives.
 
@@ -149,26 +267,24 @@ def upgrade_from_git(ref: str | None = None) -> int:
     else:
         cmd = [sys.executable, "-m", "pip", "install", "--upgrade", spec]
     con.print(f"[lfs.muted]from[/]  [lfs.primary]{target}[/]  [lfs.faint]({GIT_URL})[/]")
-    con.print(f"[lfs.muted]running:[/] {' '.join(cmd)}")
-    try:
-        completed = subprocess.run(cmd, check=False)
-    except FileNotFoundError:
+    code, output = run_with_progress(cmd, con=con)
+    if code == 127:
         con.print("[lfs.danger]could not run pip — install it, or re-run install.sh[/]")
         return 1
-    if completed.returncode != 0:
-        if kind != "pipx":
-            # Debian/Ubuntu block --user installs without this (PEP 668)
-            retry = [*cmd, "--break-system-packages"]
-            con.print("[lfs.warning]retrying with --break-system-packages[/]")
-            try:
-                completed = subprocess.run(retry, check=False)
-            except FileNotFoundError:
-                return 1
-        if completed.returncode != 0:
-            con.print(f"[lfs.danger]upgrade failed[/]  see {REPOSITORY_PAGE} for manual steps")
-            con.print(f"[lfs.muted]try a branch explicitly:[/] lfs upgrade --ref {DEFAULT_BRANCH}")
-            return completed.returncode
-    con.print("[lfs.success]updated[/]  restart `lfs` to use the new code")
+    if code != 0 and kind != "pipx":
+        # Debian/Ubuntu block --user installs without this (PEP 668)
+        retry = [*cmd, "--break-system-packages"]
+        con.print("[lfs.warning]retrying with --break-system-packages[/]")
+        code, more = run_with_progress(retry, con=con)
+        output.extend(more)
+        if code == 127:
+            return 1
+    if code != 0:
+        con.print(f"[lfs.danger]upgrade failed[/]  see {REPOSITORY_PAGE} for manual steps")
+        _show_failure(con, output)
+        con.print(f"[lfs.muted]try a branch explicitly:[/] lfs upgrade --ref {DEFAULT_BRANCH}")
+        return code
+    con.print("[lfs.success]  upgraded[/]  [lfs.muted]restart `lfs` to use the new code[/]")
     return 0
 
 
@@ -363,7 +479,6 @@ def run_update(*, check_only: bool = False, yes: bool = False, channel: str = "s
     if not cmd:
         con.print(f"[lfs.warning]could not detect how this copy was installed · {release.url}[/]")
         return 1
-    con.print(f"[lfs.muted]running:[/] {' '.join(cmd)}")
     if not yes:
         try:
             answer = input("continue? [Y/n] ").strip().lower()
@@ -375,15 +490,16 @@ def run_update(*, check_only: bool = False, yes: bool = False, channel: str = "s
     env = dict(os.environ)
     env.pop("PYTHONPATH", None)
     try:
-        code = subprocess.call(cmd, env=env)  # noqa: S603
+        code, output = run_with_progress(cmd, con=con)
     except (OSError, subprocess.SubprocessError) as exc:
         raise UpdateError(
             f"could not run {cmd[0]}: {exc}",
             hints=[f"Update manually: {' '.join(cmd)}", release.url],
         ) from exc
     if code == 0:
-        con.print("[lfs.success]✔ updated — restart `lfs` to use the new version[/]")
+        con.print("[lfs.success]  updated[/]  [lfs.muted]restart `lfs` to use the new version[/]")
         return 0
+    _show_failure(con, output)
     con.print(f"[lfs.danger]updater exited with code {code}[/]")
     con.print(f"[lfs.muted]manual: {' '.join(cmd)}[/]")
     return code
