@@ -164,9 +164,23 @@ def install():
         if code != 0:
             say("\\n  ./setup failed — read its output above.\\n")
             return code
+    # Create the `lfs` command, not just a folder with a ./run in it. A
+    # newcomer who finishes installing and is told to `cd` into a directory and
+    # type `./run` every time has not installed a command -- they have unpacked
+    # a folder and been handed a chore. ./run install links it into a directory
+    # that is already on PATH, so the next shell finds it.
     say("")
-    say(f"  installed.  cd {{target}} && ./run")
-    say(f"  afterwards:  cd {{target}} && ./run upgrade")
+    runner = os.path.join(target, "run")
+    linked = os.access(runner, os.X_OK) and run([runner, "install"]) == 0
+    say("")
+    if linked:
+        say("  installed.  type `lfs` from anywhere")
+        say("  first time:  lfs configure     (Enter accepts every default)")
+        say("  update:      lfs upgrade")
+        say(f"  the folder is {{target}} -- `lfs` runs from there, so keep it")
+    else:
+        say(f"  installed.  cd {{target}} && ./run")
+        say(f"  afterwards:  cd {{target}} && ./run upgrade")
     say("")
     return 0
 
