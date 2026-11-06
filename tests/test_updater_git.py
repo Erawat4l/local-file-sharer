@@ -10,6 +10,17 @@ import pytest
 from local_file_sharer import updater
 
 
+@pytest.fixture(autouse=True)
+def _not_a_checkout(monkeypatch):
+    """These tests are about the GitHub reinstall path.
+
+    The suite runs inside a git checkout, and `lfs upgrade` correctly prefers
+    `git pull` in that case -- so without this every test here would exercise
+    the checkout path instead of the one it was written for.
+    """
+    monkeypatch.setattr(updater, "checkout_root", lambda: None)
+
+
 def test_git_spec_names_the_repository_and_ref():
     spec = updater.git_spec("arena/example")
     assert spec.startswith("local-file-sharer @ git+https://github.com/")
@@ -414,3 +425,60 @@ def test_no_duplicates_when_only_one_copy_is_installed(tmp_path, monkeypatch):
     monkeypatch.setenv("PATH", f"{a.parent}:/usr/bin:/bin")
     monkeypatch.setattr("sys.argv", [str(a)])
     assert updater.find_duplicates() == []
+
+
+# ── upgrading a git checkout ────────────────────────────────────────────────
+def test_a_checkout_is_identified_from_the_tree_the_code_runs_from(monkeypatch):
+    """An editable install runs the checkout's own source, and for that
+    `git pull` is the right upgrade -- it is what `./run upgrade` does."""
+    monkeypatch.undo()          # the autouse fixture stubs this out on purpose
+    root = updater.checkout_root()
+    if root is None:
+        pytest.skip("not running from a checkout")
+    assert (root / ".git").exists()
+    assert (root / "pyproject.toml").exists()
+    assert updater._runs_from(root), "the package should live inside the checkout"
+
+
+def test_a_pulled_checkout_is_not_reported_as_an_upgrade_until_it_installs(monkeypatch):
+    """`git pull` succeeds but the editable reinstall fails: say so.
+
+    Telling someone "upgraded" while the code on disk is not what runs is the
+    exact confusion this whole area keeps producing.
+    """
+    calls = []
+
+    def fake_run(cmd, **_kw):
+        calls.append(cmd)
+        # git pull fine, pip broken
+        return (0, []) if cmd[0] == "git" else (1, ["ERROR: no space left on device"])
+
+    monkeypatch.setattr(updater, "run_with_progress", fake_run)
+    assert updater._pull_checkout(updater.Path("/tmp")) == 1
+    assert any("git" in c[0] for c in calls)
+    assert any("pip" in c for c in calls)
+
+
+def test_a_failed_pull_changes_nothing(monkeypatch):
+    """A non-fast-forward must stop before pip runs, not reinstall stale code."""
+    calls = []
+
+    def fake_run(cmd, **_kw):
+        calls.append(cmd)
+        return 1, ["fatal: Not possible to fast-forward"]
+
+    monkeypatch.setattr(updater, "run_with_progress", fake_run)
+    assert updater._pull_checkout(updater.Path("/tmp")) == 1
+    assert len(calls) == 1, "pip must not run after a failed pull"
+
+
+def test_upgrade_uses_the_checkout_only_when_the_code_lives_in_it(monkeypatch):
+    """A pipx copy next to an unrelated .git must still reinstall from GitHub."""
+    monkeypatch.setattr(updater, "checkout_root", lambda: updater.Path("/tmp"))
+    monkeypatch.setattr(updater, "_runs_from", lambda _root: False)
+    seen = {}
+    monkeypatch.setattr(updater, "_pull_checkout", lambda root: seen.setdefault("root", root))
+    monkeypatch.setattr(updater, "resolve_ref", lambda ref: ("main", ""))
+    monkeypatch.setattr(updater, "detect_installer", lambda: "exe")
+    updater.upgrade_from_git(None)
+    assert "root" not in seen, "the checkout path must not be taken"
