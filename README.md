@@ -188,9 +188,9 @@ termux-setup-storage   # once, so the picker can read /sdcard
 lfs                    # ← the command is `lfs`, not `start`
 ```
 
-`pipx` is installed by `pkg install pipx` if it is missing. The installer script
-also works, but it has to be read through the API rather than the raw file host
-(see [Installing from source](#installing-from-source)).
+`pipx` is installed by `pkg install pipx` if it is missing. `install.sh` also
+works, but while the repository is private it has to be read through the API
+rather than the raw file host (see [Installing from source](#installing-from-source)).
 
 If `lfs` is not found immediately, open a new session (the installer adds
 `~/.local/bin` to PATH). `start` is **not** installed — it collides with other
@@ -228,16 +228,19 @@ installer does **not**, because this repository is private: the file host
 including one for a file that exists. That 404 means "not readable without a
 token", not "wrong path".
 
-To run the installer anyway, read it through the API with an authenticated
-`gh`:
+To fetch it anyway, read it through the API with an authenticated `gh`:
 
 ```bash
-gh api "repos/Erawat4l/local-file-sharer/contents/install.sh?ref=arena/d7f4713b-local-file-sharer" \
-       -H "Accept: application/vnd.github.raw" | bash
+gh api "repos/Erawat4l/local-file-sharer/contents/install-lfs.py?ref=arena/d7f4713b-local-file-sharer" \
+       -H "Accept: application/vnd.github.raw" > install-lfs.py
+python3 install-lfs.py
 ```
 
-Setting the repository to public makes the plain `curl` form work as printed at
-the top of `install.sh`.
+(`install.sh` is the other installer — pip/pipx rather than a self-contained
+file. It is reachable the same way, replacing `install-lfs.py` in that command.)
+
+Setting the repository to public makes the plain `curl` form work, and then
+this file is all a new person needs.
 
 ### Windows
 
@@ -273,12 +276,15 @@ frozen build.
 ### From source
 
 ```bash
-git clone https://github.com/Erawat4l/local-file-sharer.git
+git clone -b arena/d7f4713b-local-file-sharer https://github.com/Erawat4l/local-file-sharer.git
 cd local-file-sharer
 python3 -m venv .venv && . .venv/bin/activate
 pip install -e ".[dev]"
 lfs --help
 ```
+
+The branch is not decoration: `main` still holds the initial commit only, so a
+plain clone gives you a README and nothing else.
 
 ---
 
