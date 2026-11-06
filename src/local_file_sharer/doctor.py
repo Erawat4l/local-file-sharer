@@ -379,6 +379,46 @@ def check_environment() -> list[Check]:
 
 
 # ── report ──────────────────────────────────────────────────────────────────
+def check_install_copies() -> list[Check]:
+    """More than one `lfs` on PATH, and which of them wins.
+
+    This is the single most confusing failure this app has: you upgrade, and
+    nothing changes, because a different copy answered the command. It is
+    invisible from inside the running process -- nothing the user sees says
+    "four lfs binaries are installed and the oldest is first". Report the
+    winner and the exact command that removes it.
+    """
+    from .updater import _first_on_path, find_duplicates  # noqa: PLC0415
+
+    try:
+        duplicates = find_duplicates()
+    except Exception:  # noqa: BLE001 - a diagnostic must never fail the report
+        return []
+    if not duplicates:
+        return [Check("copy", OK, "one lfs on PATH", "", "install")]
+
+    winner = _first_on_path()
+    checks: list[Check] = []
+    for item in duplicates:
+        runs_first = item["path"] == winner
+        how = (
+            "pipx uninstall local-file-sharer"
+            if item["kind"] == "pipx"
+            else f"rm {item['path']}"
+        )
+        checks.append(
+            Check(
+                name="copy" if not runs_first else "copy wins",
+                status=WARN if runs_first else INFO,
+                detail=f"{item['path']}  ({item['kind']}, "
+                + ("runs first)" if runs_first else "shadowed)"),
+                fix=how if runs_first else "",
+                group="install",
+            )
+        )
+    return checks
+
+
 def run_checks(
     *, config: Config | None = None, skip_tools: bool = False, skip_network: bool = False
 ) -> Report:
@@ -403,6 +443,8 @@ def run_checks(
     for check in check_config():
         report.add(check)
     for check in check_environment():
+        report.add(check)
+    for check in check_install_copies():
         report.add(check)
     return report
 

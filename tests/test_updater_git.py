@@ -482,3 +482,32 @@ def test_upgrade_uses_the_checkout_only_when_the_code_lives_in_it(monkeypatch):
     monkeypatch.setattr(updater, "detect_installer", lambda: "exe")
     updater.upgrade_from_git(None)
     assert "root" not in seen, "the checkout path must not be taken"
+
+
+# ── "did it actually change?" -- never assume yes ───────────────────────────
+def test_an_install_with_no_commit_is_not_reported_as_changed(monkeypatch):
+    """A pipx/editable/unpacked install records no commit.
+
+    upgrade_result used to answer "changed" whenever it could not read one,
+    so a pip run that installed nothing was reported as a successful upgrade.
+    """
+    monkeypatch.setattr(updater, "installed_commit", lambda: "")
+    monkeypatch.setattr(updater, "installed_stamp", lambda: ("", "1.0.0+build-a", "1.0.0"))
+    changed, _was, _now = updater.upgrade_result("", "main")
+    assert changed is False
+
+
+def test_a_new_build_stamp_proves_the_upgrade_landed(monkeypatch):
+    """The build stamp moves when the commit cannot."""
+    monkeypatch.setattr(updater, "installed_commit", lambda: "")
+    monkeypatch.setattr(updater, "installed_stamp", lambda: ("", "1.0.0+build-b", "1.0.0"))
+    changed, was, now = updater.upgrade_result("1.0.0+build-a", "main")
+    assert changed is True
+    assert was == "1.0.0+build-a" and now == "1.0.0+build-b"
+
+
+def test_a_commit_is_still_the_strongest_evidence(monkeypatch):
+    monkeypatch.setattr(updater, "installed_commit", lambda: "b" * 40)
+    monkeypatch.setattr(updater, "installed_stamp", lambda: ("b" * 40, "x", "1.0.0"))
+    assert updater.upgrade_result("a" * 40, "main")[0] is True
+    assert updater.upgrade_result("b" * 40, "main")[0] is False

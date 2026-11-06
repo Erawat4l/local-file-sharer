@@ -247,3 +247,97 @@ def test_tailscale_status_is_cached_between_menu_renders(monkeypatch):
     network.tailscale_status(fresh=True)
     assert len(calls) > after_first
     network._tailscale_cache = None
+
+
+# ── the "which lfs am I running" report ─────────────────────────────────────
+def test_doctor_names_the_copy_that_wins_path(monkeypatch):
+    """Four copies of lfs and the oldest first on PATH: this is why an upgrade
+    appears to do nothing, and nothing the app printed said so."""
+    from local_file_sharer import doctor
+
+    duplicates = [
+        {"name": "lfs", "path": "/usr/bin/lfs", "kind": "pip"},
+        {"name": "lfs", "path": "/home/bin/lfs", "kind": "pip"},
+    ]
+    monkeypatch.setattr("local_file_sharer.updater.find_duplicates", lambda: duplicates)
+    monkeypatch.setattr("local_file_sharer.updater._first_on_path", lambda: "/home/bin/lfs")
+
+    checks = doctor.check_install_copies()
+    winner = next(c for c in checks if c.status == "warn")
+    assert "/home/bin/lfs" in winner.detail
+    assert winner.fix == "rm /home/bin/lfs", "the fix must name the real command"
+    assert all(c.status in ("warn", "info") for c in checks)
+
+
+def test_doctor_is_clean_when_only_one_copy_exists(monkeypatch):
+    from local_file_sharer import doctor
+
+    monkeypatch.setattr("local_file_sharer.updater.find_duplicates", lambda: [])
+    checks = doctor.check_install_copies()
+    assert len(checks) == 1 and checks[0].status == "ok"
+
+
+def test_doctor_suggests_pipx_uninstall_for_a_pipx_copy(monkeypatch):
+    from local_file_sharer import doctor
+
+    duplicates = [{"name": "lfs", "path": "/home/.local/bin/lfs", "kind": "pipx"}]
+    monkeypatch.setattr("local_file_sharer.updater.find_duplicates", lambda: duplicates)
+    monkeypatch.setattr("local_file_sharer.updater._first_on_path", lambda: "/home/.local/bin/lfs")
+    check = next(c for c in doctor.check_install_copies() if c.status == "warn")
+    assert check.fix == "pipx uninstall local-file-sharer"
+
+
+# ── `lfs doctor --fix-copies` ───────────────────────────────────────────────
+def _shadow_setup(tmp_path, monkeypatch):
+    """Two fake lfs binaries; the *other* one wins PATH."""
+    winner = tmp_path / "bin" / "lfs"
+    loser = tmp_path / "other" / "lfs"
+    for path in (winner, loser):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("#!/bin/sh\n", encoding="utf-8")
+        path.chmod(0o755)
+    from local_file_sharer import updater
+
+    monkeypatch.setattr(
+        updater,
+        "find_duplicates",
+        lambda: [
+            {"name": "lfs", "path": str(winner), "kind": "pip"},
+            {"name": "lfs", "path": str(loser), "kind": "pip"},
+        ],
+    )
+    monkeypatch.setattr(updater, "_first_on_path", lambda: str(winner))
+    return winner, loser
+
+
+def test_fix_copies_removes_only_the_shadowing_binary(tmp_path, monkeypatch):
+    winner, loser = _shadow_setup(tmp_path, monkeypatch)
+    from local_file_sharer import updater
+
+    updater.remove_shadowing_copies()
+    assert not winner.exists(), "the shadowing copy should be gone"
+    assert loser.exists(), "the running copy must not be touched"
+
+
+def test_fix_copies_dry_run_changes_nothing(tmp_path, monkeypatch):
+    winner, loser = _shadow_setup(tmp_path, monkeypatch)
+    from local_file_sharer import updater
+
+    updater.remove_shadowing_copies(dry_run=True)
+    assert winner.exists() and loser.exists()
+
+
+def test_fix_copies_leaves_a_pipx_install_to_pipx(tmp_path, monkeypatch):
+    """Deleting a pipx launcher would leave a broken half-install behind."""
+    winner = tmp_path / "bin" / "lfs"
+    winner.parent.mkdir(parents=True)
+    winner.write_text("#!/bin/sh\n", encoding="utf-8")
+    from local_file_sharer import updater
+
+    monkeypatch.setattr(
+        updater, "find_duplicates", lambda: [{"name": "lfs", "path": str(winner), "kind": "pipx"}]
+    )
+    monkeypatch.setattr(updater, "_first_on_path", lambda: str(winner))
+    results = updater.remove_shadowing_copies()
+    assert winner.exists(), "a pipx copy must be removed with pipx, not unlink()"
+    assert any("pipx uninstall" in how for _p, how in results)

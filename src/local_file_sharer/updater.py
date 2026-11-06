@@ -141,17 +141,53 @@ def remote_commit(ref: str, *, timeout: float = 6.0) -> str:
         return ""
 
 
+def installed_stamp() -> tuple[str, str, str]:
+    """``(commit, build, version)`` for the copy that is installed.
+
+    The commit is the honest identity when it exists, but it only exists for a
+    ``pip install git+...``. A pipx git install, an editable checkout and an
+    unpacked ``install-lfs.py`` tree all leave it blank, which is exactly the
+    case where an update silently does nothing and is then reported as a
+    success. The build stamp changes on every UI change, so it is the fallback
+    that still moves.
+    """
+    commit = installed_commit()
+    build = ""
+    try:
+        import importlib.metadata as md  # noqa: PLC0415
+
+        build = md.version("local-file-sharer")
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        from . import BUILD_STAMP  # noqa: PLC0415
+
+        build = f"{build}+{BUILD_STAMP}" if build else BUILD_STAMP
+    except Exception:  # noqa: BLE001
+        pass
+    return commit, build, __version__
+
+
 def upgrade_result(before: str, ref: str) -> tuple[bool, str, str]:
     """Did the install really change? Returns ``(changed, was, now)``.
 
     pip can exit zero without installing anything (it did, for every upgrade
     after the first, because the version never changes). Comparing the recorded
-    commit before and after is the only honest check.
+    commit before and after is the only honest check -- but "no commit" is not
+    evidence of success, which is what this used to assume. When there is no
+    commit to compare, the build stamp decides; when neither is available the
+    answer is "cannot tell", and the caller says so instead of claiming an
+    upgrade happened.
     """
     now = installed_commit()
-    if not now:
-        return True, before, now  # nothing to compare: trust pip
-    return (now != before), before, now
+    if now:
+        return (now != before), before, now
+    # No commit: fall back to the build stamp, which changes whenever the
+    # shipped UI changes even though the version number does not.
+    _commit, build, _version = installed_stamp()
+    if before and build:
+        return (build != before), before, build
+    return False, before, build
 
 
 def resolve_ref(ref: str | None = None) -> tuple[str, str]:
@@ -387,6 +423,49 @@ def find_duplicates() -> list[dict[str, str]]:
     return found
 
 
+def remove_shadowing_copies(*, dry_run: bool = False) -> list[tuple[str, str]]:
+    """Remove the extra `lfs` binaries that win PATH over the running one.
+
+    Returns ``(path, result)`` pairs. Only copies that are *shadowing* are
+    touched: files nothing else points at, that are not the running binary.
+    A pipx or site-packages install is left alone -- those are removed with the
+    tool that made them, and deleting their launcher would leave a broken
+    half-install behind.
+    """
+    from rich.text import Text  # noqa: PLC0415
+
+    con = console()
+    winner = _first_on_path()
+    results: list[tuple[str, str]] = []
+    if not winner:
+        con.print("[lfs.success]✓[/] [lfs.muted]the lfs your shell runs is this one[/]")
+        return results
+    for item in find_duplicates():
+        path = Path(item["path"])
+        if item["path"] != winner:
+            continue
+        if item["kind"] == "pipx":
+            what = "pipx uninstall local-file-sharer"
+            results.append((str(path), what))
+            con.print(f"[lfs.warning]needs pipx[/]  [lfs.faint]{path}[/]")
+            con.print(f"[lfs.muted]  run[/] [lfs.primary]{what}[/]")
+            continue
+        if dry_run:
+            results.append((str(path), "would remove"))
+            con.print(f"[lfs.muted]would remove[/]  [lfs.faint]{path}[/]")
+            continue
+        try:
+            path.unlink()
+            results.append((str(path), "removed"))
+            con.print(Text(f" ✔ removed {path}", style="lfs.success"))
+        except OSError as exc:
+            results.append((str(path), f"failed: {exc}"))
+            con.print(f"[lfs.danger]✖ could not remove[/] [lfs.faint]{path}[/]  [lfs.muted]{exc}[/]")
+    if any(result == "removed" for _p, result in results):
+        con.print("[lfs.muted]open a new shell (or run[/] [lfs.primary]hash -r[/][lfs.muted]) and try again[/]")
+    return results
+
+
 def _first_on_path() -> str:
     """The `lfs` that a bare `lfs` in the shell would run."""
     mine = find_duplicates()
@@ -556,12 +635,37 @@ def upgrade_from_git(ref: str | None = None, *, verbose: bool = False) -> int:
         for item in clashes:
             mark = "  [lfs.warning](runs first)[/]" if item["path"] == first else ""
             con.print(f"  [lfs.faint]{item['path']}[/]  [lfs.muted]{item['kind']}[/]{mark}")
-        con.print(
-            "[lfs.muted]only this copy is upgraded. remove the other with[/] "
-            "[lfs.primary]pipx uninstall local-file-sharer[/] "
-            "[lfs.muted]or[/] [lfs.primary]pip uninstall local-file-sharer[/]"
-        )
+        # Name the command that removes the copy that actually wins. Telling
+        # someone "pip uninstall" while the shadowing copy is a pipx install,
+        # or a bare symlink in ~/bin, leaves them exactly where they started.
+        winner = next((item for item in clashes if item["path"] == first), None)
+        if winner is not None:
+            how = (
+                "pipx uninstall local-file-sharer"
+                if winner["kind"] == "pipx"
+                else f"rm {winner['path']}"
+            )
+            con.print(
+                f"[lfs.muted]the one that wins your PATH is[/] "
+                f"[lfs.primary]{winner['path']}[/]"
+            )
+            con.print(f"[lfs.muted]remove it with[/]  [lfs.primary]{how}[/]")
+            con.print(
+                "[lfs.muted]then[/]  [lfs.primary]hash -r[/]  "
+                "[lfs.muted](or open a new session) and run[/] [lfs.primary]lfs[/]"
+            )
+        else:
+            con.print(
+                "[lfs.muted]only this copy is upgraded. remove the other with[/] "
+                "[lfs.primary]pipx uninstall local-file-sharer[/] "
+                "[lfs.muted]or[/] [lfs.primary]pip uninstall local-file-sharer[/]"
+            )
+    # Record both identities: the commit when the install has one, and the
+    # build stamp when it does not. A pipx/editable/unpacked install has no
+    # commit, and comparing "nothing" against "nothing" used to report a
+    # successful upgrade that never installed anything.
     before = installed_commit()
+    stamp_before = installed_stamp()[1]
     wanted = remote_commit(target)
     if verbose:
         # Some failures are only diagnosable from git's own voice, so offer a
@@ -602,11 +706,26 @@ def upgrade_from_git(ref: str | None = None, *, verbose: bool = False) -> int:
         return code
     # pip exits 0 even when it installs nothing, so ask the record on disk what
     # actually landed. This is what catches the silent no-op for good.
-    changed, was, now = upgrade_result(before, target)
+    changed, was, now = upgrade_result(before or stamp_before, target)
     if not changed:
-        con.print("[lfs.warning]  nothing changed[/]  [lfs.muted]already on the newest code[/]")
-        if now:
-            con.print(f"[lfs.muted]at {now[:7]}  ({target})[/]")
+        # Two very different situations shared this branch: "already newest"
+        # and "pip said yes but nothing landed". Saying "already on the newest
+        # code" for the second is how a broken update stays invisible.
+        after_commit, after_stamp, _v = installed_stamp()
+        installed_now = after_commit or after_stamp
+        if installed_now and before and after_commit == before:
+            con.print("[lfs.warning]  nothing changed[/]  [lfs.muted]already on the newest code[/]")
+            con.print(f"[lfs.muted]at {before[:7]}  ({target})[/]")
+            return 0
+        if installed_now and stamp_before and after_stamp == stamp_before and not after_commit:
+            con.print("[lfs.warning]  nothing changed[/]  [lfs.muted]already on the newest code[/]")
+            con.print(f"[lfs.muted]build {after_stamp}[/]")
+            return 0
+        con.print("[lfs.warning]could not confirm the upgrade[/]")
+        con.print(
+            "[lfs.muted]pip reported success but nothing on disk proves it. Check with[/] "
+            "[lfs.primary]lfs --version[/] [lfs.muted]and the build stamp in the player header.[/]"
+        )
         return 0
     con.print("[lfs.success]  upgraded[/]  [lfs.muted]restart `lfs` to use the new code[/]")
     if now:

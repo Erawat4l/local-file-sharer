@@ -32,6 +32,7 @@ saturates your Wi-Fi. Works on **Termux/Android**, **Linux**, **macOS** and **Wi
   - [The three commands](#the-three-commands)
   - [One file (no git, no URL to type)](#one-file-no-git-no-url-to-type)
   - [Termux (Android)](#termux-android)
+  - [When `lfs` is not the copy you just upgraded](#when-lfs-is-not-the-copy-you-just-upgraded)
   - [Linux / macOS](#linux--macos)
   - [Windows](#windows)
   - [From source](#from-source)
@@ -197,10 +198,42 @@ pkg update && pkg upgrade
 pkg install --reinstall libexpat python
 ```
 
-**If `lfs` shows an older menu** than this README, a stale copy is earlier on
-your PATH — usually from an older install. `./run` always runs *this* checkout,
-so they can disagree. `./run install` links this checkout over the top and names
-the copy that was shadowing it.
+### When `lfs` is not the copy you just upgraded
+
+This is the most confusing failure the app has, and it is not rare: a device can
+end up with several `lfs` binaries, and the oldest one is usually first on
+`PATH`, so it answers every command. The symptoms look unrelated — an old menu,
+a subcommand that "does not exist", `lfs configure` doing something else
+entirely — because a *different program* is running.
+
+Ask which copy is which:
+
+```bash
+lfs doctor            # the INSTALL section names the winner
+```
+
+It looks like this when something is shadowing you:
+
+```
+INSTALL
+▲   copy wins  /data/data/com.termux/files/home/bin/lfs  (pip, runs first)
+•   copy       /data/data/com.termux/files/usr/bin/lfs   (pip, shadowed)
+    fix: rm /data/data/com.termux/files/home/bin/lfs
+```
+
+Remove the one that wins, in one command:
+
+```bash
+lfs doctor --fix-copies
+```
+
+It removes only copies that shadow this one, and leaves a `pipx` install alone
+(printing `pipx uninstall local-file-sharer` instead, since deleting a pipx
+launcher by hand leaves a broken half-install). Open a new shell afterwards, or
+run `hash -r`, so the shell forgets the old path.
+
+`lfs` also prints a one-line warning at startup when it detects this, so you are
+not left guessing. Silence it with `LFS_NO_COPY_WARNING=1`.
 
 ### One file (no git, no URL to type)
 
