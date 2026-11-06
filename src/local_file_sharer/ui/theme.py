@@ -171,13 +171,20 @@ def _greys(bright: bool) -> dict[str, str]:
         "primary": "bold bright_white" if bright else "bold black",
         "secondary": "grey93" if bright else "grey15",
         "muted": "grey58" if bright else "grey30",
-        "faint": "grey35" if bright else "grey50",
+        # Faint is for hints and rules only. The gif draws the description
+        # column at the same brightness as the names (#E4EBF1); grey35 made it
+        # look disabled, so this is near-white and the *muted* role carries the
+        # dimmer text.
+        "faint": "grey89" if bright else "grey50",
         "border": "grey37" if bright else "grey50",
         "border_soft": "grey27" if bright else "grey66",
-        "panel": "on grey7" if bright else "on grey88",
+        "panel": "on grey7" if bright else "on grey85",
         "surface": "on grey11" if bright else "on grey93",
-        "selection": "bold bright_white on grey23" if bright else "bold black on grey78",
-        "key": "bold bright_black on grey30" if bright else "bold white on grey42",
+        "selection": "bold bright_white on grey23" if bright else "bold black on grey82",
+        # The gif draws the key as plain grey text, not a filled chip: no
+        # background, so the gutter reads as a column of numbers rather than a
+        # row of buttons.
+        "key": "grey62" if bright else "grey39",
     }
 
 
@@ -198,8 +205,11 @@ def _build_dark(accent: str = "white") -> Theme:
     g = _greys(bright=True)
     return Theme(
         name="dark",
-        accent_name="white",
-        accent="bold bright_white",
+        # The gif's section headings and the ` LFS ` badge are cyan (#66E7F8),
+        # not white. The accent was white for a while, which made every heading
+        # look like ordinary body text.
+        accent_name="cyan",
+        accent="bold bright_cyan",
         accent_rgb=SUBTITLE_BLUE,
         primary=g["primary"],
         secondary=g["secondary"],

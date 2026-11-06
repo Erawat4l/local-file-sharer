@@ -165,7 +165,15 @@ lfs configure                     # optional: port, PIN, theme, download folder
 
 `./run` builds a private `.venv`, installs the package into it in editable
 mode, and starts the app — so the command above works even if the
-`pip install -r` and `lfs configure` lines are skipped. They exist for people
+`pip install -r` and `lfs configure` lines are skipped.
+
+If `lfs` behaves differently from `./run` — an older menu, or a command it says
+it does not have — an **older copy is earlier on your PATH**. `./run` always
+runs this checkout's `.venv/bin/lfs`, so they can disagree. Fix it with:
+
+```bash
+./run install     # links this checkout's lfs onto PATH, and names the stale one
+``` They exist for people
 who want the dependencies somewhere specific, or who want to set the port and
 PIN before the first launch.
 

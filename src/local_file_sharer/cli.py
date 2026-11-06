@@ -303,6 +303,54 @@ def _resolve_paths(raw: list[str]) -> list[Path]:
     return resolved
 
 
+#: Words people type as commands. A word in this set that is not a file on
+#: disk is far more likely a command this build lacks than a filename.
+_KNOWN_COMMANDS = frozenset(
+    {
+        "configure",
+        "setup",
+        "init",
+        "install",
+        "start",
+        "run",
+        "share",
+        "serve",
+        "send",
+        "receive",
+        "help",
+        "status",
+        "uninstall",
+    }
+)
+
+
+def _looks_like_a_command(word: str) -> bool:
+    return word.strip().lower() in _KNOWN_COMMANDS
+
+
+def _unknown_command(word: str) -> int:
+    """Explain an unknown bare word, including that the install may be old."""
+    from .ui.components import error_panel  # noqa: PLC0415
+    from .ui.console import console as make_console  # noqa: PLC0415
+    from .updater import installed_ref  # noqa: PLC0415
+
+    con = make_console()
+    con.print(
+        error_panel(
+            f"{word!r} is not a file here, and not a command in this build.",
+            title="Unknown command",
+            hints=[
+                "`lfs` on its own opens the menu — that is the usual entry point",
+                "`lfs --help` lists the commands this build has",
+                f"This copy reports ref {installed_ref() or 'unknown'}; if it is old:",
+                "    ./run upgrade      (from the checkout) or  lfs upgrade",
+                "Nothing was shared or changed",
+            ],
+        )
+    )
+    return 2
+
+
 def _print_version() -> None:
     """Version, interpreter — and where this copy came from.
 
@@ -671,6 +719,16 @@ def main(argv: list[str] | None = None) -> int:
 
             return run_update(check_only=args.check_update, yes=False)
         if args.paths:
+            # A bare word that is not a file is usually a command this build
+            # does not have -- an old install, most often. "Nothing to share"
+            # is a true and useless answer to that; name the real problem.
+            missing = [
+                word
+                for word in args.paths
+                if not Path(word).expanduser().exists() and _looks_like_a_command(word)
+            ]
+            if missing and len(missing) == len(args.paths):
+                return _unknown_command(missing[0])
             return cmd_share(cfg, state, args, _resolve_paths(args.paths))
         if args.mode:
             from .menu import run_menu
