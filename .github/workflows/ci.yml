@@ -50,6 +50,23 @@ jobs:
       - run: pip install ".[dev]"
       - name: pytest
         run: pytest -q --cov=local_file_sharer --cov-report=xml --cov-report=term-missing
+      # When this fails, the failing test names go into the job summary and an
+      # annotation. Without it the only copy is in the log blob, which is not
+      # always reachable -- and a red matrix you cannot read is a red matrix
+      # nobody fixes. Runs even when pytest fails, and never masks its status.
+      - name: failure summary
+        if: failure()
+        shell: bash
+        run: |
+          if [ -f .pytest_cache/v/cache/lastfailed ]; then
+            echo "### failing tests" >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            cat .pytest_cache/v/cache/lastfailed >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            echo "::error::failing tests: $(tr -d '\n' < .pytest_cache/v/cache/lastfailed | head -c 900)"
+          else
+            echo "::error::pytest failed before running any test (collection or install error)"
+          fi
       - name: upload coverage
         if: matrix.os == 'ubuntu-latest' && matrix.python == '3.12'
         uses: actions/upload-artifact@v4
