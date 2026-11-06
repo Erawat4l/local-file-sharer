@@ -310,13 +310,18 @@ def _shadow_setup(tmp_path, monkeypatch):
     return winner, loser
 
 
-def test_fix_copies_removes_only_the_shadowing_binary(tmp_path, monkeypatch):
+def test_fix_copies_removes_every_copy_that_is_not_this_one(tmp_path, monkeypatch):
+    """Both are stale relative to what is running, so both go.
+
+    Removing only the winner leaves the next one to take its place, which is
+    how a device ends up back here with the same confusing symptom.
+    """
     winner, loser = _shadow_setup(tmp_path, monkeypatch)
     from local_file_sharer import updater
 
     updater.remove_shadowing_copies()
     assert not winner.exists(), "the shadowing copy should be gone"
-    assert loser.exists(), "the running copy must not be touched"
+    assert not loser.exists(), "the other stale copy should go too"
 
 
 def test_fix_copies_dry_run_changes_nothing(tmp_path, monkeypatch):
@@ -341,3 +346,97 @@ def test_fix_copies_leaves_a_pipx_install_to_pipx(tmp_path, monkeypatch):
     results = updater.remove_shadowing_copies()
     assert winner.exists(), "a pipx copy must be removed with pipx, not unlink()"
     assert any("pipx uninstall" in how for _p, how in results)
+
+
+# ── a stalled download must not hang for ever ───────────────────────────────
+def test_a_silent_process_is_killed_by_the_stall_watchdog():
+    """`lfs update` sat at "0/5 contacting GitHub" with no deadline at all.
+
+    pip's output was read inline, and iterating stdout blocks: if the clone
+    stopped sending bytes there was nothing to time out and no message.
+    """
+    import time
+
+    from local_file_sharer.updater import run_with_progress
+
+    start = time.monotonic()
+    code, lines = run_with_progress(
+        ["python3", "-c", "import time; print('Cloning...', flush=True); time.sleep(30)"],
+        stall_timeout=1.5,
+    )
+    assert code == 124, "a stalled run must be reported as such"
+    assert time.monotonic() - start < 15, "the watchdog must not wait for the child"
+    assert any("stopped answering" in line for line in lines)
+
+
+def test_a_slow_but_progressing_process_is_not_killed():
+    """Silence means stalled; steady output means slow. Do not confuse them."""
+    from local_file_sharer.updater import run_with_progress
+
+    code, _lines = run_with_progress(
+        ["sh", "-c", "for i in 1 2 3 4; do echo \"step $i\"; sleep 0.6; done"],
+        stall_timeout=2.0,
+    )
+    assert code == 0
+
+
+def test_progress_output_and_exit_codes_still_flow_through():
+    from local_file_sharer.updater import run_with_progress
+
+    code, lines = run_with_progress(["sh", "-c", "echo 'Successfully installed x'"], stall_timeout=5)
+    assert code == 0 and lines == ["Successfully installed x"]
+    code, lines = run_with_progress(["sh", "-c", "echo 'boom'; exit 7"], stall_timeout=5)
+    assert code == 7 and lines == ["boom"]
+
+
+# ── a pipx copy must be recognised by its path, not just its text ───────────
+def test_a_pipx_venv_console_script_is_recognised(tmp_path):
+    """It has an ordinary Python shebang and no "pipx" in it at all, so the
+    old text-only check called it a pip install and advised `pip uninstall`."""
+    script = tmp_path / ".local/share/pipx/venvs/local-file-sharer/bin/lfs"
+    script.parent.mkdir(parents=True)
+    script.write_text("#!/usr/bin/python\nimport sys\n", encoding="utf-8")
+    from local_file_sharer.updater import is_pipx_install
+
+    assert is_pipx_install(str(script)) is True
+
+
+def test_a_shim_that_names_its_pipx_venv_is_recognised(tmp_path):
+    shim = tmp_path / "bin/local-file-sharer"
+    shim.parent.mkdir(parents=True)
+    shim.write_text(
+        "#!/bin/sh\nexec /home/u/.local/share/pipx/venvs/local-file-sharer/bin/lfs \"$@\"\n",
+        encoding="utf-8",
+    )
+    from local_file_sharer.updater import is_pipx_install
+
+    assert is_pipx_install(str(shim)) is True
+
+
+def test_a_plain_pip_script_is_not_called_pipx(tmp_path):
+    script = tmp_path / "lfs"
+    script.write_text("#!/usr/bin/python\nimport sys\n", encoding="utf-8")
+    from local_file_sharer.updater import is_pipx_install
+
+    assert is_pipx_install(str(script)) is False
+
+
+# ── clearing every stale copy, not just the winner ──────────────────────────
+def test_fix_copies_clears_all_of_them_not_only_the_winner(tmp_path, monkeypatch):
+    """Four copies is normal; removing one leaves the next in its place."""
+    bins = {}
+    for name in ("a", "b", "c"):
+        path = tmp_path / name / "lfs"
+        path.parent.mkdir(parents=True)
+        path.write_text("#!/bin/sh\n", encoding="utf-8")
+        bins[name] = path
+    from local_file_sharer import updater
+
+    monkeypatch.setattr(
+        updater,
+        "find_duplicates",
+        lambda: [{"name": "lfs", "path": str(p), "kind": "pip"} for p in bins.values()],
+    )
+    monkeypatch.setattr(updater, "_first_on_path", lambda: str(bins["a"]))
+    updater.remove_shadowing_copies()
+    assert not any(p.exists() for p in bins.values()), "every stale copy should go"
