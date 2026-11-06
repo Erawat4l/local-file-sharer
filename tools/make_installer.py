@@ -1,12 +1,11 @@
 """Build a single-file installer that carries the source inside it.
 
-The repository is private, so `pip install git+https://...` cannot work from a
-phone that has no GitHub credentials: git says "Repository not found", which
-reads like the repo does not exist. This script packs the tracked source into a
-gzipped tarball and wraps it in a small Python program, so installing needs
-nothing but the file itself.
+Cloning a private repository needs a credential the phone does not have, and
+retyping the owner name is a coin flip: it ends in a lowercase L that reads as
+a digit 1. `install-lfs.py` carries the whole checkout, so getting the app onto
+a device needs no git, no token and no URL.
 
-    python3 make_installer.py --version 1.0.0 --ref faafa94 --out install-lfs.py
+    python3 make_installer.py --version 1.0.0 --ref 7ad9764 --out install-lfs.py
 """
 
 from __future__ import annotations
@@ -127,36 +126,44 @@ def uninstall():
 
 
 def install():
-    say(f"\\n  {{BANNER}}  {{VERSION}}\\n")
+    """Unpack the checkout next to the user, then let ./setup build it.
+
+    The install deliberately lives in a plain directory rather than
+    site-packages: it is the same layout a `git clone` gives, so ./run, ./setup,
+    and `git pull` all work exactly as the documentation says.
+    """
+    say(f"\\n  {{BANNER}}  {{VERSION}}  ({{REF}})\\n")
     source = unpack()
-    say(f"  unpacked to {{source}}\\n")
 
-    if have("pipx"):
-        say("  installing with pipx (keeps it in its own environment)")
-        code = run(["pipx", "install", "--force", source])
-        if code == 0:
-            say("\\n  done. run: lfs\\n")
-            return 0
-        say("\\n  pipx failed, falling back to pip\\n")
+    target = os.environ.get("LFS_HOME") or os.path.join(os.path.expanduser("~"), "local-file-sharer")
+    if os.path.exists(os.path.join(target, "src")):
+        # Re-installing over a good checkout is refused rather than done: the
+        # user's config lives outside it, but a half-merged source tree would
+        # be worse than a clear message.
+        say(f"  already installed at {{target}}")
+        say("  upgrade it instead:  cd %s && ./run upgrade" % target)
+        return 0
+    if not os.path.exists(target):
+        shutil.move(source, target)
+    else:
+        # directory exists but empty: copy the contents across
+        for name in os.listdir(source):
+            shutil.move(os.path.join(source, name), os.path.join(target, name))
+        shutil.rmtree(source, ignore_errors=True)
 
-    # --user keeps it out of the system site-packages; PEP 668 distros block
-    # even that, so retry with the documented escape hatch before giving up.
-    attempts = [
-        [sys.executable, "-m", "pip", "install", "--user", "--upgrade", source],
-        [sys.executable, "-m", "pip", "install", "--upgrade", source],
-        [
-            sys.executable, "-m", "pip", "install", "--user", "--upgrade",
-            "--break-system-packages", source,
-        ],
-    ]
-    for cmd in attempts:
-        if run(cmd) == 0:
-            say("\\n  done. run: lfs")
-            say("  (if `lfs` is not found, add ~/.local/bin to PATH)")
-            say("\\n")
-            return 0
-    say("\\n  install failed. Send the output above.\\n")
-    return 1
+    say(f"  unpacked to {{target}}")
+    say("")
+    setup = os.path.join(target, "setup")
+    if os.access(setup, os.X_OK):
+        code = run([setup])
+        if code != 0:
+            say("\\n  ./setup failed — read its output above.\\n")
+            return code
+    say("")
+    say(f"  installed.  cd {{target}} && ./run")
+    say(f"  afterwards:  cd {{target}} && ./run upgrade")
+    say("")
+    return 0
 
 
 def main(argv):
