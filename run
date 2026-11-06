@@ -123,12 +123,22 @@ termux_install_pip() {
     is_termux || return 1
     [ -z "${LFS_NO_AUTOINSTALL:-}" ] || return 1
     command -v pkg >/dev/null 2>&1 || return 1
+    # Already there? `pkg install` succeeding is not proof the interpreter can
+    # see pip, so ask the interpreter. Reporting "pip installed" while pip is
+    # still missing is how this went round in circles before.
+    if system_has_pip; then
+        return 1
+    fi
     step "Termux keeps pip in a separate package — installing python-pip"
     if pkg install -y python-pip >"$SCRATCH"/pkg-out 2>&1; then
-        ok "pip installed"
-        return 0
+        if system_has_pip; then
+            ok "pip installed"
+            return 0
+        fi
+        warn "python-pip is installed, but this Python still cannot import pip"
+        return 1
     fi
-    warn "could not install it automatically:"
+    warn "could not install python-pip automatically:"
     tail -3 "$SCRATCH"/pkg-out 2>/dev/null | sed 's/^/    /' >&2 || true
     return 1
 }
@@ -138,13 +148,6 @@ termux_install_pip() {
 # unhelpful "No module named pip".
 venv_has_pip() {
     [ -x "$PY" ] && "$PY" -m pip --version >/dev/null 2>&1
-}
-
-# The venv module without ensurepip: Termux ships pip as a separate package and
-# has no ensurepip at all, so `python -m venv` makes a venv that cannot install
-# anything. --without-pip is what works there.
-venv_without_ensurepip() {
-    "$py" -c 'import sys, venv, ensurepip' >"$SCRATCH"/venv-probe 2>&1
 }
 
 # pip, but only reachable from outside the venv (system site-packages).
@@ -201,9 +204,10 @@ PYEOF
     return 1
 }
 
-# Every way of making a venv, most reliable first. Each attempt keeps its own
-# output so a total failure can show what actually went wrong instead of a
-# guess — the first version of this guessed, and guessed wrongly.
+# Every way of making a venv. Ordered so the normal case stays clean and fast:
+# a healthy Python gets an ordinary venv, and only a failure moves us down the
+# list. Each attempt appends to one log, so a total failure shows every real
+# error instead of a stock guess about which one it was.
 make_venv() {
     : >"$SCRATCH"/venv-out
 
@@ -212,21 +216,29 @@ make_venv() {
         "$@" >>"$SCRATCH"/venv-out 2>&1 && [ -x "$PY" ]
     }
 
-    if venv_without_ensurepip; then
-        try_venv "$py" -m venv "$VENV" && return 0
-    else
-        # No ensurepip: borrow pip from outside with --system-site-packages, so
-        # the venv can import it and install into itself.
-        if system_has_pip; then
-            warn "this Python has no ensurepip — borrowing its pip instead"
-            rm -rf "$VENV"
-            try_venv "$py" -m venv --without-pip --system-site-packages "$VENV" && return 0
-        fi
-        rm -rf "$VENV"
-        try_venv "$py" -m venv --without-pip "$VENV" && return 0
+    # 1. The ordinary venv. Fails on Termux, where `venv` calls ensurepip and
+    #    ensurepip exits 1 ("ensurepip ... returned non-zero exit status 1").
+    rm -rf "$VENV"
+    if try_venv "$py" -m venv "$VENV" && venv_has_pip; then
+        return 0
     fi
 
-    # virtualenv brings its own bootstrap and does not need ensurepip at all.
+    # 2. pip exists outside the venv: borrow it. The venv imports the system
+    #    pip and installs into its own site-packages.
+    if system_has_pip; then
+        rm -rf "$VENV"
+        if try_venv "$py" -m venv --without-pip --system-site-packages "$VENV" && venv_has_pip; then
+            return 0
+        fi
+    fi
+
+    # 3. No pip anywhere: make a bare venv; setup() bootstraps pip into it.
+    rm -rf "$VENV"
+    if try_venv "$py" -m venv --without-pip "$VENV"; then
+        return 0
+    fi
+
+    # 4. virtualenv carries its own wheels and never touches ensurepip.
     if command -v virtualenv >/dev/null 2>&1; then
         rm -rf "$VENV"
         try_venv virtualenv --no-download "$VENV" && return 0
@@ -253,15 +265,24 @@ setup() {
             if termux_install_pip && make_venv; then
                 :
             else
-                msg=$(tail -n 6 "$SCRATCH"/venv-out 2>/dev/null || true)
-                rm -f "$SCRATCH"/venv-probe
+                msg=$(tail -n 8 "$SCRATCH"/venv-out 2>/dev/null || true)
                 {
                     printf '%s\n' "could not create .venv — the attempts made were:"
                     printf '%s\n' "$msg" | sed 's/^/    /'
                     printf '\n'
                     if is_termux; then
-                        printf '%s\n' "  Termux keeps pip in its own package:"
-                        printf '%s\n' "      pkg install python-pip"
+                        # Only offer the package if this interpreter cannot
+                        # already see pip: telling someone to install what they
+                        # just installed is the loop this got stuck in.
+                        if system_has_pip; then
+                            printf '%s\n' "  pip is installed but unusable. Either:"
+                            printf '%s\n' "      pkg install --reinstall python-pip"
+                            printf '%s\n' "  or bypass ensurepip entirely:"
+                            printf '%s\n' "      pkg install virtualenv"
+                        else
+                            printf '%s\n' "  Termux keeps pip in its own package:"
+                            printf '%s\n' "      pkg install python-pip"
+                        fi
                         printf '%s\n' "  then:"
                         printf '%s\n' "      rm -rf .venv && ./run"
                     else
@@ -292,14 +313,13 @@ setup() {
             fi
         fi
         if ! venv_has_pip; then
-            msg=$(tail -n 6 "$SCRATCH"/bootstrap 2>/dev/null || true)
+            msg=$(tail -n 8 "$SCRATCH"/bootstrap 2>/dev/null || true)
             {
                 printf '%s\n' "the virtualenv has no pip and it could not be bootstrapped."
                 printf '%s\n' "$msg" | sed 's/^/    /'
                 if is_termux; then
-                    printf '%s\n' "  Termux keeps pip in its own package:"
-                    printf '%s\n' "      pkg install python-pip"
-                    printf '%s\n' "  then:  rm -rf .venv && ./run"
+                    printf '%s\n' "  try:  pkg install python-pip virtualenv"
+                    printf '%s\n' "  then: rm -rf .venv && ./run"
                 fi
             } >&2
             exit 1
