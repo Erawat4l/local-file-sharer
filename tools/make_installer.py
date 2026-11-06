@@ -23,6 +23,9 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 #: Nothing here is needed to run the app, and the screenshots alone are 2.3 MB.
 SKIP_DIRS = {"docs", "tests", ".github", ".git", "build", "dist"}
 SKIP_SUFFIXES = {".png", ".gif", ".jpg", ".jpeg", ".webp"}
+# The built installer is tracked at the repo root, so without this it would
+# bundle its previous self and double in size on every rebuild.
+SKIP_FILES = {"install-lfs.py"}
 
 
 def collect(root: pathlib.Path) -> bytes:
@@ -40,6 +43,8 @@ def collect(root: pathlib.Path) -> bytes:
             path = root / name
             parts = pathlib.PurePosixPath(name).parts
             if not path.is_file() or parts[0] in SKIP_DIRS:
+                continue
+            if name in SKIP_FILES:
                 continue
             if path.suffix.lower() in SKIP_SUFFIXES:
                 continue
@@ -141,7 +146,7 @@ def install():
         # user's config lives outside it, but a half-merged source tree would
         # be worse than a clear message.
         say(f"  already installed at {{target}}")
-        say("  upgrade it instead:  cd %s && ./run upgrade" % target)
+        say(f"  upgrade it instead:  cd {{target}} && ./run upgrade")
         return 0
     if not os.path.exists(target):
         shutil.move(source, target)
