@@ -462,3 +462,84 @@ def test_reset_clears_the_speed_history():
     tracker.reset()
     assert tracker.speed() == 0.0
     assert tracker.bytes_sent == 0
+
+
+def test_dashboard_fits_a_short_termux_window(monkeypatch):
+    """The panel must never be taller than the window.
+
+    A panel that does not fit makes rich scroll instead of repaint, so a phone
+    with a short window showed a stack of half-cut dashboards that nobody can
+    scroll back through. Every size from a tiny window up must fit.
+    """
+    import io
+
+    from rich.console import Console
+
+    from local_file_sharer.ui.dashboard import DashboardOptions, render_dashboard
+
+    tracker = TransferTracker()
+    tracker.start_file("ALL OG COLLECTION.zip", "ALL OG COLLECTION.zip", 3_600_000_000)
+    tracker.add_bytes(991_000_000, file_id="ALL OG COLLECTION.zip")
+    tracker.register_request("10.0.0.5", "Android", path="/f/x")
+
+    options = DashboardOptions(
+        title="serve · 3.6 GB",
+        footer="press Ctrl+C to stop",
+        links=[("LAN", "http://10.0.0.5:8080/")],
+        show_devices=True,
+    )
+    for height in (10, 12, 15, 18, 24, 40):
+        buf = io.StringIO()
+        con = Console(width=66, height=height, file=buf, legacy_windows=False, force_terminal=False)
+        monkeypatch.setattr("local_file_sharer.ui.dashboard.screen_height", lambda default=20, h=height: h)
+        con.print(render_dashboard(tracker, options))
+        rows = buf.getvalue().count("\n")
+        assert rows <= height, f"panel is {rows} rows in a {height}-row window"
+
+
+def test_progress_ignores_finished_files():
+    """Old downloads must not drag the percentage down.
+
+    The browser tracks the file it is fetching; the dashboard used to sum every
+    file ever requested, so it reported 42% while the browser said 98%.
+    """
+    tracker = TransferTracker()
+    tracker.start_file("old.mkv", "old.mkv", 1_000_000_000)
+    tracker.add_bytes(1_000_000_000, file_id="old.mkv")
+    tracker.finish_file("old.mkv")
+    tracker.start_file("new.zip", "new.zip", 100 * 1024 * 1024)
+    tracker.add_bytes(98 * 1024 * 1024, file_id="new.zip")
+    sent, total = tracker.progress()
+    assert total == 100 * 1024 * 1024
+    assert round(sent / total * 100) == 98
+
+
+def test_parallel_ranges_of_one_file_do_not_reset_progress():
+    """Sixteen range requests are sixteen requests for ONE file.
+
+    Each used to re-register the file with sent=0, so the dashboard's
+    percentage restarted constantly and never matched the browser.
+    """
+    tracker = TransferTracker()
+    size, parts = 3_600_000_000, 16
+    chunk = size // parts
+    key = "ALL OG COLLECTION.zip"
+    for i in range(parts):
+        tracker.start_file(key, key, size)  # every range starts the file
+        if i < 4:
+            tracker.add_bytes(chunk, file_id=key)  # ...and four complete
+            tracker.finish_file(key)
+    sent, total = tracker.progress()
+    assert total == size, "total must stay one file, not sixteen"
+    assert round(sent / total * 100) == 25
+
+
+def test_a_quiet_device_still_counts_as_connected():
+    """A device sending 16 streams goes silent between ranges; it is not gone."""
+    tracker = TransferTracker()
+    device = tracker.register_request("10.0.0.5", "Android", path="/f/x")
+    assert tracker.snapshot()["device_count"] == 1
+    device.last_seen -= 30  # half a minute of silence, mid-download
+    assert tracker.snapshot()["device_count"] == 1
+    device.last_seen -= 120  # really gone
+    assert tracker.snapshot()["device_count"] == 0

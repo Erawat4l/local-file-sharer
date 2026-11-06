@@ -293,6 +293,12 @@ class ShareRequestHandler(BaseHTTPRequestHandler):
         self.send_text(status, body, content_type="text/html; charset=utf-8")
 
     def send_html(self, body: str, *, status: int = 200, retry_after: float | None = None) -> None:
+        # A template placeholder that nobody replaced is shipped to the user as
+        # literal "{{pager}}" text on the page. That happened once because a
+        # placeholder was added to a template before the handler knew about it.
+        # Rendering it blank is far better than publishing it.
+        if "{{" in body:
+            body = _PLACEHOLDER_RE.sub("", body)
         payload = body.encode("utf-8")
         self.send_response(status)
         self.send_common_headers(content_type="text/html; charset=utf-8", length=len(payload))
@@ -1419,6 +1425,9 @@ def _pager_html(page: int, pages: int, total: int, *, base: str) -> str:
         f'<span class="muted"> · {total} items</span></span>{next_link}</nav>'
     )
 
+
+#: ``{{name}}`` placeholders in the page templates.
+_PLACEHOLDER_RE = re.compile(r"\{\{[a-z_]+\}\}")
 
 #: How many cards one page shows. A 17,000-file share used to render 17,000
 #: cards in one response (~9 MB of HTML, tens of thousands of DOM nodes), which

@@ -15,11 +15,14 @@ from collections import deque
 from dataclasses import dataclass, field
 
 SAMPLE_WINDOW = 30  # seconds of samples kept
-DEVICE_TIMEOUT = 20.0  # seconds before a quiet device is dropped
+DEVICE_TIMEOUT = 45.0  # seconds before a quiet-but-connected device is dropped
 MIN_SAMPLE_INTERVAL = 0.2
 #: Nothing on a phone's Wi-Fi or USB link exceeds this; a larger reading is an
 #: artefact of dividing by a too-small time span, not a real transfer.
 MAX_PLAUSIBLE_SPEED = 400 * 1024 * 1024
+#: After this many seconds with no new bytes, the speed is reported as zero
+#: rather than holding the last value.
+STALE_AFTER = 4.0
 
 
 @dataclass
@@ -123,19 +126,37 @@ class TransferTracker:
             self.errors += 1
 
     def start_file(self, file_id: str, name: str, total: int) -> None:
+        """Register a transfer, keeping any progress already made on it.
+
+        A ranged download issues one request per range, and every one of them
+        calls this for the same file. Overwriting the record reset ``sent`` to
+        zero each time, so the dashboard's percentage restarted constantly while
+        sixteen streams fought over it — the browser showed 98% and Termux
+        showed 42%. Requests are counted separately so ranges do not inflate it.
+        """
         with self._lock:
-            self.files[file_id] = {
-                "name": name,
-                "sent": 0,
-                "total": total,
-                "started": time.time(),
-            }
+            record = self.files.get(file_id)
+            if record is None:
+                self.files[file_id] = {
+                    "name": name,
+                    "sent": 0,
+                    "total": total,
+                    "started": time.time(),
+                    "requests": 1,
+                }
+                return
+            record["name"] = name
+            record["total"] = total
+            record["requests"] = int(record.get("requests", 0)) + 1
+            record.pop("finished", None)
 
     def finish_file(self, file_id: str) -> None:
         with self._lock:
             record = self.files.get(file_id)
             if record is not None:
-                record["finished"] = time.time()
+                record["requests"] = max(0, int(record.get("requests", 1)) - 1)
+                if record["requests"] <= 0:
+                    record["finished"] = time.time()
 
     def _sample_locked(self, delta: int) -> None:
         """Record a running total of bytes sent.
@@ -175,6 +196,12 @@ class TransferTracker:
                 base_ts, base_bytes = ts, total
                 break
         latest_ts, latest_bytes = self._samples[-1]
+        # No bytes have arrived for a while: the transfer is over (or stalled),
+        # so the honest answer is zero. Without this the last measured value was
+        # held forever and the dashboard showed "304 MB/s" long after the file
+        # had finished, which reads as a download that never ends.
+        if now - latest_ts > STALE_AFTER:
+            return 0.0
         elapsed = latest_ts - base_ts
         if elapsed < 0.01:
             # Two samples closer together than a clock tick. Dividing by that
@@ -209,17 +236,35 @@ class TransferTracker:
             return self.bytes_sent / elapsed
 
     def active_devices(self, *, timeout: float = DEVICE_TIMEOUT) -> list[Device]:
+        """Devices seen recently, newest first.
+
+        A device counts as present while it is quiet, not only while it is
+        sending bytes: a 16-stream download sends nothing between ranges, and a
+        browser fetching one file makes no other requests at all. The status
+        line used to drop to "0 devices" mid-transfer, which reads as "nobody is
+        connected" even though 26 requests had arrived.
+        """
         now = time.time()
         with self._lock:
-            for key in [k for k, d in self.devices.items() if now - d.last_seen > timeout]:
-                self.devices.pop(key, None)
+            for key, device in list(self.devices.items()):
+                if now - device.last_seen > max(timeout, DEVICE_TIMEOUT):
+                    self.devices.pop(key, None)
             return sorted(self.devices.values(), key=lambda d: -d.last_seen)
 
     def progress(self) -> tuple[int, int]:
-        """``(sent, total)`` across currently active files."""
+        """``(sent, total)`` across transfers that are still running.
+
+        Finished files are excluded. Leaving them in made the percentage sag
+        further behind reality with every completed download or retry: the
+        browser, which only knows about the file it is fetching, showed 98%
+        while this showed 42%.
+        """
         with self._lock:
-            sent = sum(int(f.get("sent", 0)) for f in self.files.values())
-            total = sum(int(f.get("total", 0)) for f in self.files.values())
+            active = [f for f in self.files.values() if not f.get("finished") and int(f.get("total", 0))]
+            if not active:
+                return 0, 0
+            sent = sum(min(int(f.get("sent", 0)), int(f.get("total", 0))) for f in active)
+            total = sum(int(f.get("total", 0)) for f in active)
             return sent, total
 
     def eta(self) -> float | None:

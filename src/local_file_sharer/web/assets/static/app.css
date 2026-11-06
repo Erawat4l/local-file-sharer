@@ -35,6 +35,9 @@ html {
   margin: 0;
   padding: 0;
   height: auto;
+  /* explicit: the document is the scroller, which is what touch drags act on */
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
   background: var(--bg);
   -webkit-text-size-adjust: 100%;
   scrollbar-color: var(--line-strong) var(--bg);
@@ -43,10 +46,13 @@ body {
   margin: 0;
   padding: 0;
   min-height: 100dvh;
-  overflow-x: hidden;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
-  overscroll-behavior-y: auto;
+  /* Do NOT scroll the body. Making <body> its own scroll container (with a
+     min-height and overflow-y:auto) is the classic way to break touch
+     scrolling on Android: the page has a 100dvh box that never moves, so a
+     drag has nothing to scroll and only the inner content shifts. The document
+     itself scrolls instead; overflow-x is clipped rather than hidden so a wide
+     child can never turn the whole page into a sideways canvas. */
+  overflow-x: clip;
   background: var(--bg);
   color: var(--text);
   font-family: var(--font);

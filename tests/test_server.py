@@ -1044,3 +1044,70 @@ def test_file_rows_carry_their_own_download_target(tmp_path, free_port):
         assert 'download="holiday.jpg"' in body
     finally:
         server.stop()
+
+
+def test_no_template_placeholder_ever_reaches_the_browser(tmp_path, free_port):
+    """A raw "{{pager}}" appeared on the page once. It must be impossible now."""
+    root = tmp_path / "ph"
+    root.mkdir()
+    for i in range(70):
+        (root / f"f{i:02d}.txt").write_text("x", encoding="utf-8")
+    server = ShareServer(Manifest.build([root]), host="127.0.0.1", port=free_port)
+    server.start()
+    assert server.wait_until_ready(timeout=5)
+    try:
+        for path in ("/", "/?p=2", "/browse", "/download/all.zip"):
+            try:
+                body = get(server, path).read()
+            except urllib.error.HTTPError:
+                continue
+            if path.endswith(".zip"):
+                continue
+            assert b"{{" not in body, f"unresolved placeholder on {path}"
+    finally:
+        server.stop()
+
+
+def test_a_placeholder_with_no_handler_is_blanked(tmp_path, free_port):
+    """Even a template placeholder nobody filled in must not reach the user."""
+    root = tmp_path / "ph2"
+    root.mkdir()
+    (root / "a.txt").write_text("x", encoding="utf-8")
+    server = ShareServer(Manifest.build([root]), host="127.0.0.1", port=free_port)
+    server.start()
+    server.wait_until_ready(timeout=5)
+    try:
+        from local_file_sharer.transfer.http_handler import _PLACEHOLDER_RE
+
+        assert _PLACEHOLDER_RE.sub("", "<p>{{pager}}</p><p>{{not_a_real_tag}}</p>") == "<p></p><p></p>"
+        assert _PLACEHOLDER_RE.sub("", "<p>keep 2 {{braces}} trimmed</p>") == "<p>keep 2  trimmed</p>"
+    finally:
+        server.stop()
+
+
+def test_the_page_scrolls_the_document_not_the_body(server):
+    """Scrolling is the document's job — a scrolling <body> breaks touch drags.
+
+    "I cant scroll on the page" on Android: a body with min-height:100dvh and
+    overflow-y:auto becomes its own scroll container that never moves, so a
+    finger drag has nothing to grab. The CSS must leave the document as the
+    scroller.
+    """
+    css = get(server, "/static/app.css").read().decode()
+    body_block = re.search(r"\nbody\s*\{(.*?)\}", css, re.S).group(1)
+    assert "overflow-y" not in body_block or "overflow-y: auto" not in body_block, (
+        "body must not be a scroll container"
+    )
+    html_block = re.search(r"\nhtml\s*\{(.*?)\}", css, re.S).group(1)
+    assert "overflow-y: auto" in html_block
+    assert "-webkit-overflow-scrolling: touch" in html_block
+
+
+def test_the_player_also_scrolls_the_document():
+    """The player has its own inline CSS and had the same body-scroll trap."""
+    from local_file_sharer.transfer.server import load_assets
+
+    player = load_assets()["player.html"]
+    assert "body{min-height:100dvh;overflow-y:auto" not in player, "body must not scroll"
+    assert "html{overflow-y:auto" in player
+    assert "-webkit-overflow-scrolling:touch" in player

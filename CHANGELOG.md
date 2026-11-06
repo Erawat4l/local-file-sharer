@@ -9,6 +9,40 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Fixed
 
+- **The Termux dashboard no longer stacks.** A panel taller than the window made
+  rich scroll instead of repaint, so a short Termux window filled with
+  half-cut copies of the dashboard — cut-off progress bars, repeated headers and
+  no footer. The panel is now built against a real row budget: sections are
+  added only while they fit, the order of sacrifice is fixed (transfers, then
+  links, then the device table, then the footer), and `vertical_overflow` is
+  `crop` so nothing can spill. Checked in a VT100 emulator at 12, 15, 18, 24 and
+  40 rows: exactly one header, bottom border always visible.
+- **The dashboard is readable on a phone-width terminal.** The stats row was
+  four fixed columns, so a 60-column window showed `sent …` and `eta 2…`.
+  Narrow windows now drop the peak and goal columns instead of truncating all
+  of them. Every width from 52 to 120 renders with no line over the edge.
+- **`{{pager}}` can no longer reach a browser.** A template placeholder that
+  nobody substituted is now blanked at send time, so a missed substitution shows
+  as an empty slot rather than literal template syntax on the page.
+- **The progress figure matches the browser.** `start_file` re-registered the
+  file on every request, so the sixteen range requests of one download kept
+  resetting `sent` to zero and fighting each other — the browser said 98% while
+  the dashboard said 42%. Progress is now kept across ranges and counted once
+  per file, and finished files no longer drag the percentage down.
+- **A connected device is not dropped for being quiet.** A 16-stream download
+  sends nothing between ranges and a browser fetching one file makes no other
+  requests, so the status line fell to "0 devices" mid-transfer even though the
+  request count was climbing. The idle window is 45 s and is measured from
+  every request, not only from bytes.
+- **The speed readout stops when the transfer does.** After a download
+  finished, the last measured value was held forever, so the dashboard showed a
+  frozen "304 MB/s" next to a completed file — which reads as a transfer that
+  never ends. Speed is reported as zero after 4 s without new bytes.
+- **The page scrolls on Android.** `body` was given `min-height:100dvh` plus
+  `overflow-y:auto`, which makes the body its own scroll container that never
+  moves; a finger drag then has nothing to grab. The document scrolls now, on
+  both the listing and the player, and `overflow-x: clip` keeps a wide child
+  from turning the page into a sideways canvas.
 - **Downloading a folder no longer saves an HTML page.** "Download selected"
   fetched each row's `href`, and on a folder listing that href is the browse
   page — so selecting three folders saved `Camera.html`, `Screenshots.html` and

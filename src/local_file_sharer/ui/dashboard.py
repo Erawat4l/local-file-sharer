@@ -22,7 +22,7 @@ from rich.text import Text
 
 from ..fmt import bar, human_count, human_size, human_speed, human_time, percent
 from ..transfer.stats import TransferTracker
-from .console import console, current_theme, screen_width
+from .console import console, current_theme, screen_height, screen_width
 from .theme import Theme
 
 SPEED_GOAL = 50 * 1024 * 1024  # the "50 MB/s or more" target on same Wi-Fi
@@ -40,11 +40,13 @@ class DashboardOptions:
     goal: int = SPEED_GOAL
 
 
-def _speed_badge(speed: float, goal: int, theme: Theme) -> Text:
+def _speed_badge(speed: float, goal: int, theme: Theme, *, show_goal: bool = True) -> Text:
     text = Text()
     text.append(human_speed(speed), style=f"bold {theme.success if speed >= goal else theme.accent}")
+    if not show_goal:
+        return text
     if speed >= goal:
-        text.append("  🚀 at target", style=theme.success)
+        text.append("  at target", style=theme.success)
     elif speed > 0:
         text.append(f"  ({int(speed / goal * 100)}% of {human_speed(goal)})", style=theme.faint)
     return text
@@ -75,6 +77,18 @@ def _device_table(tracker: TransferTracker, theme: Theme) -> Table:
             f"{state} · {device.current_file or '—'}",
         )
     return table
+
+
+def _progress_line(tracker, total: int, done: int, theme: Theme, width: int) -> Text:  # noqa: ANN001
+    """The big overall progress bar, or an empty track before anything starts."""
+    if total:
+        ratio = percent(done, total)
+        return Text.assemble(
+            (bar(done, total, max(10, width - 34)), theme.accent),
+            (f"  {ratio:5.1f}%", theme.primary),
+            (f"  {human_size(done)} / {human_size(total)}", theme.muted),
+        )
+    return Text(bar(0, 1, max(10, width - 34)), style=theme.faint)
 
 
 def _file_progress(tracker: TransferTracker, theme: Theme, limit: int, width: int) -> RenderableType:
@@ -128,43 +142,67 @@ def render_dashboard(tracker: TransferTracker, options: DashboardOptions) -> Ren
         right.append(f" · {snapshot['errors']} errors", style=theme.warning)
     header.add_row(left, right)
 
-    stats = Table.grid(padding=(0, 3))
-    stats.add_column(no_wrap=True)
-    stats.add_column(no_wrap=True)
-    stats.add_column(no_wrap=True)
-    stats.add_column(no_wrap=True)
-    stats.add_row(
-        Text.assemble(("speed  ", theme.faint), _speed_badge(speed, options.goal, theme)),
+    # Four fixed columns do not fit a phone-width terminal: values were cut to
+    # "sent  …" and "eta  2…". A narrow window drops the least useful columns
+    # instead of truncating all of them.
+    show_peak = width >= 72
+    show_goal = width >= 56
+    stats = Table.grid(padding=(0, 3 if width >= 72 else 2))
+    for _ in range(3 + (1 if show_peak else 0)):
+        stats.add_column(no_wrap=True)
+    row: list[RenderableType] = [
+        Text.assemble(
+            ("speed  ", theme.faint),
+            _speed_badge(speed, options.goal, theme, show_goal=show_goal),
+        ),
         Text.assemble(("sent  ", theme.faint), (human_size(sent), theme.success)),
         Text.assemble(("eta  ", theme.faint), (human_time(eta) if eta else "—", theme.accent)),
-        Text.assemble(
-            ("peak  ", theme.faint),
-            (human_speed(snapshot["peak_speed"]) if snapshot["peak_speed"] else "—", theme.muted),
-        ),
-    )
-
-    parts: list[RenderableType] = [header, Text("")]
-    if total:
-        ratio = percent(done, total)
-        parts.append(
+    ]
+    if show_peak:
+        row.append(
             Text.assemble(
-                (bar(done, total, max(10, width - 34)), theme.accent),
-                (f"  {ratio:5.1f}%", theme.primary),
-                (f"  {human_size(done)} / {human_size(total)}", theme.muted),
+                ("peak  ", theme.faint),
+                (human_speed(snapshot["peak_speed"]) if snapshot["peak_speed"] else "—", theme.muted),
             )
         )
-    else:
-        parts.append(Text(bar(0, 1, max(10, width - 34)), style=theme.faint))
+    stats.add_row(*row)
+
+    # The panel must fit the window, or every refresh scrolls it: a short
+    # Termux window then shows stacked, half-cut dashboards instead of one live
+    # one. Rows are counted for real — the border takes two, and each optional
+    # section is only added while its full cost still fits.
+    window = screen_height(20)
+    budget = window - 3  # border (2) + one row so the shell never scrolls
+
+    parts: list[RenderableType] = [header, Text("")]  # header + blank
+    budget -= 2
+    parts.append(_progress_line(tracker, total, done, theme, width))  # bar
+    budget -= 1
     parts.append(Text(""))
     parts.append(stats)
-    parts.append(Text(""))
-    parts.append(Text("Active transfers", style=theme.primary))
-    parts.append(_file_progress(tracker, theme, options.max_file_rows, width))
-    if options.show_devices:
+    budget -= 2
+
+    transfer_rows = len([f for f in snapshot["files"] if f["total"]])
+    device_rows = (min(len(tracker.active_devices()), 6) or 1) + 1  # + header
+    footer = 2 if options.footer else 0
+    links = (len(options.links) + 2) if options.links else 0
+
+    # priority: live transfer, then links, then the device table, then the footer
+    show_transfers = budget >= 3
+    if show_transfers:
+        shown = max(1, min(transfer_rows or 1, budget - 2))
+        parts.append(Text("", style=theme.faint))
+        parts.append(Text("Active transfers", style=theme.primary))
+        parts.append(_file_progress(tracker, theme, shown, width))
+        budget -= 2 + shown
+    show_links = bool(options.links) and budget >= links
+    show_devices = options.show_devices and budget >= device_rows + (links if show_links else 0) + 1
+    if show_devices:
         parts.append(Text(""))
         parts.append(Text("Connected devices", style=theme.primary))
         parts.append(_device_table(tracker, theme))
-    if options.links:
+        budget -= 1 + device_rows
+    if show_links:
         parts.append(Text(""))
         parts.append(Text("Links", style=theme.primary))
         link_grid = Table.grid(padding=(0, 1))
@@ -173,7 +211,8 @@ def render_dashboard(tracker: TransferTracker, options: DashboardOptions) -> Ren
         for label, url in options.links:
             link_grid.add_row(f"{label}", url)
         parts.append(link_grid)
-    if options.footer:
+        budget -= links
+    if options.footer and budget >= footer:
         parts.append(Text(""))
         parts.append(Text(options.footer, style=theme.faint))
     return Panel(
@@ -204,7 +243,10 @@ class Dashboard:
                 console=con,
                 refresh_per_second=max(2, int(1 / max(0.1, self.options.refresh))),
                 transient=False,
-                vertical_overflow="visible",
+                # "crop" keeps the drawing inside the window. "visible" let a
+                # too-tall panel spill, and each refresh then appended another
+                # copy instead of repainting — the stacked dashboards.
+                vertical_overflow="crop",
             )
             self._live.__enter__()
             self._thread = threading.Thread(target=self._loop_live, daemon=True, name="lfs-dashboard")
