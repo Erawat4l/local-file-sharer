@@ -47,7 +47,7 @@ cd "$HERE" || exit 1
 VENV="$HERE/.venv"
 PY="$VENV/bin/python"
 LFS="$VENV/bin/lfs"
-BRANCH="${LFS_BRANCH:-arena/d7f4713b-local-file-sharer}"
+BRANCH="${LFS_BRANCH:-main}"
 OWNER="Erawat4l"          # ends with a lowercase L, not a digit
 REPO="local-file-sharer"
 

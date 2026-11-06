@@ -39,11 +39,9 @@ REPOSITORY_PAGE = f"https://github.com/{REPO_SLUG}"
 #: Where a non-PyPI install comes from. The package is not published, so every
 #: upgrade has to name the repository and (optionally) the branch it came from.
 GIT_URL = f"https://github.com/{REPO_SLUG}.git"
-#: ``main`` is not (yet) a Python project — it holds only a stub README — so
-#: installing from it fails with "neither 'setup.py' nor 'pyproject.toml'
-#: found". This is the branch that actually carries the package, and the one
-#: `lfs upgrade` falls back to when the current ref has nothing installable.
-DEFAULT_BRANCH = "arena/d7f4713b-local-file-sharer"
+#: The release branch, and the ref `lfs upgrade` falls back to when the current
+#: one has nothing installable.
+DEFAULT_BRANCH = "main"
 #: Refs to try, in order, when no explicit ``--ref`` was given.
 BRANCH_CANDIDATES = (DEFAULT_BRANCH,)
 
@@ -87,10 +85,10 @@ def git_spec(ref: str | None = None) -> str:
 def ref_has_package(ref: str, *, timeout: float = 6.0) -> bool:
     """Does *ref* contain a ``pyproject.toml``?
 
-    ``main`` in this repository is a 19-byte README, so installing from it
-    fails deep inside pip with "does not appear to be a Python project". Asking
-    the API first turns that into a sentence a user can act on, and lets
-    `lfs upgrade` pick a branch that works instead of erroring out.
+    A branch pushed without the package makes pip fail deep inside with "does
+    not appear to be a Python project". Asking the API first turns that into a
+    sentence a user can act on, and lets `lfs upgrade` fall back to
+    ``DEFAULT_BRANCH`` instead of erroring out.
     """
     api = f"https://api.github.com/repos/{REPO_SLUG}/contents/pyproject.toml?ref={ref}"
     request = urllib.request.Request(

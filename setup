@@ -19,7 +19,7 @@ set -eu
 # there is no second copy to drift.
 OWNER="Erawat4l"          # ends with a lowercase L, not a digit
 REPO="local-file-sharer"
-BRANCH="${LFS_BRANCH:-arena/d7f4713b-local-file-sharer}"
+BRANCH="${LFS_BRANCH:-main}"
 
 # Reuse ./run so the two entry points cannot disagree about how to build the venv.
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
