@@ -312,3 +312,101 @@ class _FakeConsole:
 
     def print(self, *a, **k):
         pass
+
+
+# ── it must never sit waiting for an answer that cannot come ────────────────
+def test_the_child_gets_no_terminal_to_prompt_on(monkeypatch):
+    """`lfs upgrade` froze at "0/5 contacting GitHub" and never returned.
+
+    pip ran git, git asked for a username and password, and nothing was reading
+    stdin to answer it. Closing stdin plus PIP_NO_INPUT/GIT_TERMINAL_PROMPT
+    turns that into an immediate, explainable failure.
+    """
+    import subprocess
+
+    seen = {}
+
+    class FakePopen:
+        def __init__(self, cmd, **kw):
+            seen.update(kw)
+            self.stdout = []
+
+        def wait(self, timeout=None):
+            return 0
+
+        def poll(self):
+            return 0
+
+    monkeypatch.setattr(subprocess, "Popen", FakePopen)
+    updater.run_with_progress(["pip"], con=_FakeConsole())
+    assert seen["stdin"] == subprocess.DEVNULL
+    assert seen["env"]["PIP_NO_INPUT"] == "1"
+    assert seen["env"]["GIT_TERMINAL_PROMPT"] == "0"
+
+
+def test_a_private_repo_is_explained_rather_than_dumped():
+    """ "Repository not found" is also what a typo'd URL says; say so."""
+    lines = [
+        "Collecting local-file-sharer @ git+https://github.com/x/y.git@main",
+        "  remote: Repository not found.",
+        "  fatal: repository 'https://github.com/x/y.git/' not found",
+        "error: subprocess-exited-with-error",
+    ]
+    reason, hint = updater.explain_failure(lines)
+    assert "private" in reason.lower()
+    assert "not found" in hint.lower()
+
+
+def test_the_reason_is_printed_before_pips_noise(capsys, monkeypatch):
+    monkeypatch.setattr(
+        updater, "run_with_progress", lambda cmd, **kw: (1, ["  remote: Repository not found."])
+    )
+    monkeypatch.setattr(updater, "detect_installer", lambda: "pip")
+    monkeypatch.setattr(updater, "resolve_ref", lambda ref: ("arena/x", ""))
+    monkeypatch.setattr(updater, "installed_commit", lambda: "")
+    monkeypatch.setattr(updater, "remote_commit", lambda ref, **kw: "")
+    assert updater.upgrade_from_git(None) == 1
+    out = capsys.readouterr().out
+    head = out.split("remote:")[0]
+    assert "private" in head.lower() or "does not exist" in head.lower()
+    assert "install-lfs.py" in out
+
+
+def test_unknown_failures_keep_pips_own_words():
+    assert updater.explain_failure(["something odd happened"]) == ("", "")
+
+
+# ── more than one copy of lfs on PATH ───────────────────────────────────────
+def _make_exe(path, shebang, body="import sys\n"):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(f"#!{shebang}\n{body}", encoding="utf-8")
+    path.chmod(0o755)
+    return path
+
+
+def test_a_pipx_shim_is_recognised(tmp_path):
+    shim = _make_exe(
+        tmp_path / "bin" / "lfs",
+        "/home/u/.local/pipx/venvs/local-file-sharer/bin/python",
+    )
+    plain = _make_exe(tmp_path / "other" / "lfs", "/usr/bin/python3")
+    assert updater.is_pipx_install(str(shim)) is True
+    assert updater.is_pipx_install(str(plain)) is False
+
+
+def test_a_second_copy_on_path_is_reported(tmp_path, monkeypatch):
+    """pipx install --force beside an existing copy leaves two lfs commands."""
+    a = _make_exe(tmp_path / "a" / "lfs", "/usr/bin/python3")
+    b = _make_exe(tmp_path / "b" / "lfs", "/home/u/.local/pipx/venvs/x/bin/python")
+    monkeypatch.setenv("PATH", f"{a.parent}:{b.parent}:/usr/bin:/bin")
+    monkeypatch.setattr("sys.argv", [str(a)])
+    found = updater.find_duplicates()
+    assert [item["path"] for item in found] == [str(b)]
+    assert found[0]["kind"] == "pipx"
+
+
+def test_no_duplicates_when_only_one_copy_is_installed(tmp_path, monkeypatch):
+    a = _make_exe(tmp_path / "a" / "lfs", "/usr/bin/python3")
+    monkeypatch.setenv("PATH", f"{a.parent}:/usr/bin:/bin")
+    monkeypatch.setattr("sys.argv", [str(a)])
+    assert updater.find_duplicates() == []

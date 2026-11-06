@@ -7,6 +7,18 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Fixed
+- `lfs upgrade` froze forever at `0/5 contacting GitHub`. pip handed the terminal
+  to git, git asked for a username and password, and nothing was reading stdin:
+  on a private repo that prompt never returns. stdin is now closed and pip and
+  git are both told not to ask.
+- A private repository reports "Repository not found", the same message a
+  mistyped URL gives. The upgrade now names the likely cause instead of leaving
+  the user to decode pip's subprocess traceback.
+- `pipx install --force` beside an existing copy leaves two `lfs` commands on
+  PATH, and only one of them gets upgraded. The upgrade now says which copy it
+  is updating and which other one exists.
+
 ### Added
 - `tools/make_installer.py` builds a single-file installer that carries the
   source inside it. The repository is private, so `pip install git+…` dies with

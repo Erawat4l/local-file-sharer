@@ -248,14 +248,29 @@ def run_with_progress(cmd: list[str], *, con=None, title: str = "upgrading") -> 
         line.append(labels.get(state["phase"], ""), style=theme.faint)
         return line
 
-    # Never let a pip prompt block forever in a non-tty: it would hang a phone.
+    # A prompt must never wait forever: `lfs upgrade` on a phone looked frozen
+    # at "0/5 contacting GitHub" because pip handed the terminal to git, git
+    # asked for a username and password, and nothing was reading stdin to
+    # answer. stdin is closed (prompts read EOF and fail fast) and both pip and
+    # git are told not to ask at all.
+    #
     # PYTHONPATH is stripped because shipping the source tree to pip can make it
     # resolve the old copy that is being replaced.
-    env = dict(os.environ, PIP_DISABLE_PIP_VERSION_CHECK="1", PIP_PROGRESS_BAR="off")
+    env = dict(
+        os.environ,
+        PIP_DISABLE_PIP_VERSION_CHECK="1",
+        PIP_PROGRESS_BAR="off",
+        PIP_NO_INPUT="1",
+        GIT_TERMINAL_PROMPT="0",
+    )
     env.pop("PYTHONPATH", None)
+    # git shells out to ssh/askpass helpers that ignore GIT_TERMINAL_PROMPT.
+    env["GIT_ASKPASS"] = ""
+    env["SSH_ASKPASS"] = ""
     try:
         process = subprocess.Popen(  # noqa: S603
             cmd,
+            stdin=subprocess.DEVNULL,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
@@ -287,12 +302,128 @@ def run_with_progress(cmd: list[str], *, con=None, title: str = "upgrading") -> 
     return code, collected
 
 
-def _show_failure(con, lines: list[str], *, limit: int = 14) -> None:  # noqa: ANN001
+# ── why a pip git install failed, in words a person can act on ──────────────
+# pip's own message for a private repository is "Repository not found", which
+# reads exactly like a mistyped URL. The difference matters: one is a typo, the
+# other needs a login. These tests look for the fingerprints of each case.
+_CAUSE_TESTS: tuple[tuple[tuple[str, ...], str, str], ...] = (
+    (
+        (
+            "repository not found",
+            "could not read username",
+            "terminal prompts disabled",
+            "authentication failed",
+        ),
+        "GitHub says this repository does not exist — or it is private and this device is not logged in.",
+        'A private repo answers "not found" instead of "denied", so a typo and a missing login look identical.',
+    ),
+    (
+        ("could not find a version", "no matching distribution"),
+        "pip could not find the package.",
+        "Check the name and the branch.",
+    ),
+    (
+        ("permission denied", "read-only file system", "errno 30"),
+        "This device does not allow writing to that location.",
+        "Try the single-file installer, which installs into an app-private directory.",
+    ),
+    (
+        ("no space left", "errno 28"),
+        "The device ran out of storage.",
+        "Free some space and try again.",
+    ),
+    (
+        ("network is unreachable", "temporary failure in name resolution", "connection refused", "timed out"),
+        "The network dropped during the upgrade.",
+        "Check the connection and run it again — nothing was half-installed.",
+    ),
+)
+
+
+# ── duplicate installs ──────────────────────────────────────────────────────
+def is_pipx_install(entry: str) -> bool:
+    """Is *entry* a pipx shim, rather than a script in a bin directory?
+
+    pipx writes a small wrapper into ``~/.local/bin`` that runs the app from its
+    own virtualenv; a plain ``pip --user`` install writes the real console
+    script there with a shebang pointing at the interpreter it installed into.
+    """
+    try:
+        with open(entry, "rb") as handle:  # noqa: PTH123 - need bytes, not text
+            first = handle.readline(400)
+    except OSError:
+        return False
+    return b"pipx" in first
+
+
+def find_duplicates() -> list[dict[str, str]]:
+    """Every other `lfs` / `local-file-sharer` on PATH, with its flavour.
+
+    ``pipx install --force`` happily installs a second copy beside the one the
+    device already has. Whichever comes first on PATH then wins, so an upgrade
+    can update a copy that is never run — the "I upgraded and nothing changed"
+    report again, from a different direction. The running copy is skipped.
+    """
+    import shutil as _shutil  # noqa: PLC0415
+
+    found: list[dict[str, str]] = []
+    running = Path(sys.argv[0]).resolve() if sys.argv and sys.argv[0] else None
+    for name in ("lfs", "local-file-sharer"):
+        for entry in _shutil.which_all(name) if hasattr(_shutil, "which_all") else _which_all(name):
+            path = Path(entry)
+            try:
+                real = path.resolve()
+            except OSError:
+                real = path
+            if running is not None and real == running:
+                continue
+            kind = "pipx" if is_pipx_install(str(path)) else "pip"
+            if any(item["path"] == str(path) for item in found):
+                continue
+            found.append({"name": name, "path": str(path), "kind": kind})
+    return found
+
+
+def _first_on_path() -> str:
+    """The `lfs` that a bare `lfs` in the shell would run."""
+    mine = find_duplicates()
+    for entry in _which_all("lfs"):
+        if not any(item["path"] == entry for item in mine):
+            return ""  # this is the copy we are running
+        return entry
+    return ""
+
+
+def _which_all(name: str) -> list[str]:
+    """shutil.which_all landed in 3.12; this covers 3.9+."""
+    seen: list[str] = []
+    for directory in os.environ.get("PATH", "").split(os.pathsep):
+        if not directory:
+            continue
+        candidate = Path(directory) / name
+        if candidate.is_file() and os.access(candidate, os.X_OK):
+            text = str(candidate)
+            if text not in seen:
+                seen.append(text)
+    return seen
+
+
+def explain_failure(lines: list[str]) -> tuple[str, str]:
+    """``(reason, hint)`` for a failed upgrade, or ``("", "")`` when unknown."""
+    blob = " ".join(lines).lower()
+    for needles, reason, hint in _CAUSE_TESTS:
+        if any(needle in blob for needle in needles):
+            return reason, hint
+    return "", ""
+
+
+def _show_failure(con, lines: list[str], *, limit: int = 14, headline: str = "last lines from pip:") -> None:  # noqa: ANN001
     """Print the tail of a failed pip run: that is where the reason lives."""
     if not lines:
         return
     tail = lines[-limit:]
-    con.print("[lfs.muted]last lines from pip:[/]")
+    if headline:
+        con.print(f"[lfs.muted]{headline}[/]")
     for line in tail:
         con.print(f"  [lfs.faint]{line[:160]}[/]")
 
@@ -333,6 +464,22 @@ def upgrade_from_git(ref: str | None = None) -> int:
             spec,
         ]
     con.print(f"[lfs.muted]from[/]  [lfs.primary]{target}[/]  [lfs.faint]({GIT_URL})[/]")
+    # Say which copy is being upgraded when there is more than one, or the user
+    # runs the other one afterwards and concludes the upgrade did nothing.
+    here = Path(sys.argv[0]).resolve() if sys.argv and sys.argv[0] else Path("lfs")
+    con.print(f"[lfs.muted]this copy[/]  [lfs.faint]{here}[/]")
+    clashes = find_duplicates()
+    if clashes:
+        first = _first_on_path()
+        con.print("[lfs.warning]another copy is installed:[/]")
+        for item in clashes:
+            mark = "  [lfs.warning](runs first)[/]" if item["path"] == first else ""
+            con.print(f"  [lfs.faint]{item['path']}[/]  [lfs.muted]{item['kind']}[/]{mark}")
+        con.print(
+            "[lfs.muted]only this copy is upgraded. remove the other with[/] "
+            "[lfs.primary]pipx uninstall local-file-sharer[/] "
+            "[lfs.muted]or[/] [lfs.primary]pip uninstall local-file-sharer[/]"
+        )
     before = installed_commit()
     wanted = remote_commit(target)
     code, output = run_with_progress(cmd, con=con)
@@ -348,8 +495,21 @@ def upgrade_from_git(ref: str | None = None) -> int:
         if code == 127:
             return 1
     if code != 0:
-        con.print(f"[lfs.danger]upgrade failed[/]  see {REPOSITORY_PAGE} for manual steps")
-        _show_failure(con, output)
+        reason, hint = explain_failure(output)
+        if reason:
+            # Lead with the cause. pip's own words are a wall of "subprocess-
+            # exited-with-error" that says "Repository not found" in the middle.
+            con.print(f"[lfs.danger]upgrade failed[/]  {reason}")
+            if hint:
+                con.print(f"[lfs.muted]{hint}[/]")
+            if "private" in reason.lower() or "does not exist" in reason:
+                con.print(
+                    "[lfs.muted]no GitHub login on this device is fine — use the single-file"
+                    " installer instead:[/] python3 install-lfs.py"
+                )
+        else:
+            con.print(f"[lfs.danger]upgrade failed[/]  see {REPOSITORY_PAGE} for manual steps")
+        _show_failure(con, output, headline="")
         con.print(f"[lfs.muted]try a branch explicitly:[/] lfs upgrade --ref {DEFAULT_BRANCH}")
         return code
     # pip exits 0 even when it installs nothing, so ask the record on disk what
