@@ -159,6 +159,17 @@ def test_termux_is_recognised_by_prefix(checkout):
     assert "python-pip" in source, "the package that actually provides pip must be named"
 
 
+def test_termux_does_not_repeat_the_package_it_already_installed(checkout):
+    """The loop: told to run `pkg install python-pip`, ran it, told again.
+
+    If the interpreter can already see pip, offering that package again is
+    useless advice, so the message has to change.
+    """
+    source = (checkout / "run").read_text(encoding="utf-8")
+    assert "pip is installed but unusable" in source
+    assert "system_has_pip" in source
+
+
 def test_missing_pip_on_termux_installs_python_pip(checkout, tmp_path):
     """Termux splits pip out: `python` has venv, `python-pip` has pip.
 
