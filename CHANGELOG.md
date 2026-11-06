@@ -42,6 +42,31 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Performance
 
+- **Downloads use the whole link instead of one TCP stream.** A single stream is
+  capped by the bandwidth-delay product, not by the Wi-Fi: on an emulated
+  40 MB/s link with 8 ms latency, one stream measured **3.8 MB/s** while
+  sixteen measured **34 MB/s**. That is the "2.5 MB/s even on the same Wi-Fi"
+  report. Per-file downloads now split the file into ranges and fetch them
+  concurrently, and where the browser supports the File System Access API the
+  pieces are written straight to disk, so a multi-gigabyte video downloads at
+  link speed without buffering the whole thing in the tab. Files over 64 MB
+  fall back to a normal single download on browsers without that API rather
+  than risking the tab.
+- **Socket buffers are no longer silently capped.** The code asked for a 4 MiB
+  `SO_SNDBUF`, and Linux quietly granted about 400 KB because of
+  `net.core.wmem_max` — the request was never checked. It now reads the
+  kernel's real ceiling and retries there, and skips `TCP_WINDOW_CLAMP` when
+  the granted buffer is small, since clamping to a small buffer *throttles*
+  the connection rather than tuning it.
+- **The advertised address prefers a real private IP.** `169.254.x.x` is a
+  link-local address a device gives itself when DHCP failed; it was being
+  promoted to the address shown for sharing even though the rest of the code
+  filters it out. It is now a last resort.
+- **The speed readout no longer lies.** A flush carrying zero bytes used to
+  skip the sample, which froze the running total while time kept passing, so
+  the displayed speed decayed towards zero mid-transfer; and any span under
+  50 ms read as exactly 0. Speed is now sampled on every flush, clamped to a
+  physical ceiling, and never reports 0 while bytes are moving.
 - **The picker no longer re-scans every sub-folder it lists.** Building a row
   probed each directory with a second `scandir` to decide whether it was
   readable — an extra real read per folder, on every navigation, on Android

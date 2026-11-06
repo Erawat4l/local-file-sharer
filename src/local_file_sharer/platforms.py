@@ -306,31 +306,71 @@ def safe_filename(name: str, *, fallback: str = "file") -> str:
 # ─────────────────────────────────────────────────────────────────────────────
 # Sockets / high-performance transfer
 # ─────────────────────────────────────────────────────────────────────────────
-SOCKET_BUFFER = 4 * 1024 * 1024  # 4 MiB — big enough for 50 MB/s+ on Wi-Fi
+SOCKET_BUFFER = 4 * 1024 * 1024  # ask for 4 MiB; the kernel decides what it grants
 CHUNK = 512 * 1024  # fallback copy chunk
 HAS_SENDFILE = hasattr(os, "sendfile") and not WINDOWS
 
 
+def _kernel_buffer_max(key: str) -> int | None:
+    """Read ``net.core.{w,r}mem_max``; ``None`` when it cannot be read.
+
+    Linux silently caps ``SO_SNDBUF``/``SO_RCVBUF`` at these values. Asking for
+    4 MiB and getting 400 KB back is normal on Android, and it matters: the
+    socket buffer is what keeps TCP fed while an acknowledgement is in flight,
+    so a small one caps throughput on a Wi-Fi link with any latency or loss.
+    """
+    try:
+        with open(f"/proc/sys/net/core/{key}", encoding="utf-8") as handle:
+            return int(handle.read().strip())
+    except (OSError, ValueError):
+        return None
+
+
+def _set_buffer(sock: socket.socket, name: str, target: int) -> int:
+    """Set one socket buffer as close to *target* as the kernel allows.
+
+    Returns the size the kernel actually granted. Linux doubles the value it
+    reports, so the returned number is not what was passed in.
+    """
+    if not hasattr(socket, name):
+        return 0
+    try:
+        sock.setsockopt(socket.SOL_SOCKET, getattr(socket, name), target)
+        granted = sock.getsockopt(socket.SOL_SOCKET, getattr(socket, name))
+    except OSError:
+        return 0
+    if granted >= target // 2 or not LINUX:
+        return granted
+    # The kernel clamped us. Retry at its own ceiling, which it does accept.
+    ceiling = _kernel_buffer_max("wmem_max" if name == "SO_SNDBUF" else "rmem_max")
+    if not ceiling or ceiling <= granted:
+        return granted
+    try:
+        sock.setsockopt(socket.SOL_SOCKET, getattr(socket, name), ceiling)
+        return sock.getsockopt(socket.SOL_SOCKET, getattr(socket, name))
+    except OSError:
+        return granted
+
+
 def tune_socket(sock: socket.socket) -> None:
-    """Ask for large kernel buffers; silently ignore unsupported platforms."""
-    for level, name, val in (
-        (socket.SOL_SOCKET, "SO_SNDBUF", SOCKET_BUFFER),
-        (socket.SOL_SOCKET, "SO_RCVBUF", SOCKET_BUFFER),
-    ):
-        if not hasattr(socket, name):
-            continue
-        try:
-            sock.setsockopt(level, getattr(socket, name), val)
-        except OSError:
-            continue
+    """Give the connection the biggest buffers the kernel will allow.
+
+    Everything here is best-effort: an unsupported option on some platform must
+    never stop a transfer.
+    """
+    send_granted = _set_buffer(sock, "SO_SNDBUF", SOCKET_BUFFER)
+    _set_buffer(sock, "SO_RCVBUF", SOCKET_BUFFER)
     if hasattr(socket, "TCP_NODELAY"):
         try:
             sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
         except OSError:
             pass
-    if LINUX and hasattr(socket, "TCP_WINDOW_CLAMP"):
+    # Only clamp the receive window when we genuinely have a large buffer.
+    # The window advertises how much data may be in flight, so an undersized
+    # clamp caps throughput no matter how good the Wi-Fi is.
+    if LINUX and hasattr(socket, "TCP_WINDOW_CLAMP") and send_granted >= SOCKET_BUFFER // 2:
         try:
-            sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_WINDOW_CLAMP, SOCKET_BUFFER)
+            sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_WINDOW_CLAMP, send_granted)
         except OSError:
             pass
 
@@ -520,6 +560,12 @@ def iter_local_ipv4() -> Iterator[LocalAddress]:
         if ip and not ip.startswith("127.") and ip not in found:
             found[ip] = LocalAddress(ip, "", "LAN")
 
+    # A 169.254.x.x address is what a device gives itself when DHCP failed. It
+    # is reachable on the local link but is not the address another machine will
+    # guess, and the code elsewhere deliberately drops it. It is only kept as a
+    # last resort below, never as the advertised one.
+    link_local = {ip for ip in found if ip.startswith("169.254.")}
+
     # 2) Enumerate interfaces where the stdlib lets us.
     try:
         import psutil  # type: ignore[import-not-found]  # noqa: PLC0415
@@ -556,13 +602,19 @@ def iter_local_ipv4() -> Iterator[LocalAddress]:
 
     def sort_key(addr: LocalAddress):
         return (
+            1 if addr.ip.startswith("169.254.") else 0,  # real addresses first
             0 if addr.is_wifi else 1,
             0 if _ETH_IFACE_RE.match(addr.interface) else 1,
             0 if addr.is_private else 1,
             addr.ip,
         )
 
-    yield from sorted(found.values(), key=sort_key)
+    ordered = sorted(found.values(), key=sort_key)
+    routable = [a for a in ordered if a.ip not in link_local]
+    # Fall back to the link-local address only when it is all we have: a phone
+    # with a broken DHCP lease can still be reached at 169.254.x.x by a device
+    # on the same access point.
+    yield from (routable or ordered)
 
 
 def _parse_ip_addr() -> Iterator[tuple[str, str]]:

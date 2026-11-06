@@ -489,3 +489,33 @@ def test_downloads_fall_back_when_there_is_no_android_storage(tmp_path, monkeypa
     monkeypatch.setattr(platforms, "SDCARD_ALIASES", (tmp_path / "nope",))
 
     assert platforms.downloads_dir() == home / "Downloads"
+
+
+def test_tune_socket_asks_the_kernel_for_its_real_maximum():
+    """A clamped SO_SNDBUF must be retried at the kernel ceiling.
+
+    Linux silently caps socket buffers at net.core.wmem_max. Requesting 4 MiB
+    and silently accepting the ~200 KB the kernel grants leaves TCP starved on a
+    Wi-Fi link with any latency, which is exactly where throughput is lost.
+    """
+    import socket as _socket
+
+    from local_file_sharer import platforms
+
+    sock = _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM)
+    try:
+        granted = platforms._set_buffer(sock, "SO_SNDBUF", 4 * 1024 * 1024)
+        assert granted > 0
+        reported = sock.getsockopt(_socket.SOL_SOCKET, _socket.SO_SNDBUF)
+        assert reported == granted
+        ceiling = platforms._kernel_buffer_max("wmem_max")
+        if ceiling:  # a clamped buffer is retried at the ceiling, not left small
+            assert granted >= min(ceiling, 4 * 1024 * 1024)
+    finally:
+        sock.close()
+
+
+def test_unknown_sysctl_is_not_an_error():
+    from local_file_sharer import platforms
+
+    assert platforms._kernel_buffer_max("definitely_not_a_real_key") is None

@@ -17,6 +17,9 @@ from dataclasses import dataclass, field
 SAMPLE_WINDOW = 30  # seconds of samples kept
 DEVICE_TIMEOUT = 20.0  # seconds before a quiet device is dropped
 MIN_SAMPLE_INTERVAL = 0.2
+#: Nothing on a phone's Wi-Fi or USB link exceeds this; a larger reading is an
+#: artefact of dividing by a too-small time span, not a real transfer.
+MAX_PLAUSIBLE_SPEED = 400 * 1024 * 1024
 
 
 @dataclass
@@ -67,6 +70,8 @@ class TransferTracker:
     def __init__(self) -> None:
         self._lock = threading.RLock()
         self._samples: deque[tuple[float, int]] = deque(maxlen=400)
+        # last speed that was measured over a usable timespan
+        self._last_speed = 0.0
         self._total_start = time.time()
         self.bytes_sent = 0
         self.requests = 0
@@ -133,14 +138,17 @@ class TransferTracker:
                 record["finished"] = time.time()
 
     def _sample_locked(self, delta: int) -> None:
+        """Record a running total of bytes sent.
+
+        Every call appends the *cumulative* total, even when ``delta`` is 0.
+        Skipping zero-delta calls left the newest sample's total stuck at an old
+        value, so the elapsed time kept growing while the byte count did not —
+        the reported speed collapsed towards zero mid-transfer, and the "sent"
+        figure could stop advancing while data was still flowing.
+        """
         now = time.time()
-        if not self._samples:
-            self._samples.append((now, delta))
-            self._last_sample = now
-            return
-        _, last_bytes = self._samples[-1]
-        if delta:
-            self._samples.append((now, last_bytes + delta))
+        total = (self._samples[-1][1] if self._samples else 0) + delta
+        self._samples.append((now, total))
         if now - self._last_sample >= MIN_SAMPLE_INTERVAL:
             self._last_sample = now
             speed = self.speed_locked(window=3.0)
@@ -149,6 +157,14 @@ class TransferTracker:
 
     # ── reads ───────────────────────────────────────────────────────────────
     def speed_locked(self, window: float = 3.0) -> float:
+        """Bytes per second over the last *window* seconds.
+
+        The old version gave up (returned 0.0) whenever the samples spanned
+        less than 50 ms. Callers flush every 150 ms, so the first sample after
+        any quiet moment always read as exactly 0 — which is what the page then
+        displayed as the transfer speed. A short span is not an error; it is
+        just a small denominator, and the value is clamped to a sane minimum.
+        """
         now = time.time()
         if len(self._samples) < 2:
             return 0.0
@@ -159,10 +175,29 @@ class TransferTracker:
                 base_ts, base_bytes = ts, total
                 break
         latest_ts, latest_bytes = self._samples[-1]
-        elapsed = max(0.001, latest_ts - base_ts)
-        if elapsed < 0.05:
-            return 0.0
-        return max(0.0, (latest_bytes - base_bytes) / elapsed)
+        elapsed = latest_ts - base_ts
+        if elapsed < 0.01:
+            # Two samples closer together than a clock tick. Dividing by that
+            # gives nonsense in the megabytes-per-microsecond range, so keep
+            # showing the last real measurement instead. If there has not been
+            # one yet, look further back for a pair that can be measured.
+            if self._last_speed:
+                return self._last_speed
+            usable = [(ts, tot) for ts, tot in self._samples if latest_ts - ts >= 0.01]
+            if not usable:
+                # Everything arrived inside one clock tick. Reporting 0 makes the
+                # page look stalled while it is actually downloading as fast as
+                # it can, so report the bytes over the minimum measurable span.
+                start_bytes = self._samples[0][1]
+                moved = latest_bytes - start_bytes
+                # Clamp to something a LAN can plausibly do. This branch only
+                # runs when the clock did not move, so the divisor is a guess.
+                return min(moved / 0.01, MAX_PLAUSIBLE_SPEED) if moved > 0 else 0.0
+            base_ts, base_bytes = usable[0]
+            elapsed = latest_ts - base_ts
+        speed = min(max(0.0, (latest_bytes - base_bytes) / elapsed), MAX_PLAUSIBLE_SPEED)
+        self._last_speed = speed
+        return speed
 
     def speed(self, window: float = 3.0) -> float:
         with self._lock:
@@ -236,6 +271,7 @@ class TransferTracker:
     def reset(self) -> None:
         with self._lock:
             self._samples.clear()
+            self._last_speed = 0.0
             self.bytes_sent = 0
             self.requests = 0
             self.bytes_received = 0

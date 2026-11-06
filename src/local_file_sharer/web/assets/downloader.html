@@ -147,23 +147,79 @@
   if (base) renderQR(base);
 
   // ── parallel download (16 connections) ─────────────────────────────────
+  // A single TCP stream is limited by the bandwidth-delay product: on a normal
+  // Wi-Fi link it stalls out a few MB/s no matter how fast the link is, which
+  // is exactly the "2.5 MB/s on the same Wi-Fi" report. Splitting the file into
+  // ranges and fetching them at once uses the link properly.
+  //
+  // Whole files used to be held in memory as an ArrayBuffer, so this was only
+  // ever safe for small ones. Where the browser supports the File System Access
+  // API the pieces are written straight to disk instead, which means a 4 GB
+  // video downloads at full link speed without exhausting the tab.
+  const MAX_PARALLEL_BYTES = 8 * 1024 ** 3;   // refuse anything bigger (sanity)
+  const MEMORY_LIMIT = 64 * 1024 * 1024;      // buffer in memory only under this
+
+  async function pickSaveHandle(name) {
+    if (!window.showSaveFilePicker) return null;
+    // A user gesture is what allows the picker; the caller runs from a click.
+    try {
+      return await window.showSaveFilePicker({ suggestedName: name });
+    } catch (e) {
+      return null;   // user cancelled, or the picker is blocked
+    }
+  }
+
+  async function saveViaStream(handle, file, parts) {
+    const writable = await handle.createWritable();
+    // Written out of order is not allowed, so run the pieces in order but keep
+    // all of them in flight: each chunk resolves as it arrives and is appended
+    // as soon as it is its turn.
+    const pending = parts.map(p =>
+      fetch(file.url, { headers: { Range: `bytes=${p.start}-${p.end}` }, cache: 'no-store' })
+        .then(r => { if (!r.ok && r.status !== 206) throw new Error('range ' + r.status); return r.arrayBuffer(); })
+    );
+    for (let i = 0; i < pending.length; i++) {
+      const buf = await pending[i];
+      await writable.write(new Uint8Array(buf));
+      $('progress-bar').style.width = ((i + 1) / pending.length * 100).toFixed(1) + '%';
+      $('progress-text').textContent = `${file.name} · part ${i + 1}/${pending.length}`;
+    }
+    await writable.close();
+  }
+
   async function downloadParallel(file) {
     try {
+      // The file picker only opens while the user's click is still "live", and
+      // awaiting a network call burns that window. So ask for the destination
+      // first and only then negotiate with the server.
+      const handle = await pickSaveHandle(file.name);
       const head = await fetch(file.url, { method: 'HEAD', cache: 'no-store' });
       const len = parseInt(head.headers.get('content-length') || '0', 10);
-      if (!len || !head.headers.get('accept-ranges')) {
+      if (!len || !head.headers.get('accept-ranges') || len > MAX_PARALLEL_BYTES) {
         window.location.href = file.url; return;
       }
-      const chunk = Math.ceil(len / CL);
+      const want = Math.min(CL, Math.max(1, Math.ceil(len / (1024 * 1024))));
+      const chunk = Math.ceil(len / want);
       const parts = [];
-      for (let i = 0; i < CL; i++) {
+      for (let i = 0; i < want; i++) {
         const start = i * chunk;
         const end = Math.min(len - 1, start + chunk - 1);
         if (start > end) break;
         parts.push({ start, end });
       }
+      if (handle) {                       // straight to disk: no size limit
+        await saveViaStream(handle, file, parts);
+        $('progress-text').textContent = `${file.name} · saved`;
+        toast('Saved ' + file.name);
+        return;
+      }
+      if (len > MEMORY_LIMIT) {           // no disk API: do not risk the tab
+        window.location.href = file.url;
+        toast('Large file: using a single stream');
+        return;
+      }
       // Fire every range at once: `await` inside the loop would serialise the
-      // 16 connections into one, which defeats the whole point.
+      // connections into one, which defeats the whole point.
       const blob = new Array(parts.length);
       let done = 0;
       await Promise.all(parts.map(async (p, i) => {
@@ -184,6 +240,18 @@
       window.location.href = file.url; // fall back to a normal download
     }
   }
+
+  // every card gets a fast download button; the plain <a download> stays as
+  // the no-JavaScript fallback
+  document.querySelectorAll('.card.file').forEach(card => {
+    const btn = card.querySelector('.card-actions a[download]');
+    if (!btn) return;
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      const f = files.find(x => x.id === card.dataset.id);
+      if (f) downloadParallel(f);
+    });
+  });
 
   $('download-all').addEventListener('click', async () => {
     const btn = $('download-all');

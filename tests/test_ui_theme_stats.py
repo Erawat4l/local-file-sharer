@@ -419,3 +419,46 @@ def test_picker_rows_and_hints_fit_the_width(width, tmp_path):
     lines = _render_lines(render(state, width=width, height=30), width)
     over = [line for line in lines if len(line) > width]
     assert not over, f"lines wider than {width}: {[line[:60] for line in over]}"
+
+
+def test_speed_survives_a_zero_byte_flush():
+    """A flush with nothing new to add must not freeze the reported speed.
+
+    The sender flushes every 150 ms and a flush can legitimately carry 0 bytes.
+    The old sampler only appended a sample when ``delta`` was truthy, so the
+    newest running total stayed at an old value while time kept passing — the
+    speed shown on the page decayed towards zero mid-transfer even though data
+    was still flowing.
+    """
+    tracker = TransferTracker()
+    for _ in range(10):
+        tracker.add_bytes(1024 * 1024)
+        tracker.add_bytes(0)  # the timer fired with nothing new
+    assert tracker.bytes_sent == 10 * 1024 * 1024
+    speed = tracker.speed()
+    assert speed > 0, "speed collapsed to zero while bytes were sent"
+
+
+def test_speed_is_not_absurd_for_two_samples_in_the_same_instant():
+    """Two samples microseconds apart must not produce terabytes per second.
+
+    Dividing a large delta by a near-zero elapsed time gives nonsense; the last
+    honest measurement is a better answer than 3 TB/s.
+    """
+    tracker = TransferTracker()
+    tracker.add_bytes(50 * 1024 * 1024)
+    tracker.add_bytes(50 * 1024 * 1024)
+    from local_file_sharer.transfer.stats import MAX_PLAUSIBLE_SPEED
+
+    # clamped to the ceiling rather than reaching terabytes per second
+    assert tracker.speed() <= MAX_PLAUSIBLE_SPEED, "speed must stay believable"
+
+
+def test_reset_clears_the_speed_history():
+    tracker = TransferTracker()
+    tracker.add_bytes(5 * 1024 * 1024)
+    tracker.add_bytes(5 * 1024 * 1024)
+    tracker.speed()
+    tracker.reset()
+    assert tracker.speed() == 0.0
+    assert tracker.bytes_sent == 0
