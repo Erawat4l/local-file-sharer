@@ -136,9 +136,8 @@ def uninstall():
     #    tooling.
     if have("pipx") and run(["pipx", "list", "--short"]) is not None:
         listing = subprocess.run(["pipx", "list", "--short"], capture_output=True, text=True)  # noqa: S603
-        if "local-file-sharer" in (listing.stdout or ""):
-            if run(["pipx", "uninstall", "local-file-sharer"]) == 0:
-                removed_any = True
+        if "local-file-sharer" in (listing.stdout or "") and run(["pipx", "uninstall", "local-file-sharer"]) == 0:
+            removed_any = True
 
     # 2. pip, if it made one
     if have("pip"):
@@ -171,12 +170,11 @@ def uninstall():
             except OSError as exc:
                 say(f"  could not remove {{link}}: {{exc}}")
 
-    if os.path.isdir(target):
-        # a shutdown helper, not a self-delete: the folder may be the one this
-        # process is running from, and that cannot be rmtree'd safely
-        if run(["/bin/sh", "-c", f'sleep 1; rm -rf "{{target}}"']) == 0:
-            say(f"  removed {{target}}")
-            removed_any = True
+    # a shutdown helper, not a self-delete: the folder may be the one this
+    # process is running from, and that cannot be rmtree'd safely
+    if os.path.isdir(target) and run(["/bin/sh", "-c", f'sleep 1; rm -rf "{{target}}"']) == 0:
+        say(f"  removed {{target}}")
+        removed_any = True
 
     if removed_any:
         say("  removed. the `lfs` command is gone; your files were not touched.")
