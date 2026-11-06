@@ -190,8 +190,8 @@ def _greys(bright: bool) -> dict[str, str]:
 
 #: The logo gradient from docs/assets/demo.gif: blue into cyan. Sampled from
 #: the reference frames rather than picked by eye.
-LOGO_BLUE: RGB = (98, 183, 246)   # #62B7F6
-LOGO_CYAN: RGB = (65, 217, 240)   # #41D9F0
+LOGO_BLUE: RGB = (98, 183, 246)  # #62B7F6
+LOGO_CYAN: RGB = (65, 217, 240)  # #41D9F0
 SUBTITLE_BLUE: RGB = (73, 187, 229)  # #49BBE5
 
 

@@ -401,17 +401,12 @@ def check_install_copies() -> list[Check]:
     checks: list[Check] = []
     for item in duplicates:
         runs_first = item["path"] == winner
-        how = (
-            "pipx uninstall local-file-sharer"
-            if item["kind"] == "pipx"
-            else f"rm {item['path']}"
-        )
+        how = "pipx uninstall local-file-sharer" if item["kind"] == "pipx" else f"rm {item['path']}"
         checks.append(
             Check(
                 name="copy" if not runs_first else "copy wins",
                 status=WARN if runs_first else INFO,
-                detail=f"{item['path']}  ({item['kind']}, "
-                + ("runs first)" if runs_first else "shadowed)"),
+                detail=f"{item['path']}  ({item['kind']}, " + ("runs first)" if runs_first else "shadowed)"),
                 fix=how if runs_first else "",
                 group="install",
             )

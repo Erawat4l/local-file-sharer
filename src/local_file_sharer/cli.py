@@ -560,10 +560,7 @@ def _warn_about_shadowing_copy(con) -> None:  # noqa: ANN001
 
     winner_item = next((d for d in find_duplicates() if d["path"] == winner), {"path": winner, "kind": "pip"})
     how = removal_command(winner_item)
-    con.print(
-        f"[lfs.warning]![/] [lfs.muted]a different lfs answers your shell:[/] "
-        f"[lfs.faint]{winner}[/]"
-    )
+    con.print(f"[lfs.warning]![/] [lfs.muted]a different lfs answers your shell:[/] [lfs.faint]{winner}[/]")
     con.print(
         f"[lfs.muted]  this is[/] [lfs.faint]{sys.argv[0] if sys.argv else 'lfs'}[/]"
         f"[lfs.muted] — remove the other with[/] [lfs.primary]{how}[/]"
@@ -580,10 +577,7 @@ def _warn_about_shadowing_copy(con) -> None:  # noqa: ANN001
         )
     elif hint:
         con.print(f"[lfs.muted]  then[/] [lfs.primary]{hint}[/]")
-    con.print(
-        "[lfs.faint]  or let it do both: lfs doctor --fix-copies"
-        "   (quiet with LFS_NO_COPY_WARNING=1)"
-    )
+    con.print("[lfs.faint]  or let it do both: lfs doctor --fix-copies   (quiet with LFS_NO_COPY_WARNING=1)")
 
 
 def cmd_menu(cfg: Config, state: State, args: argparse.Namespace) -> int:
@@ -800,7 +794,11 @@ def cmd_configure(cfg: Config, state: State, args: argparse.Namespace) -> int:
     port = ask("port", str(cfg.network.port), "which port the share listens on")
     pin = ask("PIN (blank for none)", cfg.share.pin or "", "a 4-6 digit code guests must type")
     theme_name = ask("theme (dark / light / mono)", cfg.theme, "how the terminal app is drawn")
-    folder = ask("starting folder (blank for the picker's default)", str(state.last_dir or ""), "where the picker opens")
+    folder = ask(
+        "starting folder (blank for the picker's default)",
+        str(state.last_dir or ""),
+        "where the picker opens",
+    )
 
     # Validate before writing anything: a config that cannot load is worse than
     # no configure step at all.
@@ -953,11 +951,7 @@ def main(argv: list[str] | None = None) -> int:
             # A bare word that is not a file is usually a command this build
             # does not have -- an old install, most often. "Nothing to share"
             # is a true and useless answer to that; name the real problem.
-            missing = [
-                word
-                for word in args.paths
-                if not Path(word).expanduser().exists()
-            ]
+            missing = [word for word in args.paths if not Path(word).expanduser().exists()]
             # A single bare word -- no slash, no dot-slash -- is a command far
             # more often than a filename. "lfs nonsense" answered "Nothing to
             # share", which blames the picker for a command typo and hides that

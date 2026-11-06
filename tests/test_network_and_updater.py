@@ -374,7 +374,7 @@ def test_a_slow_but_progressing_process_is_not_killed():
     from local_file_sharer.updater import run_with_progress
 
     code, _lines = run_with_progress(
-        ["sh", "-c", "for i in 1 2 3 4; do echo \"step $i\"; sleep 0.6; done"],
+        ["sh", "-c", 'for i in 1 2 3 4; do echo "step $i"; sleep 0.6; done'],
         stall_timeout=2.0,
     )
     assert code == 0
@@ -405,7 +405,7 @@ def test_a_shim_that_names_its_pipx_venv_is_recognised(tmp_path):
     shim = tmp_path / "bin/local-file-sharer"
     shim.parent.mkdir(parents=True)
     shim.write_text(
-        "#!/bin/sh\nexec /home/u/.local/share/pipx/venvs/local-file-sharer/bin/lfs \"$@\"\n",
+        '#!/bin/sh\nexec /home/u/.local/share/pipx/venvs/local-file-sharer/bin/lfs "$@"\n',
         encoding="utf-8",
     )
     from local_file_sharer.updater import is_pipx_install

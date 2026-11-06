@@ -12,7 +12,16 @@ import sys
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
-FILES = [REPO / "shell" / "fish" / "start.fish", REPO / "shell" / "windows" / "start.fish"]
+#: The functions were renamed start.fish -> lfs.fish; this list did not follow,
+#: so CI's "fish structural check" failed on two missing files and had been red
+#: ever since. Point at what the repo actually ships, and find them rather than
+#: hard-code, so the next rename does not silently disable the check.
+FILES = sorted(
+    [
+        *(REPO / "shell" / "fish").glob("*.fish"),
+        *(REPO / "shell" / "windows").glob("*.fish"),
+    ]
+)
 
 
 def check(path: Path) -> list[str]:

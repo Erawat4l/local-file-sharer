@@ -290,7 +290,9 @@ def uninstall(*, dry_run: bool = False, purge_data: bool = False, keep_checkout:
     if remaining:
         con.print("\n[lfs.warning]these still answer `lfs`:[/]")
         for item in remaining:
-            how = "pipx uninstall local-file-sharer" if is_pipx_install(item["path"]) else f"rm {item['path']}"
+            how = (
+                "pipx uninstall local-file-sharer" if is_pipx_install(item["path"]) else f"rm {item['path']}"
+            )
             con.print(f"[lfs.faint]  {item['path']}[/]  [lfs.primary]{how}[/]")
 
     if commands:

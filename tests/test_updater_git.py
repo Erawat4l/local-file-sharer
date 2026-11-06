@@ -431,7 +431,7 @@ def test_no_duplicates_when_only_one_copy_is_installed(tmp_path, monkeypatch):
 def test_a_checkout_is_identified_from_the_tree_the_code_runs_from(monkeypatch):
     """An editable install runs the checkout's own source, and for that
     `git pull` is the right upgrade -- it is what `./run upgrade` does."""
-    monkeypatch.undo()          # the autouse fixture stubs this out on purpose
+    monkeypatch.undo()  # the autouse fixture stubs this out on purpose
     root = updater.checkout_root()
     if root is None:
         pytest.skip("not running from a checkout")

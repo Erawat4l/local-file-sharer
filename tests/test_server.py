@@ -1348,9 +1348,7 @@ def test_the_player_has_fullscreen_rules_for_the_prefixed_pseudo_class():
     from local_file_sharer.transfer.server import load_assets
 
     player = load_assets()["player.html"]
-    assert "webkitfullscreenchange" in player, (
-        "without the prefixed event the icon and state never update"
-    )
+    assert "webkitfullscreenchange" in player, "without the prefixed event the icon and state never update"
 
 
 def test_the_player_controls_cannot_overflow_a_narrow_phone():

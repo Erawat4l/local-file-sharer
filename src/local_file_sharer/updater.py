@@ -408,9 +408,7 @@ def run_with_progress(
             if stalled:
                 process.kill()
                 process.wait()
-                collected.append(
-                    f"no output for {int(stall_timeout)}s — the download stopped answering"
-                )
+                collected.append(f"no output for {int(stall_timeout)}s — the download stopped answering")
             code = process.poll()
             if code is None:
                 code = process.wait()
@@ -781,15 +779,8 @@ def upgrade_from_git(ref: str | None = None, *, verbose: bool = False) -> int:
         # or a bare symlink in ~/bin, leaves them exactly where they started.
         winner = next((item for item in clashes if item["path"] == first), None)
         if winner is not None:
-            how = (
-                "pipx uninstall local-file-sharer"
-                if winner["kind"] == "pipx"
-                else f"rm {winner['path']}"
-            )
-            con.print(
-                f"[lfs.muted]the one that wins your PATH is[/] "
-                f"[lfs.primary]{winner['path']}[/]"
-            )
+            how = "pipx uninstall local-file-sharer" if winner["kind"] == "pipx" else f"rm {winner['path']}"
+            con.print(f"[lfs.muted]the one that wins your PATH is[/] [lfs.primary]{winner['path']}[/]")
             con.print(f"[lfs.muted]remove it with[/]  [lfs.primary]{how}[/]")
             con.print(
                 f"[lfs.muted]then[/]  [lfs.primary]{platforms.rehash_hint()}[/]  "
@@ -825,7 +816,9 @@ def upgrade_from_git(ref: str | None = None, *, verbose: bool = False) -> int:
         con.print("[lfs.danger]the download stopped answering[/]")
         con.print(f"[lfs.muted]no output for {int(STALL_TIMEOUT)}s, so it was abandoned.[/]")
         con.print("[lfs.muted]nothing was changed. a weak connection is the usual cause —[/]")
-        con.print("[lfs.muted]try again, or on a slow link use the single file:[/] [lfs.primary]install-lfs.py[/]")
+        con.print(
+            "[lfs.muted]try again, or on a slow link use the single file:[/] [lfs.primary]install-lfs.py[/]"
+        )
         return 1
     if code != 0 and kind != "pipx":
         # Debian/Ubuntu block --user installs without this (PEP 668)

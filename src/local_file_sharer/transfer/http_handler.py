@@ -1418,10 +1418,7 @@ def _other_files_block(files) -> str:  # noqa: ANN001
         f"<span>{html.escape(f.size_text)}</span></li>"
         for f in files
     )
-    return (
-        '<h3 class="also">Also in this share</h3>\n'
-        f'<ul class="playlist also-files">\n{rows}\n</ul>'
-    )
+    return f'<h3 class="also">Also in this share</h3>\n<ul class="playlist also-files">\n{rows}\n</ul>'
 
 
 def _page_number(query: dict[str, list[str]]) -> int:

@@ -73,9 +73,11 @@ jobs:
         run: |
           python -m venv /tmp/check
           /tmp/check/bin/pip install --quiet dist/*.whl
-          /tmp/check/bin/start version
-          /tmp/check/bin/start --help > /dev/null
-          /tmp/check/bin/start completions fish > /dev/null
+          # the console script is `lfs` (and `local-file-sharer`); `start` was
+          # the old name and no longer exists as an entry point
+          /tmp/check/bin/lfs version
+          /tmp/check/bin/lfs --help > /dev/null
+          /tmp/check/bin/lfs completions fish > /dev/null
       - uses: actions/upload-artifact@v4
         with:
           name: dist
@@ -100,13 +102,13 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq fish
-          fish --no-execute shell/fish/start.fish
-          fish --no-execute shell/windows/start.fish
+          fish --no-execute shell/fish/lfs.fish
+          fish --no-execute shell/windows/lfs.fish
           for shell in fish bash powershell zsh; do
             PYTHONPATH=src python -m local_file_sharer completions "$shell" > /dev/null
           done
-          PYTHONPATH=src python -m local_file_sharer completions fish > /tmp/start.fish
-          fish --no-execute /tmp/start.fish
+          PYTHONPATH=src python -m local_file_sharer completions fish > /tmp/lfs.fish
+          fish --no-execute /tmp/lfs.fish
       - name: powershell parse
         shell: pwsh
         run: |
