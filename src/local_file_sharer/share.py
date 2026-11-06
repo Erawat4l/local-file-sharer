@@ -99,7 +99,7 @@ class ShareResult:
 # Preparation
 # ─────────────────────────────────────────────────────────────────────────────
 def prepare_manifest(paths: Sequence[Path], *, mode: str, expire_minutes: int, title: str = "") -> Manifest:
-    paths = [Path(p) for p in paths if Path(p).exists()]
+    paths = [p for p in paths if Path(p).exists()]
     if not paths:
         raise ShareError(
             "Nothing to share",

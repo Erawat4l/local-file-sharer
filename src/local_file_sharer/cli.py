@@ -160,6 +160,11 @@ def build_command_parsers() -> dict[str, argparse.ArgumentParser]:
         prog="lfs doctor", parents=[common], description="check dependencies, firewall and network"
     )
     doctor.add_argument("--fast", action="store_true", help="skip tool and network probes")
+    doctor.add_argument(
+        "--fix-copies",
+        action="store_true",
+        help="remove an older lfs that shadows this one on PATH",
+    )
     parsers["doctor"] = doctor
 
     config = argparse.ArgumentParser(
@@ -239,6 +244,39 @@ def build_command_parsers() -> dict[str, argparse.ArgumentParser]:
 _VALUE_OPTIONS = {"-p", "--port", "-m", "--mode", "--theme", "--expire", "--interface", "--pin"}
 
 
+#: Short forms people type. Resolved before the prefix search, because ``up``
+#: is a prefix of nothing and ``conf`` is a prefix of two different commands.
+_COMMAND_ALIASES = {
+    "up": "upgrade",
+    "upd": "upgrade",
+    "conf": "configure",
+    "cfg": "configure",
+    "doc": "doctor",
+    "ver": "version",
+    "men": "menu",
+    "comp": "completions",
+}
+
+
+def resolve_subcommand(word: str) -> str:
+    """The subcommand *word* means, or ``""`` when it is not one.
+
+    ``lfs up`` and ``lfs conf`` used to fall through to the share path and
+    answer "Nothing to share", which reads like a bug in the app rather than a
+    typo in the command. An unambiguous prefix is now accepted; an ambiguous
+    one (``c``, ``com``) is not, so a real file called ``c`` still shares.
+    """
+    lowered = word.strip().lower()
+    if lowered in SUBCOMMAND_NAMES:
+        return lowered
+    if lowered in _COMMAND_ALIASES:
+        return _COMMAND_ALIASES[lowered]
+    matches = [name for name in SUBCOMMAND_NAMES if name.startswith(lowered)]
+    # an exact-length prefix would have matched above; 2 chars avoids turning
+    # a shareable one-letter file into a subcommand
+    return matches[0] if len(lowered) >= 3 and len(matches) == 1 else ""
+
+
 def split_argv(argv: list[str]) -> tuple[str | None, list[str]]:
     """Return ``(subcommand, remaining)`` when a bare word names a subcommand.
 
@@ -257,8 +295,9 @@ def split_argv(argv: list[str]) -> tuple[str | None, list[str]]:
             if token in _VALUE_OPTIONS:
                 skip_next = True
             continue
-        if token in SUBCOMMAND_NAMES:
-            return token, argv[:index] + argv[index + 1 :]
+        command = resolve_subcommand(token)
+        if command:
+            return command, argv[:index] + argv[index + 1 :]
         return None, argv
     return None, argv
 
@@ -325,7 +364,22 @@ _KNOWN_COMMANDS = frozenset(
 
 
 def _looks_like_a_command(word: str) -> bool:
-    return word.strip().lower() in _KNOWN_COMMANDS
+    """True for anything the shell is more likely to mean as a command.
+
+    Covers the subcommands this build has, the old hand-written list (words
+    from other tools and later versions), and anything `resolve_subcommand`
+    recognises -- so `lfs conf` on an old build says "this build may be old"
+    instead of opening a share of a file called *conf*.
+    """
+    lowered = word.strip().lower()
+    if not lowered or "/" in lowered or lowered.startswith("."):
+        return False
+    return (
+        lowered in _KNOWN_COMMANDS
+        or lowered in SUBCOMMAND_NAMES
+        or lowered in _COMMAND_ALIASES
+        or bool(resolve_subcommand(lowered))
+    )
 
 
 def _unknown_command(word: str) -> int:
@@ -337,13 +391,15 @@ def _unknown_command(word: str) -> int:
     con = make_console()
     con.print(
         error_panel(
-            f"{word!r} is not a file here, and not a command in this build.",
+            f"There is no file or folder called {word!r} here.",
             title="Unknown command",
             hints=[
                 "`lfs` on its own opens the menu — that is the usual entry point",
                 "`lfs --help` lists the commands this build has",
+                "`lfs doctor` shows which copy answers your shell",
+                "    (several lfs binaries is common; the oldest usually wins)",
                 f"This copy reports ref {installed_ref() or 'unknown'}; if it is old:",
-                "    ./run upgrade      (from the checkout) or  lfs upgrade",
+                "    lfs upgrade",
                 "Nothing was shared or changed",
             ],
         )
@@ -397,6 +453,39 @@ def _handle_error(exc: BaseException, *, debug: bool) -> int:
 # ─────────────────────────────────────────────────────────────────────────────
 # Commands
 # ─────────────────────────────────────────────────────────────────────────────
+def _warn_about_shadowing_copy(con) -> None:  # noqa: ANN001
+    """One warning when an older `lfs` is what the shell actually runs.
+
+    Every other symptom of this is misleading: the menu is old, a subcommand
+    "does not exist", configure shows the share error -- all because a
+    different binary answered. It costs one PATH scan to say so up front, once.
+    """
+    import os  # noqa: PLC0415
+
+    if os.environ.get("LFS_NO_COPY_WARNING"):
+        return
+    try:
+        from .updater import _first_on_path, find_duplicates  # noqa: PLC0415
+    except Exception:  # noqa: BLE001
+        return
+    try:
+        winner = _first_on_path()
+        if not winner or not find_duplicates():
+            return
+    except Exception:  # noqa: BLE001 - never block the menu on this
+        return
+    con.print(
+        f"[lfs.warning]![/] [lfs.muted]a different lfs answers your shell:[/] "
+        f"[lfs.faint]{winner}[/]"
+    )
+    con.print(
+        f"[lfs.muted]  this is[/] [lfs.faint]{sys.argv[0] if sys.argv else 'lfs'}[/]"
+        f"[lfs.muted] — remove the other with[/] [lfs.primary]rm {winner}[/]"
+        f" [lfs.muted]or run[/] [lfs.primary]lfs doctor[/]"
+    )
+    con.print("[lfs.faint]  quiet with LFS_NO_COPY_WARNING=1")
+
+
 def cmd_menu(cfg: Config, state: State, args: argparse.Namespace) -> int:
     """Bare `lfs`: show the menu, then act.
 
@@ -414,6 +503,7 @@ def cmd_menu(cfg: Config, state: State, args: argparse.Namespace) -> int:
 
     animate = cfg.animate_banner and not args.no_anim
     con = make_console()
+    _warn_about_shadowing_copy(con)
     jump_in = getattr(args, "force_picker", False)
     if not con.is_terminal or not jump_in:
         return run_menu(config=cfg, state=state, animate=animate)
@@ -500,6 +590,11 @@ def cmd_share(cfg: Config, state: State, args: argparse.Namespace, paths: list[P
 def cmd_doctor(cfg: Config, state: State, args: argparse.Namespace) -> int:
     from .doctor import run_doctor
 
+    if getattr(args, "fix_copies", False):
+        from .updater import remove_shadowing_copies  # noqa: PLC0415
+
+        remove_shadowing_copies(dry_run=bool(args.json))
+        return 0
     return run_doctor(as_json=args.json, fast=args.fast)
 
 
@@ -728,9 +823,18 @@ def main(argv: list[str] | None = None) -> int:
             missing = [
                 word
                 for word in args.paths
-                if not Path(word).expanduser().exists() and _looks_like_a_command(word)
+                if not Path(word).expanduser().exists()
             ]
-            if missing and len(missing) == len(args.paths):
+            # A single bare word -- no slash, no dot-slash -- is a command far
+            # more often than a filename. "lfs nonsense" answered "Nothing to
+            # share", which blames the picker for a command typo and hides that
+            # an older install may be what answered. The original word is only
+            # available here: _resolve_paths() makes every path absolute, so
+            # this decision cannot move down into prepare_manifest().
+            bare = [word for word in missing if "/" not in word and "\\" not in word]
+            if len(args.paths) == 1 and bare:
+                return _unknown_command(bare[0])
+            if len(args.paths) == 1 and missing and _looks_like_a_command(missing[0]):
                 return _unknown_command(missing[0])
             return cmd_share(cfg, state, args, _resolve_paths(args.paths))
         if args.mode:

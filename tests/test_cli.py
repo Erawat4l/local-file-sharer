@@ -7,7 +7,13 @@ import json
 import pytest
 
 from local_file_sharer import __version__
-from local_file_sharer.cli import build_command_parsers, build_parser, main, split_argv
+from local_file_sharer.cli import (
+    build_command_parsers,
+    build_parser,
+    main,
+    resolve_subcommand,
+    split_argv,
+)
 
 
 def test_version_command(capsys):
@@ -304,3 +310,86 @@ def test_update_is_an_alias_for_upgrade():
 def test_update_and_upgrade_share_one_parser():
     parsers = build_command_parsers()
     assert parsers["update"] is parsers["upgrade"]
+
+
+# ── typing a command short ──────────────────────────────────────────────────
+@pytest.mark.parametrize(
+    ("typed", "expected"),
+    [
+        ("configure", "configure"),
+        ("conf", "configure"),
+        ("cfg", "configure"),
+        ("up", "upgrade"),
+        ("upd", "upgrade"),
+        ("update", "update"),
+        ("doc", "doctor"),
+        ("doctor", "doctor"),
+        ("ver", "version"),
+        ("menu", "menu"),
+    ],
+)
+def test_a_shortened_command_still_names_its_subcommand(typed, expected):
+    """`lfs conf` used to fall through to the share path and answer
+    "Nothing to share", which reads like a broken app rather than a typo."""
+    assert resolve_subcommand(typed) == expected
+
+
+@pytest.mark.parametrize("word", ["c", "co", "com", "~/Downloads", "movie.mp4", "sdcard"])
+def test_ambiguous_or_pathlike_words_are_not_subcommands(word):
+    """A real one- or two-letter filename must still share."""
+    assert resolve_subcommand(word) == ""
+
+
+def test_an_ambiguous_prefix_is_refused_rather_than_guessed():
+    """`completions` and `completion` are both installed, so a prefix that
+    matches more than one is refused instead of picking arbitrarily."""
+    assert resolve_subcommand("com") == ""
+    assert resolve_subcommand("compl") == ""
+    # and an unambiguous longer prefix still works
+    assert resolve_subcommand("comp") == "completions"
+
+
+def test_a_shortened_command_is_detected_in_argv():
+    assert split_argv(["up"]) == ("upgrade", [])
+    assert split_argv(["conf"]) == ("configure", [])
+    assert split_argv(["~/Downloads"]) == (None, ["~/Downloads"])
+
+
+# ── a bare word is a command, not a file ────────────────────────────────────
+def test_a_made_up_bare_word_is_reported_as_an_unknown_command(capsys):
+    """The reported case: `lfs nonsense` answered "Nothing to share".
+
+    That blames the file picker for a command typo, and hides the far more
+    likely cause -- an older build that does not have the command.
+    """
+    code = main(["nonsense"])
+    out = capsys.readouterr().out
+    assert code == 2
+    assert "Unknown command" in out
+    assert "nonsense" in out
+    assert "doctor" in out, "point at the command that names the shadowing copy"
+    assert "Nothing to share" not in out
+
+
+def test_a_word_that_names_a_command_is_reported_as_unknown_not_unshareable(capsys):
+    """`lfs download` is a command word: say so, do not blame the picker."""
+    code = main(["download"])
+    out = capsys.readouterr().out
+    assert code == 2
+    assert "Unknown command" in out
+
+
+def test_a_missing_absolute_path_keeps_the_share_error(capsys):
+    """A path that is clearly a path must not be called a command."""
+    code = main(["/tmp/definitely-not-here-1234.mp4"])
+    out = capsys.readouterr().out
+    assert code == 2
+    assert "Nothing to share" in out
+    assert "Unknown command" not in out
+
+
+def test_a_missing_dot_slash_path_keeps_the_share_error(capsys):
+    code = main(["./definitely-not-here-1234.mp4"])
+    out = capsys.readouterr().out
+    assert code == 2
+    assert "Nothing to share" in out
