@@ -21,6 +21,8 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
+import time
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
@@ -190,6 +192,23 @@ def upgrade_result(before: str, ref: str) -> tuple[bool, str, str]:
     return False, before, build
 
 
+def is_throwaway_ref(ref: str) -> bool:
+    """A ref that belongs to one session and will never move again.
+
+    Installs made from a feature branch pin that branch forever: `lfs upgrade`
+    realises the copy came from ``arena/abc123`` and reinstalls *that*, so the
+    device is frozen on whatever that branch held the day it was abandoned.
+    Every later fix is invisible, and the update keeps reporting success. That
+    is not a branch a user chose; it is a leftover of how they installed once.
+    """
+    lowered = (ref or "").strip().lower()
+    if not lowered:
+        return False
+    if lowered in ("main", "master", "trunk", DEFAULT_BRANCH):
+        return False
+    return lowered.startswith(("arena/", "feature/", "fix/", "tmp/", "temp/", "wip/"))
+
+
 def resolve_ref(ref: str | None = None) -> tuple[str, str]:
     """Pick a branch that can actually be installed. Returns ``(ref, note)``."""
     if ref:
@@ -200,6 +219,15 @@ def resolve_ref(ref: str | None = None) -> tuple[str, str]:
         return ref, f"{ref} has no pyproject.toml — the install will fail"
 
     wanted = installed_ref()
+    # An install from a throwaway branch must not pin itself to it for ever.
+    if is_throwaway_ref(wanted):
+        if ref_has_package(DEFAULT_BRANCH):
+            return DEFAULT_BRANCH, (
+                f"this copy came from {wanted}, which is a finished branch — "
+                f"following {DEFAULT_BRANCH} from now on"
+            )
+        return DEFAULT_BRANCH, ""
+
     candidates = [wanted, *[b for b in BRANCH_CANDIDATES if b != wanted]]
     for candidate in candidates:
         if ref_has_package(candidate):
@@ -251,7 +279,15 @@ def _phase_for(line: str, current: str) -> str:
     return current
 
 
-def run_with_progress(cmd: list[str], *, con=None, title: str = "upgrading") -> tuple[int, list[str]]:
+#: How long pip may go completely silent before the update is abandoned.
+#: Generous on purpose: a phone starting a clone can be quiet for a while, but
+#: four minutes of nothing is a dead connection, not a slow one.
+STALL_TIMEOUT = 240.0
+
+
+def run_with_progress(
+    cmd: list[str], *, con=None, title: str = "upgrading", stall_timeout: float | None = None
+) -> tuple[int, list[str]]:
     """Run *cmd* quietly and draw a progress bar in its place.
 
     pip is chatty: ``lfs upgrade`` used to hand the terminal to pip, which
@@ -272,6 +308,8 @@ def run_with_progress(cmd: list[str], *, con=None, title: str = "upgrading") -> 
     theme = current_theme()
     collected: list[str] = []
     state = {"phase": "resolve"}
+    begun = time.monotonic()
+    stall_timeout = STALL_TIMEOUT if stall_timeout is None else stall_timeout
 
     def render() -> Text:
         order = [key for key, _ in UPGRADE_STEPS]
@@ -285,6 +323,12 @@ def run_with_progress(cmd: list[str], *, con=None, title: str = "upgrading") -> 
         line.append(bar(done, total, width), style=theme.accent)
         line.append(f"  {done}/{total}  ", style=theme.muted)
         line.append(labels.get(state["phase"], ""), style=theme.faint)
+        # A frozen 0/5 gives no way to tell a slow network from a hung clone.
+        # The elapsed seconds make the difference obvious and prove the app is
+        # alive, which is the actual complaint: "stuck".
+        elapsed = max(0, int(time.monotonic() - begun))
+        if elapsed >= 3 and state["phase"] != "done":
+            line.append(f"  {elapsed}s", style=theme.faint)
         return line
 
     # A prompt must never wait forever: `lfs upgrade` on a phone looked frozen
@@ -320,24 +364,75 @@ def run_with_progress(cmd: list[str], *, con=None, title: str = "upgrading") -> 
         return 127, ["command not found: " + " ".join(cmd)]
 
     assert process.stdout is not None
-    if con.is_terminal:
-        with Live(render(), console=con, refresh_per_second=8, transient=True) as live:
-            for line in process.stdout:
-                stripped = line.rstrip()
-                if stripped:
-                    collected.append(stripped)
-                state["phase"] = _phase_for(stripped, state["phase"])
-                live.update(render(), refresh=True)
-            code = process.wait()
-            state["phase"] = "done" if code == 0 else state["phase"]
-            live.update(render(), refresh=True)
-    else:
-        for line in process.stdout:
-            stripped = line.rstrip()
+
+    # pip's output is read on a worker thread rather than inline. Iterating
+    # stdout blocks, so a clone that stops sending bytes left the bar at
+    # "0/5 contacting GitHub" with no way out: no deadline, no timeout, no
+    # message, and Ctrl+C the only exit. Reading in the background lets the
+    # loop below notice that nothing has arrived and give up with a reason.
+    def pump() -> None:
+        assert process.stdout is not None
+        for raw in process.stdout:
+            stripped = raw.rstrip()
             if stripped:
                 collected.append(stripped)
             state["phase"] = _phase_for(stripped, state["phase"])
-        code = process.wait()
+            state["last"] = time.monotonic()
+
+    state["last"] = time.monotonic()
+    reader = threading.Thread(target=pump, daemon=True)
+    reader.start()
+
+    def wait_or_kill(live=None) -> tuple[bool, bool]:
+        """Poll to completion. Returns ``(stalled, cancelled)``."""
+        while True:
+            if process.poll() is not None:
+                return False, False
+            quiet = time.monotonic() - float(state.get("last", begun))
+            if quiet > stall_timeout:
+                return True, False
+            if live is not None:
+                live.update(render(), refresh=True)
+            time.sleep(0.2)
+
+    stalled = False
+    if con.is_terminal:
+        with Live(render(), console=con, refresh_per_second=8, transient=True) as live:
+            try:
+                stalled, _ = wait_or_kill(live)
+            except KeyboardInterrupt:
+                process.kill()
+                process.wait()
+                live.stop()
+                raise
+            if stalled:
+                process.kill()
+                process.wait()
+                collected.append(
+                    f"no output for {int(stall_timeout)}s — the download stopped answering"
+                )
+            code = process.poll()
+            if code is None:
+                code = process.wait()
+            state["phase"] = "done" if code == 0 and not stalled else state["phase"]
+            live.update(render(), refresh=True)
+    else:
+        try:
+            stalled, _ = wait_or_kill()
+        except KeyboardInterrupt:
+            process.kill()
+            process.wait()
+            raise
+        if stalled:
+            process.kill()
+            process.wait()
+            collected.append(f"no output for {int(stall_timeout)}s — the download stopped answering")
+        code = process.poll()
+        if code is None:
+            code = process.wait()
+    reader.join(timeout=2)
+    if stalled:
+        return 124, collected
     return code, collected
 
 
@@ -381,18 +476,39 @@ _CAUSE_TESTS: tuple[tuple[tuple[str, ...], str, str], ...] = (
 
 # ── duplicate installs ──────────────────────────────────────────────────────
 def is_pipx_install(entry: str) -> bool:
-    """Is *entry* a pipx shim, rather than a script in a bin directory?
+    """Is *entry* part of a pipx install?
 
-    pipx writes a small wrapper into ``~/.local/bin`` that runs the app from its
-    own virtualenv; a plain ``pip --user`` install writes the real console
-    script there with a shebang pointing at the interpreter it installed into.
+    Two different files answer to this and only one of them mentions pipx:
+
+    * ``~/.local/bin/local-file-sharer`` — a pipx shim, whose text says pipx;
+    * ``~/.local/share/pipx/venvs/local-file-sharer/bin/lfs`` — the console
+      script inside the venv, with an ordinary Python shebang.
+
+    Only the first used to be recognised, so the copy that pipx actually owns
+    was reported as a plain ``pip`` install and the advice was to run
+    ``pip uninstall`` on it — which does nothing, because pip did not make it.
+    The path is therefore checked as well as the contents.
     """
+    lowered = str(entry).lower().replace("\\", "/")
+    if "/pipx/venvs/" in lowered or "/pipx/bin/" in lowered:
+        return True
+    # A shim in ~/.local/bin is often a symlink into the venv: follow it
+    # before reading anything, or the path check above never sees pipx.
+    try:
+        resolved = str(Path(entry).resolve()).lower().replace("\\", "/")
+    except OSError:
+        resolved = ""
+    if "/pipx/venvs/" in resolved or "/pipx/bin/" in resolved:
+        return True
     try:
         with open(entry, "rb") as handle:  # noqa: PTH123 - need bytes, not text
-            first = handle.readline(400)
+            head = handle.read(600)
     except OSError:
         return False
-    return b"pipx" in first
+    # The shim's own text names the venv it runs the app from, so this catches
+    # the case where the file is a real script rather than a symlink.
+    blob = head.lower()
+    return b"pipx" in blob or b"pipx/venvs" in blob
 
 
 def find_duplicates() -> list[dict[str, str]]:
@@ -437,14 +553,27 @@ def remove_shadowing_copies(*, dry_run: bool = False) -> list[tuple[str, str]]:
     con = console()
     winner = _first_on_path()
     results: list[tuple[str, str]] = []
-    if not winner:
+    duplicates = find_duplicates()
+    if not winner and not duplicates:
         con.print("[lfs.success]✓[/] [lfs.muted]the lfs your shell runs is this one[/]")
         return results
-    for item in find_duplicates():
+    if not winner:
+        con.print("[lfs.success]✓[/] [lfs.muted]nothing is shadowing this copy[/]")
+        return results
+
+    # A device commonly has three or four of these, not two. Removing only the
+    # winner leaves the next one to take its place, and the user is back here
+    # tomorrow. Order matters as well as count: the shell finds the first, so
+    # list them in PATH order and clear everything that is not this binary.
+    ordered = sorted(duplicates, key=lambda item: (item["path"] != winner, item["path"]))
+    pipx_seen = False
+    for item in ordered:
         path = Path(item["path"])
-        if item["path"] != winner:
-            continue
         if item["kind"] == "pipx":
+            # One pipx uninstall covers every file pipx owns.
+            if pipx_seen:
+                continue
+            pipx_seen = True
             what = "pipx uninstall local-file-sharer"
             results.append((str(path), what))
             con.print(f"[lfs.warning]needs pipx[/]  [lfs.faint]{path}[/]")
@@ -677,6 +806,14 @@ def upgrade_from_git(ref: str | None = None, *, verbose: bool = False) -> int:
         code, output = run_with_progress(cmd, con=con)
     if code == 127:
         con.print("[lfs.danger]could not run pip — install it, or re-run install.sh[/]")
+        return 1
+    if code == 124:
+        # Killed by the stall watchdog, not by pip. Say what happened and what
+        # to try: an unexplained 124 would look like an app bug.
+        con.print("[lfs.danger]the download stopped answering[/]")
+        con.print(f"[lfs.muted]no output for {int(STALL_TIMEOUT)}s, so it was abandoned.[/]")
+        con.print("[lfs.muted]nothing was changed. a weak connection is the usual cause —[/]")
+        con.print("[lfs.muted]try again, or on a slow link use the single file:[/] [lfs.primary]install-lfs.py[/]")
         return 1
     if code != 0 and kind != "pipx":
         # Debian/Ubuntu block --user installs without this (PEP 668)

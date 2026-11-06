@@ -511,3 +511,42 @@ def test_a_commit_is_still_the_strongest_evidence(monkeypatch):
     monkeypatch.setattr(updater, "installed_stamp", lambda: ("b" * 40, "x", "1.0.0"))
     assert updater.upgrade_result("a" * 40, "main")[0] is True
     assert updater.upgrade_result("b" * 40, "main")[0] is False
+
+
+# ── an install from a finished branch must not pin itself to it ─────────────
+@pytest.mark.parametrize(
+    "ref",
+    ["arena/d7f4713b-local-file-sharer", "feature/x", "fix/y", "wip/z", "tmp/q", "Arena/ABC"],
+)
+def test_a_throwaway_branch_is_recognised(ref):
+    assert updater.is_throwaway_ref(ref) is True
+
+
+@pytest.mark.parametrize("ref", ["main", "master", "trunk", "", "release/1.0"])
+def test_a_real_branch_is_not_treated_as_throwaway(ref):
+    assert updater.is_throwaway_ref(ref) is False
+
+
+def test_an_install_from_a_finished_branch_follows_main(monkeypatch):
+    """The reported trap: installed once from arena/d7f4713b, then `lfs upgrade`
+    reinstalled that same dead branch for ever. Every later fix was invisible
+    and the upgrade still reported success."""
+    monkeypatch.setattr(updater, "installed_ref", lambda: "arena/d7f4713b-local-file-sharer")
+    monkeypatch.setattr(updater, "ref_has_package", lambda ref, **kw: True)
+    target, note = updater.resolve_ref()
+    assert target == "main", f"still pinned to {target}"
+    assert "finished branch" in note, "the switch must be explained, not silent"
+
+
+def test_a_deliberate_ref_is_still_honoured(monkeypatch):
+    """`--ref somebranch` is an explicit choice and must not be second-guessed."""
+    monkeypatch.setattr(updater, "installed_ref", lambda: "arena/x")
+    monkeypatch.setattr(updater, "ref_has_package", lambda ref, **kw: True)
+    assert updater.resolve_ref("feature/keep-me")[0] == "feature/keep-me"
+
+
+def test_an_install_from_main_stays_on_main(monkeypatch):
+    monkeypatch.setattr(updater, "installed_ref", lambda: "main")
+    monkeypatch.setattr(updater, "ref_has_package", lambda ref, **kw: True)
+    target, note = updater.resolve_ref()
+    assert target == "main" and note == ""

@@ -235,6 +235,17 @@ run `hash -r`, so the shell forgets the old path.
 `lfs` also prints a one-line warning at startup when it detects this, so you are
 not left guessing. Silence it with `LFS_NO_COPY_WARNING=1`.
 
+**If `lfs upgrade` seems stuck** on `0/5 contacting GitHub`, it is not stuck: the
+bar now shows elapsed seconds, and an update that hears nothing from the network
+for four minutes is abandoned with an explanation instead of hanging. A weak
+connection is the usual reason; retrying, or using `install-lfs.py` on a slow
+link, is the fix.
+
+**Upgrading a copy installed from an old branch** used to reinstall that branch
+forever. If a copy was installed once from something like
+`arena/d7f4713b-local-file-sharer`, `lfs upgrade` now recognises it as a finished
+branch and follows `main` instead, saying so on the way past.
+
 ### One file (no git, no URL to type)
 
 Prefer not to clone? Download `install-lfs.py` and run it:
