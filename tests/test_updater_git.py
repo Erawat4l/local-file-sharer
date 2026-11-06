@@ -256,6 +256,11 @@ def test_pip_exiting_zero_without_installing_is_not_called_an_upgrade(capsys, mo
     monkeypatch.setattr(updater, "installed_commit", lambda: "c" * 40)
     monkeypatch.setattr(updater, "remote_commit", lambda ref, **kw: "c" * 40)
     monkeypatch.setattr(updater, "upgrade_result", lambda before, ref: (False, "c" * 40, "c" * 40))
+    # The "another copy is installed" warning also contains the word
+    # "upgraded", so leaving it unpatched made this assertion depend on
+    # whether the machine running the tests happened to have a second lfs on
+    # PATH -- it failed in CI for a reason that had nothing to do with pip.
+    monkeypatch.setattr(updater, "find_duplicates", lambda: [])
     assert updater.upgrade_from_git(None) == 0
     out = capsys.readouterr().out
     assert "nothing changed" in out
