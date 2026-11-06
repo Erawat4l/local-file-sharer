@@ -195,6 +195,11 @@ def build_command_parsers() -> dict[str, argparse.ArgumentParser]:
         default=None,
         help="branch or tag to install (default: the one this copy came from)",
     )
+    upgrade.add_argument(
+        "--verbose",
+        action="store_true",
+        help="show pip's own output instead of just the progress bar",
+    )
     parsers["upgrade"] = upgrade
     # `lfs update` is the word people reach for; it shares the same parser.
     parsers["update"] = upgrade
@@ -377,7 +382,7 @@ def cmd_menu(cfg: Config, state: State, args: argparse.Namespace) -> int:
 def cmd_upgrade(cfg: Config, state: State, args: argparse.Namespace) -> int:
     from .updater import upgrade_from_git  # noqa: PLC0415
 
-    return upgrade_from_git(getattr(args, "ref", None))
+    return upgrade_from_git(getattr(args, "ref", None), verbose=bool(getattr(args, "verbose", False)))
 
 
 def cmd_share(cfg: Config, state: State, args: argparse.Namespace, paths: list[Path]) -> int:

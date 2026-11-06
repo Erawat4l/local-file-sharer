@@ -1225,3 +1225,48 @@ def test_a_media_card_opens_the_player(share_tree, free_port):
         assert body.count('class="card-main"') > len(linked)
     finally:
         server.stop()
+
+
+def _player_page(server) -> str:
+    """The player HTML for the video the media fixture created."""
+    item_id = json.load(get(server, "/api/manifest"))["items"][0]["id"]
+    rows = _rows(get(server, "/d/" + item_id).read().decode())
+    href = next(href for href, kind, _ in rows if kind == "video")
+    return get(server, href).read().decode()
+
+
+def test_the_player_uses_icons_not_a_row_of_words(media_server):
+    """A phone row of text buttons wrapped onto three lines and got mis-tapped."""
+    server, _item_id = media_server
+    body = _player_page(server)
+    # every control is a round icon button
+    assert body.count('class="round') >= 7
+    # the words that used to be printed on them are gone from the control row
+    # (the codec panel keeps a text Download button on purpose: it is the only
+    # action there, and a lone icon would be a puzzle)
+    controls = body.split('<div class="buttons">')[1].split("</div>")[0]
+    for word in (">Full<", ">PiP<", ">Play<", ">Download<", ">vol<"):
+        assert word not in controls, f"{word} is still a text button"
+
+
+def test_the_player_stage_adapts_to_the_video_shape(media_server):
+    """A 2.39:1 film must not sit in a 16:9 box with black bands, and a 9:16
+    short must not be a postage stamp. The player reads the real dimensions."""
+    server, _item_id = media_server
+    body = _player_page(server)
+    assert "fitStageTo" in body
+    assert "videoWidth" in body and "videoHeight" in body
+    for shape in ("portrait", "square", "ultrawide"):
+        assert shape in body
+
+
+def test_a_tap_toggles_the_controls_and_never_pauses(media_server):
+    """The reported bug: tapping to hide the controls paused the video instead,
+    and the controls only came back on a timer."""
+    server, _item_id = media_server
+    body = _player_page(server)
+    assert "dismissByTap" in body
+    assert "userHidden" in body
+    # the old click-to-pause handler bound to the picture must be gone; the
+    # play button and the spacebar keep that exact expression on purpose
+    assert "v.addEventListener('click'" not in body

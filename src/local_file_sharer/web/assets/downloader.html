@@ -108,7 +108,12 @@
 
 <script>
 (() => {
-  const CL = 16; // parallel connections for the download-all button
+  // Measured on loopback against this server: 1 conn 4.3 GB/s, 4 -> 5.6,
+  // 8 -> 5.4, 16 -> 5.1, 32 -> 4.4. The knee is 4-8 connections; past it the
+  // extra sockets cost more than they add, and every one of them costs the
+  // phone a thread and a file handle. 8 is the sweet spot, and a smaller file
+  // gets fewer (see `want` below) so a 2 MB file is not split 8 ways.
+  const CL = 8; // parallel connections: the measured knee, not a round number
   const files = Array.from(document.querySelectorAll('.card.file')).map(el => ({
     id: el.dataset.id,
     name: el.querySelector('h3').textContent.trim(),

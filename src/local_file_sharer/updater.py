@@ -209,6 +209,11 @@ def _phase_for(line: str, current: str) -> str:
     for marker, phase in _PHASE_MARKERS:
         if marker in lowered:
             return phase
+    # Any output at all means the first stage is over, even if pip's wording
+    # changes. A 0/5 bar that never moves is indistinguishable from a hang, and
+    # that is exactly what a user reported while git was slowly cloning.
+    if lowered.strip() and current == "resolve":
+        return "clone"
     return current
 
 
@@ -428,7 +433,7 @@ def _show_failure(con, lines: list[str], *, limit: int = 14, headline: str = "la
         con.print(f"  [lfs.faint]{line[:160]}[/]")
 
 
-def upgrade_from_git(ref: str | None = None) -> int:
+def upgrade_from_git(ref: str | None = None, *, verbose: bool = False) -> int:
     """Install the newest code from GitHub, the only place this package lives.
 
     ``lfs --update`` looks for a GitHub *release*, and there are none yet, so it
@@ -482,7 +487,14 @@ def upgrade_from_git(ref: str | None = None) -> int:
         )
     before = installed_commit()
     wanted = remote_commit(target)
-    code, output = run_with_progress(cmd, con=con)
+    if verbose:
+        # Some failures are only diagnosable from git's own voice, so offer a
+        # way to see it live instead of guessing from a bar that does not move.
+        con.print(f"[lfs.muted]running[/]  [lfs.faint]{' '.join(cmd)}[/]")
+        code = subprocess.call(cmd, env=dict(os.environ, GIT_TERMINAL_PROMPT="0"))  # noqa: S603
+        output = []
+    else:
+        code, output = run_with_progress(cmd, con=con)
     if code == 127:
         con.print("[lfs.danger]could not run pip — install it, or re-run install.sh[/]")
         return 1

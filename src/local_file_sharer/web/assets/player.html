@@ -31,7 +31,8 @@
   body{min-height:100dvh;overflow-x:clip}
   @media (max-width:980px){
     .shell{grid-template-columns:1fr;grid-template-rows:auto}
-    .stage{min-height:100dvh}
+    /* no forced full height: a 2.39:1 film would sit in a tall black column */
+    .stage{min-height:0}
   }
 
   /* ── stage ── */
@@ -43,7 +44,7 @@
   .badge{font-family:var(--mono);font-size:11px;padding:4px 9px;border-radius:999px;border:1px solid var(--line);color:var(--dim)}
   .spacer{flex:1}
 
-  .video-wrap{position:relative;flex:1;min-height:260px;border-radius:18px;overflow:hidden;
+  .video-wrap{position:relative;flex:0 1 auto;min-height:0;border-radius:18px;overflow:hidden;
     background:#000;border:1px solid var(--line);box-shadow:0 30px 80px -40px rgba(0,0,0,.95)}
   video,audio{width:100%;height:100%;display:block;background:#000}
   video{object-fit:contain}
@@ -61,14 +62,15 @@
   .stage:fullscreen .understage{display:none}
   /* controls fade away while playing, exactly like a desktop player */
   .stage.hide-cursor{cursor:none}
-  .stage:fullscreen.is-playing:not(.show-controls) .controls,
-  .stage:fullscreen.is-playing:not(.show-controls) .topline{opacity:0;pointer-events:none}
-  .stage:fullscreen .controls,
-  .stage:fullscreen .topline{transition:opacity .22s ease}
+  .stage.is-playing:not(.show-controls) .controls,
+  .stage.is-playing:not(.show-controls) .topline{opacity:0;pointer-events:none;
+    transform:translateY(6px)}
+  .stage .controls,
+  .stage .topline{transition:opacity .2s ease, transform .2s ease}
   video:fullscreen{width:100vw;height:100vh;object-fit:contain;background:#000}
   video::backdrop{background:#000}
-  .stage-audio .video-wrap{display:grid;place-items:center;background:
-      #0a0a0a}
+  .stage-audio .video-wrap{display:grid;place-items:center;background:#0a0a0a;
+    aspect-ratio:auto;max-width:100%;max-height:none;min-height:280px}
   .stage-audio video{display:none}
   .artwork{text-align:center;padding:28px}
   .artwork .disc{width:180px;height:180px;margin:0 auto 18px;border-radius:50%;
@@ -102,7 +104,8 @@
   /* custom controls */
   .controls{margin-top:14px;padding:14px 16px;border-radius:16px;border:1px solid var(--line);
     background:rgba(10,10,10,.82);backdrop-filter:blur(16px);display:grid;gap:10px}
-  .seekrow{display:flex;align-items:center;gap:12px}
+  .seekrow{display:flex;align-items:center;gap:10px;min-width:0}
+  .seekrow .t{flex:0 0 auto;font-variant-numeric:tabular-nums}
   /* the slider stretches, but the tooltip is anchored to it, not the row */
   .seekwrap{position:relative;flex:1;display:flex;align-items:center}
   .seekwrap input[type=range]{width:100%}
@@ -122,15 +125,49 @@
   input[type=range]::-moz-range-progress{height:6px;border-radius:999px;background:var(--accent)}
   input[type=range]::-moz-range-thumb{width:14px;height:14px;border:0;border-radius:50%;background:#fff}
 
-  .buttons{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  /* one row on a phone: 6 round buttons and the speed chip do not fit beside
+     the play button plus a volume slider, and wrapping pushed the download and
+     fullscreen buttons onto a second line where they were easy to miss. */
+  .buttons{display:flex;align-items:center;gap:6px;flex-wrap:nowrap;overflow:visible}
+  .buttons .spacer{display:none}
+  @media (min-width:820px){ .buttons{gap:8px} .buttons .spacer{display:block;flex:1} }
   button{font-family:inherit;color:var(--text);background:#141414;
     border:1px solid var(--line);border-radius:11px;padding:9px 13px;font-size:13px;cursor:pointer;
     display:inline-flex;align-items:center;gap:7px;transition:background .14s ease,transform .14s ease}
   button:hover{background:#232323;transform:translateY(-1px)}
   button.primary{background:#f5f5f5;color:#000;border:0;font-weight:650}
-  button.icon{font-size:15px;padding:9px 11px}
-  .volume{display:flex;align-items:center;gap:8px;min-width:120px}
-  .volume input{width:90px}
+  /* Round icon buttons, like every other player: a picture is quicker to read
+     than the word "Full" or "PiP", and it stops the row wrapping on a phone. */
+  .round{width:40px;height:40px;padding:0;border-radius:50%;justify-content:center;
+    position:relative;flex:0 0 auto;text-decoration:none}
+  .round.primary{width:46px;height:46px}
+  @media (max-width:400px){
+    .buttons{gap:5px}
+    .round{width:38px;height:38px}
+    .round.primary{width:44px;height:44px}
+    #rate b{font-size:11.5px}
+  }
+  .round .i{width:21px;height:21px;fill:none;stroke:currentColor;stroke-width:1.8;
+    stroke-linecap:round;stroke-linejoin:round}
+  .round.primary .i{width:24px;height:24px;fill:currentColor;stroke:none}
+  .round .i .solid{fill:currentColor;stroke:none}
+  .round .i.off{display:none}
+  .round .glyph{position:absolute;font-size:8.5px;font-weight:700;letter-spacing:0;
+    bottom:9px;left:50%;transform:translateX(-50%);pointer-events:none}
+  .round#mute .i{width:20px}
+  #vol{width:88px;flex:0 0 auto}
+  @media (max-width:700px){ #vol{display:none} }   /* the mute button is enough */
+  #rate b{font-size:12.5px;font-weight:650;font-variant-numeric:tabular-nums}
+
+  /* ── the stage takes the video's own shape ────────────────────────────────
+     A fixed tall box letterboxes a wide film into a black band, and a portrait
+     clip into a thin strip. aspect-ratio is set from the file's metadata so the
+     frame fits the picture: landscape films get a wide stage, vertical shorts
+     get a tall one. */
+  .video-wrap{aspect-ratio:16 / 9;flex:0 1 auto;width:100%;max-height:calc(100dvh - 210px)}
+  .video-wrap.portrait{aspect-ratio:9 / 16;max-width:min(100%, 56dvh)}
+  .video-wrap.square{aspect-ratio:1 / 1;max-width:min(100%, 72dvh)}
+  .video-wrap.ultrawide{aspect-ratio:21 / 9}
 
   .understage{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:14px 2px 20px;
     color:var(--faint);font-size:12.5px}
@@ -208,18 +245,44 @@
         <span class="t" id="dur">—</span>
       </div>
       <div class="buttons">
-        <button class="primary" id="play"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg><span>Play</span></button>
-        <button class="icon" id="back10" title="Back 10s" aria-label="Back 10 seconds">-10</button>
-        <button class="icon" id="fwd10" title="Forward 10s" aria-label="Forward 10 seconds">+10</button>
-        <div class="volume">
-          <button class="icon" id="mute" title="Mute" aria-label="Mute">vol</button>
-          <input id="vol" type="range" min="0" max="100" value="100" aria-label="Volume">
-        </div>
+        <button class="round primary" id="play" aria-label="Play">
+          <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
+        </button>
+        <button class="round" id="back10" aria-label="Back 10 seconds" title="Back 10s">
+          <svg class="i" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M11 5 6.5 9 11 13"/><path d="M6.5 9H13a5.5 5.5 0 1 1 0 11h-3"/></svg>
+          <span class="glyph">10</span>
+        </button>
+        <button class="round" id="fwd10" aria-label="Forward 10 seconds" title="Forward 10s">
+          <svg class="i" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="m13 5 4.5 4-4.5 4"/><path d="M17.5 9H11a5.5 5.5 0 1 0 0 11h3"/></svg>
+          <span class="glyph">10</span>
+        </button>
+        <button class="round" id="mute" aria-label="Mute" title="Mute">
+          <svg class="i" id="vol-on" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M4 9.5h3L11.5 6v12L7 14.5H4z"/><path d="M15.5 9a4 4 0 0 1 0 6"/>
+            <path d="M18 6.5a7.5 7.5 0 0 1 0 11"/></svg>
+          <svg class="i off" id="vol-off" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M4 9.5h3L11.5 6v12L7 14.5H4z"/><path d="m16 9.5 5 5"/><path d="m21 9.5-5 5"/></svg>
+        </button>
+        <input id="vol" type="range" min="0" max="100" value="100" aria-label="Volume">
         <div class="spacer"></div>
-        <button id="rate" title="Playback speed">1×</button>
-        <button id="full" title="Fullscreen">Full</button>
-        <button id="pip" title="Picture in picture" aria-label="Picture in picture">PiP</button>
-        <a href="{{download_url}}" download><button>Download</button></a>
+        <button class="round" id="rate" aria-label="Playback speed" title="Playback speed"><b id="rate-label">1&times;</b></button>
+        <button class="round" id="pip" aria-label="Picture in picture" title="Picture in picture">
+          <svg class="i" viewBox="0 0 24 24" aria-hidden="true">
+            <rect x="3" y="5" width="18" height="14" rx="2.5"/>
+            <rect x="12" y="11" width="7" height="6" rx="1.2" class="solid"/></svg>
+        </button>
+        <a class="round" id="get" href="{{download_url}}" download aria-label="Download" title="Download">
+          <svg class="i" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M12 4v10"/><path d="m7.5 10.5 4.5 4 4.5-4"/><path d="M5 19h14"/></svg>
+        </a>
+        <button class="round" id="full" aria-label="Fullscreen" title="Fullscreen">
+          <svg class="i" id="full-on" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M4 9V4h5"/><path d="M20 9V4h-5"/><path d="M4 15v5h5"/><path d="M20 15v5h-5"/></svg>
+          <svg class="i off" id="full-off" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M9 4v5H4"/><path d="M15 4v5h5"/><path d="M9 20v-5H4"/><path d="M15 20v-5h5"/></svg>
+        </button>
       </div>
     </div>
 
@@ -240,6 +303,7 @@
       <div class="row"><span>transferred</span><b id="sent">—</b></div>
       <div class="row"><span>devices</span><b id="devices">1</b></div>
       <div class="row"><span>format</span><b>{{mime}}</b></div>
+      <div class="row"><span>shape</span><b id="shape">—</b></div>
     </div>
     <p style="margin-top:18px;font-size:12px;color:var(--faint);line-height:1.55">
       If the preview stays black, the codec is not supported by this browser
@@ -281,6 +345,7 @@
 
   v.addEventListener('loadedmetadata', () => {
     dur.textContent = clock(v.duration);
+    fitStageTo(v.videoWidth, v.videoHeight);
     // restore last position so a reload keeps your place
     const saved = parseFloat(localStorage.getItem('lfs-pos:' + location.pathname) || '0');
     if (saved > 3 && saved < v.duration - 5) v.currentTime = saved;
@@ -296,18 +361,19 @@
       localStorage.setItem('lfs-pos:' + location.pathname, String(v.currentTime));
     }
   });
-  // swap only the glyph, so the button keeps its size and the label stays text
+  // swap only the glyph: the button has no text label any more, and keeping
+  // the element means no layout shift when it changes.
   const setGlyph = (el, path) => el.querySelector('svg').firstElementChild.setAttribute('d', path);
   const PLAY_PATH = 'M8 5v14l11-7z';
   const PAUSE_PATH = 'M7 5h4v14H7zM13 5h4v14h-4z';
   v.addEventListener('play', () => {
     setGlyph(playBtn, PAUSE_PATH);
-    playBtn.querySelector('span').textContent = 'Pause';
+    playBtn.setAttribute('aria-label', 'Pause');
     stage.classList.add('playing');
   });
   v.addEventListener('pause', () => {
     setGlyph(playBtn, PLAY_PATH);
-    playBtn.querySelector('span').textContent = 'Play';
+    playBtn.setAttribute('aria-label', 'Play');
     stage.classList.remove('playing');
   });
   v.addEventListener('progress', () => {
@@ -360,7 +426,7 @@
     document.getElementById('unsupported').classList.add('show');
     document.getElementById('unsupported-body').hidden = false;
     stage.classList.remove('playing');
-    playBtn.querySelector('span').textContent = 'Play';
+    setGlyph(playBtn, PLAY_PATH);
     // the seek bar cannot move if there is nothing to seek
     seek.disabled = true;
   };
@@ -403,28 +469,99 @@
   seek.addEventListener('pointerdown', tipFor);
   seek.addEventListener('pointerleave', () => seekTip.classList.remove('show'));
 
-  // ── auto-hiding controls while a video plays fullscreen ────────────────────
+  // ── controls: a tap shows and hides them, the timer only tidies up ────────
+  // Before, they only ever faded on a 2.2s timer and only in fullscreen, so a
+  // tap did nothing visible: the controls were already there, and nothing the
+  // finger did could dismiss them. Tapping the picture now toggles them, which
+  // is what every phone player does.
   let hideTimer;
-  const revealControls = () => {
+  // Whether the *user* dismissed them, as opposed to the idle timer. Without
+  // this, the mouse movement that precedes every click re-shows the controls,
+  // so a tap always saw them visible and always hid them — the second tap did
+  // nothing, which is exactly the bug this was meant to fix.
+  let userHidden = false;
+  const controlsShown = () => stage.classList.contains('show-controls');
+  const showControls = () => {
     stage.classList.add('show-controls');
     stage.classList.remove('hide-cursor');
     clearTimeout(hideTimer);
-    hideTimer = setTimeout(() => {
-      if (!v.paused && document.fullscreenElement) {
-        stage.classList.remove('show-controls');
-        stage.classList.add('hide-cursor');
-      }
-    }, 2200);
+    hideTimer = setTimeout(hideControls, 2600);
   };
-  stage.addEventListener('pointermove', revealControls);
-  stage.addEventListener('pointerdown', revealControls);
-  v.addEventListener('play', () => { stage.classList.add('is-playing'); revealControls(); });
+  const hideControls = () => {
+    if (v.paused) return;                  // never hide from a paused player
+    stage.classList.remove('show-controls');
+    stage.classList.add('hide-cursor');
+    userHidden = true;
+  };
+  const dismissByTap = () => {
+    if (userHidden || !controlsShown()) {
+      userHidden = false;
+      showControls();                      // second tap brings them back
+    } else {
+      clearTimeout(hideTimer);
+      hideControls();
+    }
+  };
+  // was that a tap, or the end of a drag/scroll?
+  let tapStart = null;
+  stage.addEventListener('pointerdown', (e) => {
+    tapStart = {
+      x: e.clientX, y: e.clientY, t: Date.now(), dragging: false,
+      onChrome: !!e.target.closest('.controls, .topline, a, button, input'),
+    };
+  });
+  stage.addEventListener('pointermove', (e) => {
+    // a mouse reveals on movement unless the user dismissed them on purpose;
+    // a finger only reveals mid-drag, because tapping is its reveal
+    if (e.pointerType && e.pointerType !== 'mouse') return;
+    if (userHidden) return;
+    if (tapStart) {
+      if (Math.hypot(e.clientX - tapStart.x, e.clientY - tapStart.y) > 12) tapStart.dragging = true;
+      return;
+    }
+    showControls();
+  });
+  stage.addEventListener('pointerup', (e) => {
+    if (!tapStart) return;
+    const moved = Math.hypot(e.clientX - tapStart.x, e.clientY - tapStart.y);
+    const quick = Date.now() - tapStart.t < 500;
+    const onChrome = tapStart.onChrome || !!e.target.closest('.controls, .topline, a, button, input');
+    tapStart = null;
+    if (moved > 12 || !quick || onChrome) return;
+    dismissByTap();
+  });
+  // a finger dragging the seek bar must not fire the auto-hide mid-drag
+  document.getElementById('seek').addEventListener('pointerdown', () => clearTimeout(hideTimer));
+  v.addEventListener('play', () => {
+    stage.classList.add('is-playing');
+    userHidden = false;
+    showControls();
+  });
   v.addEventListener('pause', () => {
     stage.classList.remove('is-playing', 'hide-cursor');
+    userHidden = false;
     stage.classList.add('show-controls');
     clearTimeout(hideTimer);
   });
-  document.addEventListener('fullscreenchange', revealControls);
+  document.addEventListener('fullscreenchange', () => { userHidden = false; showControls(); });
+
+  // ── the stage matches the picture, not a fixed 16:9 box ───────────────────
+  // A 2.39:1 film in a 16:9 box leaves black bands; a 9:16 short in the same
+  // box is a postage stamp. Read the real dimensions and shape the frame.
+  function fitStageTo(width, height) {
+    const wrap = stage.querySelector('.video-wrap');
+    if (!wrap || !width || !height) return;
+    const ratio = width / height;
+    wrap.classList.remove('portrait', 'square', 'ultrawide');
+    if (ratio < 0.85) wrap.classList.add('portrait');
+    else if (ratio < 1.15) wrap.classList.add('square');
+    else if (ratio > 2.0) wrap.classList.add('ultrawide');
+    // exact ratio, so film bars disappear instead of being cropped
+    if (ratio >= 0.85) wrap.style.aspectRatio = `${width} / ${height}`;
+    const kind = ratio < 0.85 ? 'short' : ratio < 1.15 ? 'square' : 'wide';
+    document.getElementById('shape').textContent =
+      `${width}×${height} · ${kind}`;
+  }
 
   // ── remember and restore the volume, and the position on every change ──────
   const savedVol = localStorage.getItem('lfs-vol');
@@ -447,15 +584,31 @@
   playBtn.addEventListener('click', () => (v.paused ? v.play() : v.pause()));
   document.getElementById('back10').addEventListener('click', () => { v.currentTime = Math.max(0, v.currentTime - 10); });
   document.getElementById('fwd10').addEventListener('click', () => { v.currentTime = Math.min(v.duration || 1e9, v.currentTime + 10); });
-  document.getElementById('mute').addEventListener('click', (e) => {
-    v.muted = !v.muted; e.currentTarget.textContent = v.muted ? 'mute' : 'vol';
+  // Set the flag only: paintVolume() owns the icon. Writing textContent here
+  // deleted the two <svg> glyphs and left the word "mute" in their place.
+  document.getElementById('mute').addEventListener('click', () => { v.muted = !v.muted; });
+  document.getElementById('vol').addEventListener('input', (e) => {
+    v.volume = e.target.value / 100;
+    v.muted = v.volume === 0;
   });
-  document.getElementById('vol').addEventListener('input', (e) => { v.volume = e.target.value / 100; v.muted = v.volume === 0; });
+  // one icon for "sound on", one for "muted", so the button says what it is
+  const paintVolume = () => {
+    const silent = v.muted || v.volume === 0;
+    document.getElementById('vol-on').classList.toggle('off', silent);
+    document.getElementById('vol-off').classList.toggle('off', !silent);
+    document.getElementById('vol').value = silent ? 0 : v.volume * 100;
+    document.getElementById('mute').setAttribute('aria-label', silent ? 'Unmute' : 'Mute');
+  };
+  v.addEventListener('volumechange', paintVolume);
+  paintVolume();
   const rates = [1, 1.25, 1.5, 2, 0.75];
   let rateIdx = 0;
-  document.getElementById('rate').addEventListener('click', (e) => {
-    rateIdx = (rateIdx + 1) % rates.length; v.playbackRate = rates[rateIdx];
-    e.currentTarget.textContent = rates[rateIdx] + '×';
+  document.getElementById('rate').addEventListener('click', () => {
+    rateIdx = (rateIdx + 1) % rates.length;
+    v.playbackRate = rates[rateIdx];
+    // the label lives in a <b> inside the round button; replacing the whole
+    // button's text would delete the element the label lives in
+    document.getElementById('rate-label').textContent = rates[rateIdx] + '\u00d7';
   });
   // Fullscreen the stage (video + controls), not just the video, so the seek
   // bar and volume stay reachable. iOS Safari has no element fullscreen for
@@ -479,12 +632,14 @@
   document.getElementById('full').addEventListener('click', goFullscreen);
   // double-click the picture to toggle, like every desktop player
   v.addEventListener('dblclick', goFullscreen);
-  // tap/click the picture to pause, the first thing anyone tries
-  v.addEventListener('click', () => (v.paused ? v.play() : v.pause()));
+  // No click-to-pause on the picture: a tap is "show/hide the controls", which
+  // is what every phone player does. It used to pause the video, so tapping to
+  // dismiss the controls stopped playback instead — that was the complaint.
   document.addEventListener('fullscreenchange', () => {
     const on = Boolean(document.fullscreenElement);
     stage.classList.toggle('is-fullscreen', on);
-    document.getElementById('full').textContent = on ? 'Exit' : 'Full';
+    document.getElementById('full-on').classList.toggle('off', on);
+    document.getElementById('full-off').classList.toggle('off', !on);
     // keep the video sized after the layout flips
     requestAnimationFrame(() => v.dispatchEvent(new Event('resize')));
   });

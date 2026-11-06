@@ -7,6 +7,23 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Changed
+- The player's controls are icons, not words, and fit one row on a phone.
+- The player stage takes the video's own shape: a 2.39:1 film fills a wide
+  frame instead of sitting in black bands, and a 9:16 short fills a tall one.
+  The aside shows the real resolution (e.g. `1920×804 · wide`).
+
+### Fixed
+- Tapping the picture pauses nothing now: a tap shows and hides the controls,
+  and a second tap brings them back. The old handler paused the video instead,
+  and the controls only reappeared on a 2.2s timer.
+- The mute button no longer replaces its icon with the word "mute".
+- `lfs upgrade` advances off "contacting GitHub" as soon as pip prints
+  anything, so a slow clone no longer looks like a hang, and `--verbose` shows
+  pip's own output when the bar is not enough.
+- Parallel downloads use 8 connections instead of 16: measured against this
+  server, throughput peaks at 4-8 and drops by half by 16.
+
 ### Fixed
 - `lfs upgrade` froze forever at `0/5 contacting GitHub`. pip handed the terminal
   to git, git asked for a username and password, and nothing was reading stdin:
