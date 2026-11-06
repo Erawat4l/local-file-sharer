@@ -101,13 +101,45 @@ def running_from(path: Path) -> bool:
     return False
 
 
+def _path_entries(name: str) -> list[str]:
+    """Every *name* on PATH, whether or not it is the one that would run."""
+    import os  # noqa: PLC0415
+
+    found: list[str] = []
+    for directory in os.environ.get("PATH", "").split(os.pathsep):
+        if not directory:
+            continue
+        candidate = Path(directory) / name
+        if candidate.is_symlink() or candidate.exists():
+            found.append(str(candidate))
+    return found
+
+
+def _own_tree() -> Path | None:
+    """The checkout this process is running from, when it is a checkout."""
+    try:
+        prefix = Path(sys.prefix).resolve()
+    except OSError:
+        return None
+    if prefix.name != ".venv":
+        return None
+    candidate = prefix.parent
+    return candidate if _is_checkout(candidate) else None
+
+
 def make_plan(*, purge_data: bool = False, keep_checkout: bool = False) -> Plan:
     """Decide everything that should go, without deleting anything yet."""
     plan = Plan()
+    tree = _own_tree()
+    own = Path(sys.argv[0]).resolve() if sys.argv and sys.argv[0] else None
 
     # 1. every launcher on PATH, with the flavour that knows how to remove it
+    seen: set[str] = set()
     for item in find_duplicates():
         path = item["path"]
+        if path in seen:
+            continue
+        seen.add(path)
         if item["kind"] == "pipx":
             # pipx owns a venv behind that shim; deleting the shim by hand
             # leaves a broken half-install, so it is delegated.
@@ -117,27 +149,37 @@ def make_plan(*, purge_data: bool = False, keep_checkout: bool = False) -> Plan:
             continue
         plan.steps.append(Step("launcher", path))
 
-    # the copy that is running right now is not in find_duplicates(); it is
-    # removed last because deleting it mid-run is the one risky delete
-    own = Path(sys.argv[0]).resolve() if sys.argv and sys.argv[0] else None
+    # The symlink the shell actually runs is skipped by find_duplicates(): it
+    # resolves to this very binary, so it looks like "the running copy". It is
+    # not -- it is a separate file on PATH that outlives everything else and
+    # would be left dangling. Every symlink pointing into our own tree goes.
+    if tree is not None:
+        for entry in _path_entries("lfs") + _path_entries("local-file-sharer"):
+            path = Path(entry)
+            if str(path) in seen or not path.is_symlink():
+                continue
+            try:
+                target = path.resolve()
+            except OSError:
+                continue
+            if target == own or target.is_relative_to(tree):
+                seen.add(str(path))
+                plan.steps.append(Step("launcher (on PATH)", str(path)))
+
+    # the copy that is running right now, removed last
     if own is not None and own.exists():
-        plan.steps.append(Step("launcher (this one)", str(own)))
+        plan.steps.append(Step("running executable", str(own)))
 
     # 2. the checkout, if this is a directory install rather than site-packages
-    checkout = Path(sys.prefix).resolve().parent if "venv" in sys.prefix.lower() else None
-    if checkout is None:
-        # the console script lives in <checkout>/.venv/bin/lfs
-        candidate = own.parent.parent.parent if own is not None else None
-        checkout = candidate
-    if checkout is not None and _is_checkout(checkout):
+    if tree is not None:
         if keep_checkout:
-            plan.kept.append(f"checkout {checkout} (--keep-checkout)")
-        elif running_from(checkout):
-            plan.steps.append(Step("checkout (after this command exits)", str(checkout)))
+            plan.kept.append(f"checkout {tree} (--keep-checkout)")
         else:
-            plan.steps.append(Step("checkout", str(checkout)))
-    elif checkout is not None:
-        plan.kept.append(f"{checkout} (not a local-file-sharer checkout)")
+            # Never rmtree the tree we are standing in: pip's own imports come
+            # from that .venv, so deleting it mid-run crashes the command with
+            # a ModuleNotFoundError traceback -- after it has already removed
+            # half of itself. A detached shell removes it once we are gone.
+            plan.steps.append(Step("checkout (after this exits)", str(tree)))
 
     # 3. config and cache -- a reinstall should not inherit a stale PIN
     plan.steps.append(Step("config", str(platforms.config_dir())))
@@ -165,6 +207,31 @@ def _remove(step: Step) -> None:
         step.detail = str(exc)
 
 
+def _defer_removal(path: Path) -> bool:
+    """Delete *path* from a detached shell once this process is gone.
+
+    A checkout cannot remove itself: its `.venv` is where pip and rich are
+    being imported from, so `shutil.rmtree` unloads the ground the interpreter
+    is standing on. The command died with ModuleNotFoundError after deleting
+    part of itself. A `sh -c 'sleep 1; rm -rf ...'` started with start_new_session
+    survives us and finishes the job.
+    """
+    import shlex  # noqa: PLC0415
+    import subprocess  # noqa: PLC0415
+
+    script = f"sleep 1; rm -rf {shlex.quote(str(path))}"
+    try:
+        subprocess.Popen(  # noqa: S603
+            ["/bin/sh", "-c", script],
+            start_new_session=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        return True
+    except OSError:
+        return False
+
+
 def apply(plan: Plan, *, dry_run: bool = False) -> Plan:
     """Carry out *plan*, in order. Never raises for a single failed step."""
     if dry_run:
@@ -177,7 +244,11 @@ def apply(plan: Plan, *, dry_run: bool = False) -> Plan:
         _remove(step)
     for step in plan.steps:
         if step.what.startswith("checkout (after"):
-            _remove(step)
+            if _defer_removal(Path(step.path)):
+                step.removed = True
+                step.detail = "in a moment"
+            else:
+                _remove(step)
     return plan
 
 
@@ -195,6 +266,8 @@ def uninstall(*, dry_run: bool = False, purge_data: bool = False, keep_checkout:
         return 0
 
     verb = "would remove" if dry_run else "removing"
+    # Print the plan before touching anything, so a crash mid-removal still
+    # leaves a record of what was attempted.
     for step in plan.steps:
         con.print(f"[lfs.muted]{verb}[/] [lfs.faint]{step.path}[/]  [lfs.faint]({step.what})[/]")
     for command in plan.commands:
@@ -206,31 +279,38 @@ def uninstall(*, dry_run: bool = False, purge_data: bool = False, keep_checkout:
         con.print("\n[lfs.muted]nothing was changed (--dry-run)[/]")
         return 0
 
+    # Everything below runs *before* the console is asked to render anything
+    # else. Rich loads its character tables lazily from site-packages, so any
+    # print after this checkout is deleted can raise ModuleNotFoundError.
     apply(plan)
+    kept = list(plan.kept)
+    commands = list(plan.commands)
+    steps = list(plan.steps)
 
-    failed = [step for step in plan.steps if not step.removed]
+    failed = [step for step in steps if not step.removed]
     for step in failed:
         con.print(Text(f" ✖ could not remove {step.path}", style="lfs.danger"))
         con.print(f"[lfs.faint]   {step.detail}[/]")
 
-    remaining = [item for item in find_duplicates() if item["path"] not in {s.path for s in failed}]
+    failed_paths = {s.path for s in failed}
+    remaining = [item for item in find_duplicates() if item["path"] not in failed_paths]
     if remaining:
         con.print("\n[lfs.warning]these still answer `lfs`:[/]")
         for item in remaining:
             how = "pipx uninstall local-file-sharer" if is_pipx_install(item["path"]) else f"rm {item['path']}"
             con.print(f"[lfs.faint]  {item['path']}[/]  [lfs.primary]{how}[/]")
 
-    if plan.commands:
+    if commands:
         con.print("\n[lfs.muted]one step is left to you:[/]")
-        for command in plan.commands:
+        for command in commands:
             con.print(f"  [lfs.primary]{command}[/]")
-    if plan.kept:
-        con.print("\n[lfs.muted]kept:[/] [lfs.faint]" + ", ".join(plan.kept) + "[/]")
+    if kept:
+        con.print("\n[lfs.muted]kept:[/] [lfs.faint]" + ", ".join(kept) + "[/]")
 
     if failed:
         con.print("\n[lfs.warning]partly removed[/] [lfs.muted]— the lines above say what is left.[/]")
         return 1
-    if plan.commands:
+    if commands:
         con.print("\n[lfs.muted]then run the command above and `lfs` is gone.[/]")
         return 0
     con.print("\n[lfs.success]✓[/] [lfs.muted]removed — `lfs` is gone. Your files were not touched.[/]")
