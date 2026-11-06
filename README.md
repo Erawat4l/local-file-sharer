@@ -145,27 +145,29 @@ cd local-file-sharer
 
 `./run install` builds a private `.venv` in the checkout, downloads `rich` and
 `qrcode`, and links `lfs` onto your PATH — a progress bar runs while it
-downloads, so it never looks frozen. When it finishes, `lfs` works from any
-directory:
+downloads, so it never looks frozen. When it finishes you have one command,
+`lfs`, and it works from any directory:
 
 ```bash
-lfs            # the menu
+lfs configure    # once: port, PIN, theme, starting folder (Enter accepts each default)
+lfs              # the menu, any time after
 ```
 
-After that, `cd` anywhere you like and type `lfs`. To start the menu without
-touching PATH at all, `./run` from the checkout does the same thing.
+Everything you do afterwards is `lfs`: `lfs doctor`, `lfs upgrade`, `lfs ~/Downloads`.
+`./run` still exists inside the checkout and runs exactly the same binary, but it
+is only there for the checkout itself — the command to remember is `lfs`.
 
-**Updating is one command.** `run` re-runs its setup whenever the checkout has
-moved to a new commit, so:
+**Updating is one command**, and it is not `./run`:
 
 ```bash
-cd local-file-sharer
-git pull
-./run upgrade
+lfs upgrade
 ```
 
-`./run upgrade` pulls and reinstalls, again behind a progress bar, and prints
-what changed. `lfs update` from inside the menu does the same thing in the app.
+In a clone this runs `git pull` in the checkout and reinstalls what it pulled,
+behind a progress bar, and prints what changed. Anywhere else — a `pipx`
+install, a frozen build, a copy unpacked from `install-lfs.py` — it reinstalls
+from GitHub instead. Either way it is the same command, and the same one the
+menu's **Update** item runs.
 
 **First run on Termux** needs Python and pip before any of this (once only):
 

@@ -27,7 +27,7 @@ import sys
 import traceback
 from pathlib import Path
 
-from . import APP_NAME, APP_TAGLINE, REPO_URL, __version__, platforms
+from . import APP_CMD, APP_NAME, APP_TAGLINE, REPO_URL, __version__, platforms
 from .config import (
     Config,
     config_path,
@@ -602,7 +602,10 @@ def cmd_configure(cfg: Config, state: State, args: argparse.Namespace) -> int:
     con.print("")
     con.print(f"[lfs.success]✓[/] configured  [lfs.muted]port {port_value} · theme {theme_name}[/]")
     con.print(f"[lfs.muted]  file: {config_path()}[/]")
-    con.print("[lfs.muted]  next: ./run   (or lfs)[/]")
+    # `lfs` is the command people type; `./run` only exists inside a checkout
+    # and is the thing that keeps getting confused with a stale copy, so the
+    # hint points at the command that is always correct.
+    con.print(f"[lfs.muted]  next: {APP_CMD}   (the menu)[/]")
     return 0
 
 

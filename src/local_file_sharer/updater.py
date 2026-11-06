@@ -431,14 +431,92 @@ def _show_failure(con, lines: list[str], *, limit: int = 14, headline: str = "la
         con.print(f"  [lfs.faint]{line[:160]}[/]")
 
 
+def checkout_root() -> Path | None:
+    """The git checkout this build was imported from, if there is one.
+
+    An editable install runs the source tree directly, so the tree above the
+    package *is* the checkout. A clone installed with ``./run install`` is
+    exactly that, and for those ``git pull`` is the correct upgrade — it keeps
+    the user's own history, and it is the thing ``./run upgrade`` does.
+    """
+    here = Path(__file__).resolve()
+    for parent in here.parents:
+        if (parent / ".git").exists() and (parent / "pyproject.toml").exists():
+            return parent
+    return None
+
+
+def _runs_from(root: Path) -> bool:
+    """True when the imported package lives inside *root*."""
+    package = Path(__file__).resolve().parent
+    try:
+        package.relative_to(root.resolve())
+    except ValueError:
+        return False
+    return True
+
+
+def _pull_checkout(root: Path) -> int:
+    """``git pull --ff-only`` inside *root*, then reinstall editable."""
+    con = console()
+    con.print(f"[lfs.muted]checkout[/]  [lfs.primary]{root}[/]")
+    code, lines = run_with_progress(
+        ["git", "-C", str(root), "pull", "--ff-only"],
+        con=con,
+        title="updating the checkout",
+    )
+    if code != 0:
+        con.print("[lfs.danger]git pull failed[/]  [lfs.muted]nothing was changed[/]")
+        _show_failure(con, lines, headline="last lines from git:")
+        return 1
+    con.print("  [lfs.muted]pulled[/]")
+    # Python caches compiled modules next to the source. A checkout whose file
+    # times did not move forward -- an unpacked archive, a restored backup, a
+    # pull that only rewrote some files -- keeps importing the OLD bytecode and
+    # the update silently does nothing. Dropping the caches costs milliseconds
+    # and removes the whole class of "I upgraded and it is still the old one".
+    dropped = 0
+    for cache in root.rglob("__pycache__"):
+        if ".venv" in cache.parts:
+            continue
+        shutil.rmtree(cache, ignore_errors=True)
+        dropped += 1
+    if dropped:
+        con.print(f"  [lfs.faint]cleared {dropped} bytecode cache(s)[/]")
+    code, lines = run_with_progress(
+        [sys.executable, "-m", "pip", "install", "--quiet", "--editable", str(root)],
+        con=con,
+        title="reinstalling",
+    )
+    if code != 0:
+        con.print("[lfs.danger]reinstall failed[/]  [lfs.muted]the code was pulled but not installed[/]")
+        _show_failure(con, lines)
+        return 1
+    con.print("  [lfs.success]✓[/] [lfs.muted]upgraded — start it again with[/] [lfs.primary]lfs[/]")
+    return 0
+
+
 def upgrade_from_git(ref: str | None = None, *, verbose: bool = False) -> int:
     """Install the newest code from GitHub, the only place this package lives.
 
     ``lfs --update`` looks for a GitHub *release*, and there are none yet, so it
     can only report ``404``. This does the thing the user actually wants: pull
     the current commit of the branch they installed from.
+
+    A git checkout is handled in place instead: reinstalling over it from
+    GitHub would work, but it throws away the local history and takes longer,
+    and ``git pull`` is what ``./run upgrade`` does. Asking people to run the
+    wrapper script for a normal update was the reason ``./run`` kept being
+    confused with the command.
     """
     con = console()
+    root = checkout_root()
+    # Only when this really is an editable install of that checkout. A test, a
+    # frozen build or a pipx copy can sit next to a .git directory without
+    # being that tree, and pulling then reinstalling the wrong thing is worse
+    # than reinstalling from GitHub.
+    if root is not None and ref is None and _runs_from(root):
+        return _pull_checkout(root)
     target, note = resolve_ref(ref)
     if note:
         con.print(f"[lfs.warning]{note}[/]")

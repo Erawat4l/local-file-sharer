@@ -1256,8 +1256,13 @@ def test_the_player_stage_adapts_to_the_video_shape(media_server):
     body = _player_page(server)
     assert "fitStageTo" in body
     assert "videoWidth" in body and "videoHeight" in body
-    for shape in ("portrait", "square", "ultrawide"):
+    # The classes only carry height caps; the ratio itself is written inline
+    # from the file. Demanding an `ultrawide` class was demanding a second
+    # source of truth, which is what made the frame the wrong shape.
+    for shape in ("portrait", "square"):
         assert shape in body
+    assert "wrap.style.aspectRatio" in body
+    assert "setProperty('--ar'" in body
 
 
 def test_a_tap_toggles_the_controls_and_never_pauses(media_server):
@@ -1270,3 +1275,81 @@ def test_a_tap_toggles_the_controls_and_never_pauses(media_server):
     # the old click-to-pause handler bound to the picture must be gone; the
     # play button and the spacebar keep that exact expression on purpose
     assert "v.addEventListener('click'" not in body
+
+
+# ── the player's layout, which broke on a 412px phone ────────────────────────
+def _player_css() -> str:
+    from local_file_sharer.transfer.server import load_assets
+
+    player = load_assets()["player.html"]
+    return player[player.index("<style>") : player.index("</style>")]
+
+
+def test_the_player_sizes_the_frame_from_the_picture_not_a_fixed_column():
+    """A full-width frame with only a max-height letterboxes the film.
+
+    ``width:100%`` wins over the cap, so the box stayed as wide as the column
+    and the picture sat inside it with black bars -- on a landscape phone the
+    film was a small rectangle in a mostly empty screen. The width must be
+    derived from the aspect ratio so the frame hugs the picture.
+    """
+    css = _player_css()
+    block = next(
+        (m.group(1) for m in re.finditer(r"\.video-wrap\{([^}]*)\}", css, re.S)
+         if "--maxh" in m.group(1)),
+        "",
+    )
+    assert block, "no .video-wrap rule defines --maxh"
+    assert "var(--ar" in block, "the frame is not sized from the file's ratio"
+    squeezed = block.replace(" ", "")
+    assert "width:min(100%,calc(var(--maxh)" in squeezed, (
+        "the frame must be the smaller of the column and maxh*ratio"
+    )
+    # no class may impose its own ratio: the inline one from fitStageTo wins
+    for shape in ("portrait", "square"):
+        rule = re.search(rf"\.video-wrap\.{shape}\{{([^}}]*)\}}", css)
+        if rule:
+            assert "aspect-ratio" not in rule.group(1), (
+                f".{shape} sets a ratio that fights the file's real one"
+            )
+
+
+def test_the_player_has_fullscreen_rules_for_the_prefixed_pseudo_class():
+    """Android Chrome exposes :-webkit-full-screen, and the prefixed rule was
+    missing, so the stage stayed padded and rounded after the button was hit:
+    the video expanded, but inside a card instead of the screen."""
+    css = _player_css()
+    assert ".stage:-webkit-full-screen" in css
+    assert ".stage:-webkit-full-screen .video-wrap" in css
+
+    from local_file_sharer.transfer.server import load_assets
+
+    player = load_assets()["player.html"]
+    assert "webkitfullscreenchange" in player, (
+        "without the prefixed event the icon and state never update"
+    )
+
+
+def test_the_player_controls_cannot_overflow_a_narrow_phone():
+    """Eight round buttons needed 368px inside 336px of padding at 412px wide,
+    so the fullscreen button was pushed outside the card. The secondary
+    controls must be able to take their own row."""
+    css = _player_css()
+    block = re.search(r"\.buttons \.secondary\{([^}]*)\}", css, re.S)
+    assert block is not None, "the secondary group lost its own rule"
+    assert "width:100%" in block.group(1).replace(" ", ""), (
+        "the secondary group must break the line, not squeeze in beside the buttons"
+    )
+    assert "flex-wrap:wrap" in re.search(r"\.buttons\{([^}]*)\}", css, re.S).group(1)
+
+
+def test_the_player_speed_control_is_a_logo_with_the_rate_in_a_corner():
+    """It read "1x": a word where an icon belongs, and the widest thing in the
+    row. The gauge is decorative; the rate stays readable underneath."""
+    from local_file_sharer.transfer.server import load_assets
+
+    player = load_assets()["player.html"]
+    rate = player[player.index('id="rate"') : player.index('id="pip"')]
+    assert "<svg" in rate, "the speed button has no icon"
+    assert 'class="glyph" id="rate-label"' in rate, "the rate label moved"
+    assert "<b id=" not in rate, "the rate should not be the button's only content"

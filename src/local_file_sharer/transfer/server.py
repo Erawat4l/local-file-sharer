@@ -22,18 +22,34 @@ from .http_handler import ShareContext, ShareRequestHandler
 from .manifest import Manifest
 from .stats import TransferTracker
 
-WEB_ASSETS = Path(__file__).resolve().parent.parent / "web" / "assets"
+_PACKAGE_DIR = Path(__file__).resolve().parent.parent
+WEB_ASSETS = _PACKAGE_DIR / "web" / "assets"
 
 
-def load_assets() -> dict[str, str]:
-    """Read the bundled web UI templates (never fails for the CLI)."""
+def load_assets(*, source_dir: Path | None = None) -> dict[str, str]:
+    """Read the bundled web UI templates (never fails for the CLI).
+
+    The package directory is searched first. A fixed *absolute* path is not
+    enough on its own: a phone that still has an older copy installed (``lfs``
+    from ``~/bin`` next to the checkout, a pipx install, a frozen build) keeps
+    serving that copy's HTML, and the symptom is a player that ignores every
+    fix — the tab still reports the old ``<build>`` stamp. Passing
+    ``source_dir`` (the tree the running code was imported from) makes the
+    assets follow the code that is actually executing.
+    """
+    roots: list[Path] = []
+    if source_dir is not None:
+        roots.append(Path(source_dir) / "web" / "assets")
+    roots.append(WEB_ASSETS)
     assets: dict[str, str] = {}
     for name in ("downloader.html", "server.html", "player.html", "login.html", "error.html"):
-        path = WEB_ASSETS / name
-        try:
-            assets[name] = path.read_text(encoding="utf-8")
-        except OSError:
-            continue
+        for root in roots:
+            path = root / name
+            try:
+                assets[name] = path.read_text(encoding="utf-8")
+                break
+            except OSError:
+                continue
     assets["index.html"] = assets.get("downloader.html", "")
     return assets
 
@@ -91,7 +107,7 @@ class ShareServer:
         self.requested_host = host
         self.requested_port = port
         self.tracker = TransferTracker()
-        self.assets = load_assets()
+        self.assets = load_assets(source_dir=_PACKAGE_DIR)
         self.context = ShareContext(
             manifest=manifest,
             tracker=self.tracker,

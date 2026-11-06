@@ -41,7 +41,18 @@
   .logo{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;font-family:var(--mono);font-size:13px;
     background:#111;border:1px solid var(--line);color:var(--text)}
   .title{font-weight:650;font-size:15px;letter-spacing:-.01em;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .badge{font-family:var(--mono);font-size:11px;padding:4px 9px;border-radius:999px;border:1px solid var(--line);color:var(--dim)}
+  .badge{font-family:var(--mono);font-size:11px;padding:4px 9px;border-radius:999px;border:1px solid var(--line);color:var(--dim);
+    flex:0 0 auto;white-space:nowrap}
+  /* On a phone the four header items cannot share one line, and the build
+     stamp used to drop to a line of its own in the middle of the header,
+     which read as a layout accident. It stays, because it is how you tell a
+     stale player from a fresh one, but it gets its own quiet row. */
+  @media (max-width:600px){
+    .topline{gap:8px;row-gap:6px;margin-bottom:10px}
+    .topline .badge{font-size:10px;padding:3px 7px}
+    .topline .build{order:10;width:100%;text-align:right;border:0;background:none;
+      padding:0;color:var(--faint);font-size:10px;letter-spacing:.02em}
+  }
   .spacer{flex:1}
 
   .video-wrap{position:relative;flex:0 1 auto;min-height:0;border-radius:18px;overflow:hidden;
@@ -53,13 +64,21 @@
      rounded card and the forced 100dvh row that make it look boxed in. A
      :fullscreen element cannot use its own background to cover the page, so
      the backdrop is painted on ::backdrop. */
-  .stage:fullscreen{padding:0;background:#000;display:flex;flex-direction:column}
-  .stage:fullscreen::backdrop{background:#000}
-  .stage:fullscreen .topline{padding:12px 18px;margin:0;background:linear-gradient(#000,#0000)}
-  .stage:fullscreen .video-wrap{flex:1;min-height:0;border:0;border-radius:0;box-shadow:none}
-  .stage:fullscreen .controls{padding-bottom:max(10px, env(safe-area-inset-bottom))}
+  /* Android Chrome still exposes the prefixed pseudo-class, so the unprefixed
+     rules alone left the stage padded, rounded and boxed in after the button
+     was pressed -- the video did expand, but inside a card. Both spellings. */
+  .stage:fullscreen,.stage:-webkit-full-screen{padding:0;background:#000;
+    display:flex;flex-direction:column;width:100vw;height:100vh}
+  .stage:fullscreen::backdrop,.stage:-webkit-full-screen::backdrop{background:#000}
+  .stage:fullscreen .topline,.stage:-webkit-full-screen .topline{
+    padding:12px 18px;margin:0;background:linear-gradient(#000,#0000)}
+  .stage:fullscreen .video-wrap,.stage:-webkit-full-screen .video-wrap{
+    flex:1;min-height:0;width:auto;max-width:none;max-height:none;margin:0;
+    border:0;border-radius:0;box-shadow:none;aspect-ratio:auto}
+  .stage:fullscreen .controls,.stage:-webkit-full-screen .controls{
+    padding-bottom:max(10px, env(safe-area-inset-bottom))}
   /* fullscreen: keep the picture and the controls, drop the help text */
-  .stage:fullscreen .understage{display:none}
+  .stage:fullscreen .understage,.stage:-webkit-full-screen .understage{display:none}
   /* controls fade away while playing, exactly like a desktop player */
   .stage.hide-cursor{cursor:none}
   .stage.is-playing:not(.show-controls) .controls,
@@ -125,12 +144,27 @@
   input[type=range]::-moz-range-progress{height:6px;border-radius:999px;background:var(--accent)}
   input[type=range]::-moz-range-thumb{width:14px;height:14px;border:0;border-radius:50%;background:#fff}
 
-  /* one row on a phone: 6 round buttons and the speed chip do not fit beside
-     the play button plus a volume slider, and wrapping pushed the download and
-     fullscreen buttons onto a second line where they were easy to miss. */
-  .buttons{display:flex;align-items:center;gap:6px;flex-wrap:nowrap;overflow:visible}
+  /* The row used to be one line of eight fixed-width circles. On a 412px
+     phone the controls have 336px inside their padding and eight circles need
+     368px, so the row overflowed by 32px: the fullscreen button was pushed
+     outside the card, half off the screen, which is what "options are
+     shattered" was. The fix is to let the buttons shrink and to move the three
+     secondary ones (speed, PiP, download) onto a second row on narrow screens,
+     where they can be full-size and easy to hit. */
+  .buttons{display:flex;align-items:center;gap:6px;flex-wrap:wrap;row-gap:8px;min-width:0}
   .buttons .spacer{display:none}
-  @media (min-width:820px){ .buttons{gap:8px} .buttons .spacer{display:block;flex:1} }
+  /* `width:100%` is what actually moves the group down: as a plain flex item
+     it would squeeze in beside the buttons and stay on the same row, which is
+     the overflow this is meant to fix. */
+  .buttons .secondary{display:flex;align-items:center;justify-content:center;
+    gap:6px;min-width:0;width:100%;order:10}
+  #full{order:9;margin-left:auto}   /* fullscreen stays on the top row, right */
+  @media (min-width:820px){
+    .buttons{gap:8px;flex-wrap:nowrap}
+    .buttons .spacer{display:block;flex:1}
+    .buttons .secondary{display:contents}   /* one row again: room for it */
+    #full{order:0;margin-left:0}
+  }
   button{font-family:inherit;color:var(--text);background:#141414;
     border:1px solid var(--line);border-radius:11px;padding:9px 13px;font-size:13px;cursor:pointer;
     display:inline-flex;align-items:center;gap:7px;transition:background .14s ease,transform .14s ease}
@@ -139,13 +173,15 @@
   /* Round icon buttons, like every other player: a picture is quicker to read
      than the word "Full" or "PiP", and it stops the row wrapping on a phone. */
   .round{width:40px;height:40px;padding:0;border-radius:50%;justify-content:center;
-    position:relative;flex:0 0 auto;text-decoration:none}
-  .round.primary{width:46px;height:46px}
-  @media (max-width:400px){
-    .buttons{gap:5px}
-    .round{width:38px;height:38px}
-    .round.primary{width:44px;height:44px}
-    #rate b{font-size:11.5px}
+    position:relative;flex:0 1 auto;min-width:34px;text-decoration:none}
+  .round.primary{width:46px;height:46px;min-width:46px;flex:0 0 auto}
+  /* 360px and 320px phones are the tight ones: shrink the circles rather than
+     let the row run off the card */
+  @media (max-width:380px){
+    .buttons{gap:4px}
+    .round{width:36px;height:36px;min-width:34px}
+    .round.primary{width:42px;height:42px;min-width:42px}
+    #rate b{font-size:11px}
   }
   .round .i{width:21px;height:21px;fill:none;stroke:currentColor;stroke-width:1.8;
     stroke-linecap:round;stroke-linejoin:round}
@@ -154,6 +190,10 @@
   .round .i.off{display:none}
   .round .glyph{position:absolute;font-size:8.5px;font-weight:700;letter-spacing:0;
     bottom:9px;left:50%;transform:translateX(-50%);pointer-events:none}
+  /* the speed chip keeps its gauge logo and prints the rate in the corner */
+  #rate .glyph{bottom:4px;font-size:9px;letter-spacing:-.02em;color:var(--text);
+    background:rgba(0,0,0,.55);border-radius:4px;padding:0 2px;line-height:1.25}
+  #rate .i{width:18px;height:18px;margin-bottom:5px}
   .round#mute .i{width:20px}
   #vol{width:88px;flex:0 0 auto}
   @media (max-width:700px){ #vol{display:none} }   /* the mute button is enough */
@@ -164,10 +204,27 @@
      clip into a thin strip. aspect-ratio is set from the file's metadata so the
      frame fits the picture: landscape films get a wide stage, vertical shorts
      get a tall one. */
-  .video-wrap{aspect-ratio:16 / 9;flex:0 1 auto;width:100%;max-height:calc(100dvh - 210px)}
-  .video-wrap.portrait{aspect-ratio:9 / 16;max-width:min(100%, 56dvh)}
-  .video-wrap.square{aspect-ratio:1 / 1;max-width:min(100%, 72dvh)}
-  .video-wrap.ultrawide{aspect-ratio:21 / 9}
+  /* The frame is exactly the picture, never bigger.
+
+     It used to be `width:100%` with a `max-height`, which does not do that:
+     the width wins, so the box stays the full column width and only its height
+     is clamped. A 2.39:1 film then sat letterboxed inside a wide black card —
+     on a landscape phone that was a small picture floating in a mostly empty
+     screen. Sizing the WIDTH from the tallest the box may be (`--maxh * ar`)
+     and capping it at the column means the two agree, so the picture fills the
+     frame edge to edge and the frame hugs the picture.
+
+     --ar is written by fitStageTo() from the file's real dimensions; the 16/9
+     default is only used before the metadata arrives. */
+  .video-wrap{--maxh:calc(100dvh - 210px);
+    width:min(100%, calc(var(--maxh) * var(--ar, 1.7777)));
+    aspect-ratio:var(--ar, 16 / 9);
+    max-height:var(--maxh);flex:0 1 auto;margin:0 auto}
+
+  /* A tall short is allowed to use more of the height, and never wider than
+     the column. No class may set its own ratio: the inline one from the file
+     is the only truth, or the two disagree and the frame is the wrong shape. */
+  .video-wrap.portrait,.video-wrap.square{--maxh:calc(100dvh - 230px);max-width:100%}
 
   .understage{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:14px 2px 20px;
     color:var(--faint);font-size:12.5px}
@@ -183,9 +240,16 @@
     padding:18px 16px;overflow:auto}
   aside h3{margin:0 0 12px;font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:var(--faint)}
   .playlist{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+  /* min-width:0 on the row as well as the link: a flex item defaults to
+     min-width:auto, so the row refuses to shrink below its longest filename
+     and pushes the size label off the screen. */
   .playlist li{display:flex;align-items:center;gap:8px;justify-content:space-between;padding:9px 11px;
-    border-radius:10px;border:1px solid transparent;font-size:13px}
-  .playlist li a{color:var(--text);text-decoration:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    border-radius:10px;border:1px solid transparent;font-size:13px;min-width:0}
+  /* min-width:0 is what makes ellipsis work inside a flex row: without it the
+     <a> keeps its content width, the row overflows, and the filename runs off
+     the right edge of a phone with no ellipsis and no visible name at all. */
+  .playlist li a{color:var(--text);text-decoration:none;min-width:0;flex:1 1 auto;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .playlist li span{font-family:var(--mono);font-size:11px;color:var(--faint);flex:0 0 auto}
   .playlist li:hover{background:#141414}
   .playlist li.active{background:#161616;border-color:#3a3a3a}
@@ -208,7 +272,7 @@
       <span class="badge">{{size}}</span>
       <span class="badge" id="speed">0 B/s</span>
       <div class="spacer"></div>
-      <span class="badge" title="build of the player UI">{{version}} · {{build}}</span>
+      <span class="badge build" title="build of the player UI">{{version}} · {{build}}</span>
     </div>
 
     <div class="video-wrap">
@@ -267,16 +331,30 @@
         </button>
         <input id="vol" type="range" min="0" max="100" value="100" aria-label="Volume">
         <div class="spacer"></div>
-        <button class="round" id="rate" aria-label="Playback speed" title="Playback speed"><b id="rate-label">1&times;</b></button>
-        <button class="round" id="pip" aria-label="Picture in picture" title="Picture in picture">
-          <svg class="i" viewBox="0 0 24 24" aria-hidden="true">
-            <rect x="3" y="5" width="18" height="14" rx="2.5"/>
-            <rect x="12" y="11" width="7" height="6" rx="1.2" class="solid"/></svg>
-        </button>
-        <a class="round" id="get" href="{{download_url}}" download aria-label="Download" title="Download">
-          <svg class="i" viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M12 4v10"/><path d="m7.5 10.5 4.5 4 4.5-4"/><path d="M5 19h14"/></svg>
-        </a>
+        <!-- Secondary controls. On a phone these take their own row (see
+             .buttons .secondary) so the main row keeps play, seek-back,
+             seek-forward and mute at full size. -->
+        <div class="secondary">
+          <!-- A speedometer, not the text "1x": the user asked for logos
+               rather than words, and a gauge reads as "speed" at a glance
+               while the current rate stays legible underneath it. -->
+          <button class="round" id="rate" aria-label="Playback speed" title="Playback speed">
+            <svg class="i" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M4.2 17.5a8.5 8.5 0 1 1 15.6 0"/>
+              <path d="m12 14.5 4-4.2"/>
+              <circle cx="12" cy="15.2" r="1.4" class="solid"/></svg>
+            <span class="glyph" id="rate-label">1&times;</span>
+          </button>
+          <button class="round" id="pip" aria-label="Picture in picture" title="Picture in picture">
+            <svg class="i" viewBox="0 0 24 24" aria-hidden="true">
+              <rect x="3" y="5" width="18" height="14" rx="2.5"/>
+              <rect x="12" y="11" width="7" height="6" rx="1.2" class="solid"/></svg>
+          </button>
+          <a class="round" id="get" href="{{download_url}}" download aria-label="Download" title="Download">
+            <svg class="i" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 4v10"/><path d="m7.5 10.5 4.5 4 4.5-4"/><path d="M5 19h14"/></svg>
+          </a>
+        </div>
         <button class="round" id="full" aria-label="Fullscreen" title="Fullscreen">
           <svg class="i" id="full-on" viewBox="0 0 24 24" aria-hidden="true">
             <path d="M4 9V4h5"/><path d="M20 9V4h-5"/><path d="M4 15v5h5"/><path d="M20 15v5h-5"/></svg>
@@ -552,12 +630,15 @@
     const wrap = stage.querySelector('.video-wrap');
     if (!wrap || !width || !height) return;
     const ratio = width / height;
-    wrap.classList.remove('portrait', 'square', 'ultrawide');
+    // Only the caps differ per shape now; the ratio itself is always inline.
+    wrap.classList.remove('portrait', 'square');
     if (ratio < 0.85) wrap.classList.add('portrait');
     else if (ratio < 1.15) wrap.classList.add('square');
-    else if (ratio > 2.0) wrap.classList.add('ultrawide');
-    // exact ratio, so film bars disappear instead of being cropped
-    if (ratio >= 0.85) wrap.style.aspectRatio = `${width} / ${height}`;
+    // One source of truth for the shape. The classes only carry caps now; the
+    // ratio itself always comes from the file, and --ar lets the landscape
+    // rule size the width from the space that is actually free.
+    wrap.style.aspectRatio = `${width} / ${height}`;
+    wrap.style.setProperty('--ar', String(ratio));
     const kind = ratio < 0.85 ? 'short' : ratio < 1.15 ? 'square' : 'wide';
     document.getElementById('shape').textContent =
       `${width}×${height} · ${kind}`;
@@ -635,8 +716,8 @@
   // No click-to-pause on the picture: a tap is "show/hide the controls", which
   // is what every phone player does. It used to pause the video, so tapping to
   // dismiss the controls stopped playback instead — that was the complaint.
-  document.addEventListener('fullscreenchange', () => {
-    const on = Boolean(document.fullscreenElement);
+  document.addEventListener('webkitfullscreenchange', () => {
+    const on = Boolean(document.fullscreenElement || document.webkitFullscreenElement);
     stage.classList.toggle('is-fullscreen', on);
     document.getElementById('full-on').classList.toggle('off', on);
     document.getElementById('full-off').classList.toggle('off', !on);
