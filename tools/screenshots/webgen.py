@@ -13,6 +13,7 @@ from webshot import (
     LINE_STRONG,
     TEXT,
     WARN,
+    Measure,
     Shot,
 )
 
@@ -28,7 +29,15 @@ def backdrop(shot: Shot) -> None:
         shot.line(0, y, W, y, stroke="rgba(148,163,184,0.055)")
 
 
-def topbar(shot: Shot, *, title: str, subtitle: str, chips: list[tuple[str, bool]], y: float = 96) -> float:
+def topbar(
+    shot: Shot,
+    *,
+    title: str,
+    subtitle: str,
+    chips: list[tuple[str, bool]],
+    y: float = 96,
+    back_link: bool = False,
+) -> float:
     h = 76
     shot.card(M, y, W - M * 2, h, r=18)
     # logo tile
@@ -40,8 +49,21 @@ def topbar(shot: Shot, *, title: str, subtitle: str, chips: list[tuple[str, bool
     x = M + 350
     for label, accent in chips:
         x += shot.chip(x, y + 25, label, accent=accent) + 10
-    shot.text(W - M - 18, y + 33, "1.0.0", weight=600, size=12, fill=FAINT, anchor="end")
-    shot.text(W - M - 18, y + 51, title, weight=500, size=11, fill=FAINT, anchor="end")
+    if back_link:
+        # player.html:320 — a chevron back link to "/?list=1", then the build
+        # badge. Right-align the badge first, then place the chevron to its left
+        # so the two never overlap.
+        build = "1.0.0 · all files"
+        badge_x = W - M - 18
+        shot.text(badge_x, y + 43, build, weight=500, size=11, fill=FAINT, anchor="end")
+        chevron_x = badge_x - Measure("sans", 500, 11).width(build) - 16
+        shot.parts.append(
+            f'<path d="M{chevron_x} {y + 30}l-5 6 5 6" stroke="{DIM}" stroke-width="1.8" '
+            f'fill="none" stroke-linecap="round" stroke-linejoin="round"/>'
+        )
+    else:
+        shot.text(W - M - 18, y + 33, "1.0.0", weight=600, size=12, fill=FAINT, anchor="end")
+        shot.text(W - M - 18, y + 51, title, weight=500, size=11, fill=FAINT, anchor="end")
     return y + h
 
 
@@ -120,7 +142,23 @@ def downloader() -> Shot:
     grid_y = hero_y + hero_h + 26
     shot.text(M, grid_y + 8, "Shared files", weight=700, size=19, fill=TEXT)
     shot.text(M + 128, grid_y + 8, "8 items · 4.0 GB", size=12.5, fill=FAINT)
-    shot.pill_input(W - M - 300, grid_y - 14, 300, "Filter files…", h=34, mono=False)
+    # The real section head has a search box whose placeholder is literally
+    # "Search name or type — try mp4", followed by a row of kind chips
+    # (All · Video · Images · Audio · Documents · Archives) with "All" on. The
+    # shot used to draw a single "Filter files…" box and no chips at all, which
+    # is markup that has never existed.
+    shot.pill_input(W - M - 300, grid_y - 14, 300, "Search name or type — try mp4", h=34, mono=False)
+    chip_x = M
+    chip_y = grid_y + 30
+    for label, on in (
+        ("All", True),
+        ("Video", False),
+        ("Images", False),
+        ("Audio", False),
+        ("Documents", False),
+        ("Archives", False),
+    ):
+        chip_x += shot.chip(chip_x, chip_y, label, accent=on) + 8
 
     files = [
         ("🎬", "Aurora-Film-Festival-Keynote-4K.mkv", "3.6 GB · video"),
@@ -135,7 +173,7 @@ def downloader() -> Shot:
     for index, (icon, name, meta) in enumerate(files):
         col, row = index % 2, index // 2
         cx = M + col * (col_w + 24)
-        cy = grid_y + 26 + row * (row_h + 12)
+        cy = chip_y + 34 + row * (row_h + 12)
         shot.card(cx, cy, col_w, row_h, r=16, fill="rgba(17,26,43,0.72)")
         shot.rect(
             cx + 16, cy + 16, 44, 44, fill="rgba(34,211,238,0.10)", stroke="rgba(34,211,238,0.22)", r=13
@@ -145,14 +183,12 @@ def downloader() -> Shot:
         shot.text(cx + 74, cy + 54, meta, size=11.5, fill=FAINT)
         shot.text(cx + col_w - 20, cy + 44, "Download  →", weight=600, size=12.5, fill=ACCENT, anchor="end")
 
-    shot.text(
-        W / 2,
-        H - 22,
-        "local-file-sharer 1.0.0  ·  resumable · range requests · zero-copy sendfile",
-        size=11.5,
-        fill=FAINT,
-        anchor="middle",
-    )
+    fy = H - 24
+    shot.line(M, fy - 16, W - M, fy - 16, stroke=LINE)
+    shot.text(M, fy, "local-file-sharer 1.0.0", size=11.5, fill=FAINT)
+    shot.text(M + 148, fy, "·", size=11.5, fill=FAINT)
+    shot.text(M + 164, fy, "resumable · range requests · zero-copy sendfile", size=11.5, fill=FAINT)
+    shot.text(W - M, fy, "powered by pure Python + rich", size=11.5, fill=FAINT, anchor="end")
     return shot
 
 
@@ -163,7 +199,7 @@ def server() -> Shot:
     y = topbar(
         shot,
         title="web file server",
-        subtitle="FILE BROWSER",
+        subtitle="web file server",
         chips=[("demo", False), ("8 files · 4.0 GB", False), ("download station", False)],
     )
     head_y = y + 26
@@ -187,8 +223,16 @@ def server() -> Shot:
         size=12.5,
         fill=DIM,
     )
+    # Real markup: <form> with a search input ("Filter in this folder…") and a
+    # ghost "Filter" submit button, then actions "Select all" and
+    # "Download selected". The shot drew a lone "Filter…" pill and skipped the
+    # Select all button entirely.
     shot.button(W - M - 28 - 168, head_y + 26, "Download selected", w=168, h=40, variant="primary")
-    shot.pill_input(W - M - 28 - 168 - 220 - 12, head_y + 30, 220, "Filter…", h=32, mono=False)
+    shot.button(W - M - 28 - 168 - 12 - 92, head_y + 30, "Select all", w=92, h=32, size=12, variant="ghost")
+    form_w = 300
+    form_x = W - M - 28 - 168 - 12 - 92 - 12 - form_w
+    shot.pill_input(form_x, head_y + 30, form_w - 74, "Filter in this folder…", h=32, mono=False)
+    shot.button(form_x + form_w - 68, head_y + 30, "Filter", w=68, h=32, size=12, variant="ghost")
 
     # stat strip
     strip_y = head_y + 110
@@ -233,14 +277,14 @@ def server() -> Shot:
         shot.text(W - M - 90, ry + 26, size, family="mono", size=12, fill=DIM, anchor="end")
         shot.text(W - M - 22, ry + 26, "↓", weight=700, size=14, fill=ACCENT, anchor="end")
 
-    shot.text(
-        W / 2,
-        H - 22,
-        "HTTP Range · resumable · 0 gaps · powered by pure Python",
-        size=11.5,
-        fill=FAINT,
-        anchor="middle",
-    )
+    # Footer per server.html: brand + version + the manifest path on the left,
+    # the aria2c tip pushed right. "powered by pure Python" is not in the page.
+    fy = H - 24
+    shot.line(M, fy - 16, W - M, fy - 16, stroke=LINE)
+    shot.text(M, fy, "local-file-sharer 1.0.0", size=11.5, fill=FAINT)
+    shot.text(M + 148, fy, "·", size=11.5, fill=FAINT)
+    shot.text(M + 164, fy, "GET /api/manifest", family="mono", size=11.5, fill=DIM)
+    shot.text(W - M, fy, "tip: aria2c -x16 -s16 for maximum speed", size=11.5, fill=FAINT, anchor="end")
     return shot
 
 
@@ -248,11 +292,16 @@ def server() -> Shot:
 def player() -> Shot:
     shot = Shot(W, H, url="http://192.168.1.42:8080/s/b45d56a6")
     backdrop(shot)
+    # The player is a full-screen stage, not a site page: its own top line is
+    # LFS · filename · size badge · speed badge · back link · build badge
+    # (player.html:314-326). The shot used to draw the shared site header with
+    # "live / HTTP Range seek / mode stream" chips, none of which the page has.
     y = topbar(
         shot,
         title="media player",
-        subtitle="STREAM",
-        chips=[("live", True), ("HTTP Range seek", False), ("mode stream", False)],
+        subtitle="player",
+        chips=[("3.6 GB", False), ("0 B/s", False)],
+        back_link=True,
     )
 
     vx, vy = M, y + 26
@@ -278,7 +327,8 @@ def player() -> Shot:
     shot.text(
         vx + vw / 2,
         vy + vh / 2 + 98,
-        "video/x-matroska · 3.6 GB · seeking works instantly",
+        # player.html:335 — the overlay shows mime · size and nothing else.
+        "video/x-matroska · 3.6 GB",
         size=12,
         fill=FAINT,
         anchor="middle",
@@ -297,19 +347,36 @@ def player() -> Shot:
             fill=DIM if position == 0.38 else FAINT,
             anchor="start" if position == 0 else ("end" if position == 1 else "middle"),
         )
-    # controls
-    cy = vy + vh - 30
-    controls = [("⏪", True), ("▶️", True), ("⏩", True), ("🔊", True), ("1×", False), ("⛶", True)]
+    # Controls, in the order and shape the shipped page uses: back10, play,
+    # fwd10, mute, volume slider, rate, pip. The shot used to draw emoji
+    # transport glyphs (⏪ ▶️ ⏩ 🔊) and a fullscreen button — the real player has
+    # no fullscreen button in this row and labels none of them with emoji.
+    cy = vy + vh - 34
     cx = vx + 28
-    for glyph, is_emoji in controls:
-        if is_emoji:
-            shot.emoji(cx, cy - 14, glyph, 22)
-            cx += 34
+    for label, primary in (("10", False), ("▶", True), ("10", False), ("🔇", False)):
+        r = 17 if not primary else 21
+        shot.circle(cx + r, cy, r, fill="rgba(34,211,238,0.16)" if primary else "rgba(148,163,184,0.12)")
+        if label == "🔇":
+            shot.emoji(cx + r - 9, cy - 9, label, 18)
+        elif label == "▶":
+            shot.text(cx + r + 1, cy + 5, label, weight=700, size=15, fill="#c8f7ff", anchor="middle")
         else:
-            shot.rect(cx, cy - 24, 44, 26, fill="rgba(148,163,184,0.10)", stroke=LINE_STRONG, r=13)
-            shot.text(cx + 22, cy - 5, glyph, weight=600, size=12, fill=DIM, anchor="middle")
-            cx += 56
-    shot.text(vx + vw - 28, cy - 3, "buffered 38%", family="mono", size=11, fill=FAINT, anchor="end")
+            # back/fwd 10s: the number sits inside a round button
+            shot.text(cx + r, cy + 4, label, weight=700, size=11, fill=DIM, anchor="middle")
+        cx += r * 2 + 12
+    # volume slider
+    shot.line(cx, cy, cx + 66, cy, stroke=LINE_STRONG, sw=4)
+    shot.line(cx, cy, cx + 40, cy, stroke=ACCENT, sw=4)
+    cx += 82
+    # playback speed
+    shot.rect(cx, cy - 13, 46, 26, fill="rgba(148,163,184,0.10)", stroke=LINE_STRONG, r=13)
+    shot.text(cx + 23, cy + 4, "1×", weight=600, size=12, fill=DIM, anchor="middle")
+    cx += 58
+    # pip — player.html:398 has it; the shot used to stop at the rate chip
+    shot.circle(cx + 17, cy, 17, fill="rgba(148,163,184,0.12)")
+    shot.rect(cx + 10, cy - 8, 14, 11, fill="none", stroke=DIM, r=2)
+    shot.rect(cx + 14, cy - 4, 10, 8, fill="none", stroke=ACCENT, r=2)
+    shot.text(vx + vw - 28, cy + 4, "buffered 38%", family="mono", size=11, fill=FAINT, anchor="end")
 
     # playlist / stats sidebar
     sx = vx + vw + 24
@@ -331,8 +398,8 @@ def player() -> Shot:
         shot.text(sx + sw - 22, sy, value, family="mono", weight=700, size=12.5, fill=ACCENT, anchor="end")
         sy += 30
     shot.line(sx + 18, sy, sx + sw - 18, sy, stroke=LINE)
-    shot.text(sx + 22, sy + 26, "space play · ← → ±10s", size=11, fill=FAINT)
-    shot.text(sx + 22, sy + 46, "f fullscreen · m mute", size=11, fill=FAINT)
+    # player.html:426 renders this as one line of <kbd> hints, not two.
+    shot.text(sx + 22, sy + 26, "space play · ← → ±10s · f fullscreen · m mute", size=11, fill=FAINT)
 
     # notice
     ny = vy + vh + 22
@@ -358,7 +425,7 @@ def player() -> Shot:
     shot.text(
         W / 2,
         H - 22,
-        "streaming with HTTP Range — seek anywhere instantly",
+        "Streaming with HTTP Range — seek anywhere instantly.",
         size=11.5,
         fill=FAINT,
         anchor="middle",
@@ -366,12 +433,33 @@ def player() -> Shot:
     return shot
 
 
+def recorded_text() -> list[str]:
+    """Every label the three screenshots draw, in draw order.
+
+    These pages are hand-drawn SVG, not renders of the shipped HTML, so they
+    can claim copy the templates never contained — and did: the download shot
+    drew a "Filter files…" box against a page that has kind chips and a
+    "Search name or type — try mp4" placeholder, and the server shot ended with
+    "powered by pure Python", a line that exists in no template. Write the copy
+    next to the PNGs so a test can hold it against the real markup.
+    """
+    out: list[str] = []
+    for _name, builder in (("web-download", downloader), ("web-server", server), ("web-player", player)):
+        shot = builder()
+        out.extend(shot.labels)
+    return out
+
+
 def main() -> None:
     ASSETS.mkdir(parents=True, exist_ok=True)
+    labels: list[str] = []
     for name, builder in (("web-download", downloader), ("web-server", server), ("web-player", player)):
         shot = builder()
         shot.save(ASSETS / f"{name}.png", scale=1.5)
+        labels.extend(shot.labels)
         print(name, "ok")
+    (ASSETS / "web-text.txt").write_text("\n".join(labels) + "\n", encoding="utf-8")
+    print(f"web-text.txt: {len(labels)} labels")
 
 
 if __name__ == "__main__":

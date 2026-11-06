@@ -8,6 +8,7 @@ these tests skip cleanly if ``tools/screenshots`` is absent.
 from __future__ import annotations
 
 import importlib.util
+import re
 import sys
 from pathlib import Path
 
@@ -80,7 +81,6 @@ def test_to_svg_pads_every_row_to_cols():
     svg_padded = termsvg.to_svg(rows, title="t", chrome=False, cols=8)
 
     def width_of(svg: str) -> float:
-        import re
 
         return float(re.search(r'<svg[^>]*width="([\d.]+)"', svg).group(1))
 
@@ -165,3 +165,198 @@ def test_the_gif_shows_the_menu_the_code_draws(monkeypatch):
     assert stable(today) == stable(recorded.read_text(encoding="utf-8")), (
         "docs/assets/demo.gif is stale — rerun tools/screenshots/demo_gif.py"
     )
+
+
+#: Copy the shots legitimately draw that no template literal matches: demo
+#: values, sample filenames, and prose the templates assemble from placeholders.
+_WEB_SAMPLE_VALUES = {
+    "http://192.168.1.42:8080/",
+    "http://192.168.1.42:8080/d/3e4524dd/",
+    "http://192.168.1.42:8080/s/b45d56a6",
+    "no-store",
+    "LFS",
+    "1.0.0",
+    "local-file-sharer",
+    "local-file-sharer 1.0.0",
+    "1.0.0 · all files",
+    "demo",
+    "8 files · 4.0 GB",
+    "8 items · 4.0 GB",
+    "4.0 GB",
+    "2.5 GB",
+    "2.5 GB / 4.0 GB · 3 files",
+    "72 MB/s",
+    "ETA 21s · 72 MB/s",
+    "16",
+    "16×",
+    "8",
+    "3",
+    "1×",
+    "10",
+    "▶",
+    "🔇",
+    "↓",
+    "·",
+    "0:00",
+    "0:41:12",
+    "1:48:20",
+    "buffered 38%",
+    "192.168.1.42:8080",
+    "0 B/s",
+    "Aurora-Film…mkv",
+    "3.6 GB · playing",
+    "matroska",
+    "Aurora-Film-Festival-Keynote-4K.mkv",
+    "3.6 GB · video",
+    "Termux-notes.txt",
+    "4.1 KB · text",
+    "live-set-2026.flac",
+    "402 MB · audio",
+    "moodboard-final.png",
+    "17.6 MB · image",
+    "report.pdf",
+    "2.8 MB · pdf",
+    "holiday-photos.zip",
+    "612 MB · archive",
+    "IMG_20261101_143210.jpg",
+    "2026-10-31-wedding-012.jpg",
+    "3.6 GB",
+    "4.1 KB",
+    "402 MB",
+    "17.6 MB",
+    "2.8 MB",
+    "612 MB",
+    "4.9 MB",
+    "Download ",
+    "everything",
+    ", fast.",
+    "Download  →",
+    "video/x-matroska · 3.6 GB",
+    "NAME",
+    "SIZE",
+    "name",
+    "size",
+    "Download all",
+    "Search name or type — try mp4",
+    "All",
+    "Video",
+    "Images",
+    "Audio",
+    "Documents",
+    "Archives",
+}
+
+#: Small words the templates emit separately but the shots draw as one label.
+_WEB_FRAGMENTS = {"All", "Video", "Images", "Audio", "Documents", "Archives"}
+#: (label drawn by a shot, string that must exist in the shipped templates).
+#: Curated on purpose: a browser renders these pages, and this toolchain draws
+#: them by hand, so the risk is copy that no template contains. These are the
+#: lines that were wrong, plus the ones around them. Demo values and anything a
+#: ``{{placeholder}}`` or the page's javascript fills in are NOT covered here —
+#: no text comparison can check those without a browser.
+_WEB_COPY = [
+    ("DOWNLOAD STATION", "text-transform: uppercase"),
+    ("download station", "download station"),
+    ("mode download", 'mode <b>{{mode}}</b>'),
+    ("8 devices", "{{device_count}}"),
+    ("Download all", "Download all"),
+    ("Everything as .zip", "Everything as .zip"),
+    ("Copy curl one-liner", "Copy curl one-liner"),
+    ("aria2c -x16", "aria2c -x16"),
+    ("scan to open on another device", "scan to open on another device"),
+    ("Shared files", "Shared files"),
+    ("Search name or type — try mp4", "Search name or type — try mp4"),
+    ("All", 'data-filter="all"'),
+    ("Video", 'data-filter="video"'),
+    ("Images", 'data-filter="image"'),
+    ("Audio", 'data-filter="audio"'),
+    ("Documents", 'data-filter="document"'),
+    ("Archives", 'data-filter="archive"'),
+    ("resumable · range requests · zero-copy sendfile", "resumable · range requests · zero-copy sendfile"),
+    ("powered by pure Python + rich", "powered by pure Python + rich"),
+    ("web file server", "web file server"),
+    ("Browse ", "Browse "),
+    ("Every file is served with HTTP Range support — resume, seek and parallelise freely.",
+     "Every file is served with HTTP Range support — resume, seek and parallelise freely."),
+    ("Filter in this folder…", "Filter in this folder…"),
+    ("Filter", ">Filter<"),
+    ("Select all", "Select all"),
+    ("Download selected", "Download selected"),
+    ("GET /api/manifest", "GET /api/manifest"),
+    ("tip: aria2c -x16 -s16 for maximum speed", "for maximum speed"),
+    ("Playlist · 1", "Playlist · {{playlist_count}}"),
+    ("buffered 38%", "buffered"),
+    ("space play · ← → ±10s · f fullscreen · m mute", "play ·"),
+    ("Streaming with HTTP Range — seek anywhere instantly.",
+     "Streaming with HTTP Range — seek anywhere instantly."),
+    ("If the preview stays black, the codec is not supported by this browser (common for MKV/HEVC).",
+     "If the preview stays black"),
+    ("0 B/s", "0 B/s"),
+    ("1.0.0 · all files", 'title="All files in this share"'),
+]
+
+
+def test_web_screenshots_copy_matches_the_templates():
+    """Copy the web shots draw must be copy the shipped pages contain.
+
+    These three PNGs are hand-drawn SVG, not renders of the HTML, so they can
+    display wording that no template has — and did:
+
+    * a "Filter files…" box where the page has kind chips and
+      "Search name or type — try mp4"
+    * a "powered by pure Python" footer where the page says
+      "powered by pure Python + rich" beside the brand line
+    * emoji transport controls (⏪ ▶️ ⏩ 🔊) that the player never renders
+    * a "live / HTTP Range seek / mode stream" header on a player whose real
+      top line is filename, size, speed, back link and build
+
+    This checks a curated list of those lines in both directions: the label is
+    in the generated web-text.txt, and its source is in the templates.
+    """
+    recorded = REPO / "docs" / "assets" / "web-text.txt"
+    if not recorded.exists():  # pragma: no cover - committed with the PNGs
+        pytest.skip("docs/assets/web-text.txt is not present")
+
+    web = REPO / "src" / "local_file_sharer" / "web" / "assets"
+    templates = "\n".join(
+        (web / name).read_text(encoding="utf-8", errors="ignore")
+        for name in ("downloader.html", "server.html", "player.html")
+    )
+    css = (web / "static" / "app.css").read_text(encoding="utf-8", errors="ignore")
+    source = templates + "\n" + css
+    drawn = recorded.read_text(encoding="utf-8")
+
+    for label, origin in _WEB_COPY:
+        assert origin in source, (
+            f"the templates no longer contain {origin!r} (for label {label!r}) — "
+            "if the page changed, update webgen.py and this list"
+        )
+        assert label in drawn, (
+            f"the screenshots no longer draw {label!r} — regenerate with "
+            "tools/screenshots/webgen.py"
+        )
+
+
+def test_web_screenshots_do_not_revive_retired_copy():
+    """The exact strings that were wrong, so fixing them cannot silently regress."""
+    recorded = REPO / "docs" / "assets" / "web-text.txt"
+    if not recorded.exists():  # pragma: no cover
+        pytest.skip("docs/assets/web-text.txt is not present")
+    drawn = recorded.read_text(encoding="utf-8")
+
+    # Whole-line matches: "powered by pure Python" was the bug, but the fixed
+    # line legitimately starts with those words, so a substring test cannot tell
+    # them apart. Compare what the shot actually printed, line by line.
+    lines = {line.strip() for line in drawn.splitlines()}
+    retired = [
+        "Filter files…",            # a control the downloader does not have
+        "powered by pure Python",   # truncated: the page says "+ rich"
+        "HTTP Range seek",          # invented player badge
+        "mode stream",              # invented player badge
+        "FILE BROWSER",             # the page says "web file server"
+        "seeking works instantly",  # invented overlay subtitle
+    ]
+    glyphs = ["⏪", "⏩", "🔊"]        # the player draws no emoji controls
+    present = [text for text in retired if text in lines]
+    present += [g for g in glyphs if g in drawn]
+    assert not present, f"retired web copy came back: {present}"
