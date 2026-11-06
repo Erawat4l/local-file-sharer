@@ -7,6 +7,13 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Added
+- `tools/make_installer.py` builds a single-file installer that carries the
+  source inside it. The repository is private, so `pip install git+…` dies with
+  "Repository not found" on a device without credentials — which is
+  indistinguishable from a typo'd URL. The installer needs no git and no token:
+  `python3 install-lfs.py`.
+
 ### Fixed
 - Videos and audio inside a folder now open the player instead of downloading.
   Every row pointed at the raw bytes, so opening a movie from a folder saved it.
