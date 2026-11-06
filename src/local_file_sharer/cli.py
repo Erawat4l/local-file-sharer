@@ -363,6 +363,57 @@ _KNOWN_COMMANDS = frozenset(
 )
 
 
+def normalise_options(argv: list[str]) -> list[str]:
+    """Repair the single-dash typo: ``-ref main`` → ``--ref main``.
+
+    ``-ref`` reads like a long option but argparse only accepts one dash for
+    one-letter flags, so it fails with "unrecognized arguments: -ref main" and
+    dumps the whole usage block at the user. It is the most natural typo in the
+    world -- the previous instruction said ``--ref`` in a sentence and it is
+    easy to drop a dash -- so repair it rather than punish it.
+
+    A token is only rewritten when it matches a long option *this build knows*
+    and is longer than two characters, so ``-p 9000``, ``-V`` and a negative
+    number are untouched. ``-confirm`` stays broken because no such option
+    exists, rather than being silently mangled into ``--onfirm``.
+    """
+    known = _known_long_options()
+    out: list[str] = []
+    for token in argv:
+        if token == "--":
+            out.append(token)
+            out.extend(argv[argv.index(token) + 1 :])
+            break
+        if (
+            len(token) > 2
+            and token.startswith("-")
+            and not token.startswith("--")
+            and not token[1].isdigit()
+            and token[1:] in known
+        ):
+            out.append("-" + token)
+        else:
+            out.append(token)
+    return out
+
+
+_LONG_OPTIONS: set[str] | None = None
+
+
+def _known_long_options() -> set[str]:
+    """Every ``--long-option`` this build accepts, built once and cached."""
+    global _LONG_OPTIONS
+    if _LONG_OPTIONS is None:
+        found: set[str] = set()
+        for parser in (build_parser(), *build_command_parsers().values()):
+            for action in parser._actions:
+                for option in action.option_strings:
+                    if option.startswith("--"):
+                        found.add(option[2:])
+        _LONG_OPTIONS = found
+    return _LONG_OPTIONS
+
+
 def _looks_like_a_command(word: str) -> bool:
     """True for anything the shell is more likely to mean as a command.
 
@@ -474,16 +525,24 @@ def _warn_about_shadowing_copy(con) -> None:  # noqa: ANN001
             return
     except Exception:  # noqa: BLE001 - never block the menu on this
         return
+    from . import platforms as _platforms  # noqa: PLC0415
+    from .updater import removal_command  # noqa: PLC0415
+
+    winner_item = next((d for d in find_duplicates() if d["path"] == winner), {"path": winner, "kind": "pip"})
+    how = removal_command(winner_item)
     con.print(
         f"[lfs.warning]![/] [lfs.muted]a different lfs answers your shell:[/] "
         f"[lfs.faint]{winner}[/]"
     )
     con.print(
         f"[lfs.muted]  this is[/] [lfs.faint]{sys.argv[0] if sys.argv else 'lfs'}[/]"
-        f"[lfs.muted] — remove the other with[/] [lfs.primary]rm {winner}[/]"
-        f" [lfs.muted]or run[/] [lfs.primary]lfs doctor[/]"
+        f"[lfs.muted] — remove the other with[/] [lfs.primary]{how}[/]"
+        f" [lfs.muted]then[/] [lfs.primary]{_platforms.rehash_hint()}[/]"
     )
-    con.print("[lfs.faint]  quiet with LFS_NO_COPY_WARNING=1")
+    con.print(
+        "[lfs.faint]  or let it do both: lfs doctor --fix-copies"
+        "   (quiet with LFS_NO_COPY_WARNING=1)"
+    )
 
 
 def cmd_menu(cfg: Config, state: State, args: argparse.Namespace) -> int:
@@ -761,6 +820,7 @@ def main(argv: list[str] | None = None) -> int:
         _print_version()
         return 0
 
+    argv = normalise_options(argv)
     command, remaining = split_argv(argv)
     if command == "help":
         build_parser().print_help()

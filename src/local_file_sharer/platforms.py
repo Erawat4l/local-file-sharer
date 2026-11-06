@@ -61,6 +61,71 @@ def home_dir() -> Path:
         return Path(os.environ.get("USERPROFILE") or os.getcwd())
 
 
+def current_shell() -> str:
+    """The shell this process was started from, as a short name.
+
+    ``$SHELL`` is not reliable everywhere -- fish sets it, but a wrapper or an
+    ``env -i`` loses it, and Termux users often run fish without it pointing at
+    fish -- so the parent process is consulted as a fallback. Returns one of
+    ``fish``, ``zsh``, ``bash``, ``pwsh``, ``powershell``, ``sh`` or ``""``.
+    """
+    import os  # noqa: PLC0415
+
+    def known(name: str) -> str:
+        name = os.path.basename(name or "").lower()
+        for shell in ("fish", "zsh", "bash", "pwsh", "powershell"):
+            if shell in name:
+                return shell
+        return "sh" if name in ("sh", "-sh", "dash", "ash") else ""
+
+    found = known(os.environ.get("SHELL", ""))
+    if found:
+        return found
+    # fall back to the parent process's name
+    try:
+        stat = Path("/proc/self/stat").read_text(encoding="utf-8", errors="replace")
+        ppid = stat.rsplit(")", 1)[1].split()[1]
+        cmdline = Path(f"/proc/{ppid}/cmdline").read_bytes().split(b"\0")[0].decode("utf-8", "replace")
+        found = known(cmdline)
+        if found:
+            return found
+        # the parent may be the terminal's shell-wrapper; try the grandparent
+        stat = Path(f"/proc/{ppid}/stat").read_text(encoding="utf-8", errors="replace")
+        gppid = stat.rsplit(")", 1)[1].split()[1]
+        cmdline = Path(f"/proc/{gppid}/cmdline").read_bytes().split(b"\0")[0].decode("utf-8", "replace")
+        return known(cmdline)
+    except (OSError, IndexError, ValueError):
+        return ""
+
+
+def rehash_command() -> str:
+    """The command that makes *this* shell forget a moved binary.
+
+    ``hash -r`` is bash/zsh only. In fish it is ``rehash``, and running the
+    bash one prints ``fish: Unknown command: hash`` -- advice that fails in the
+    shell it was printed for. Windows has no equivalent worth typing, so the
+    honest answer there is to open a new terminal.
+    """
+    shell = current_shell()
+    if shell == "fish":
+        return "rehash"
+    if shell in ("bash", "zsh"):
+        return "hash -r"
+    if shell in ("pwsh", "powershell"):
+        return "$env:PATH = $env:PATH"
+    if shell == "sh":
+        return "command -v lfs"
+    return ""
+
+
+def rehash_hint() -> str:
+    """A ready-to-print sentence: the right command, or the universal fallback."""
+    command = rehash_command()
+    if command:
+        return f"{command}  (or open a new shell)"
+    return "open a new shell"
+
+
 def downloads_dir() -> Path:
     """Where shared downloads land, and where Download mode starts.
 

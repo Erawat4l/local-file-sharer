@@ -539,6 +539,17 @@ def find_duplicates() -> list[dict[str, str]]:
     return found
 
 
+def removal_command(item: dict[str, str]) -> str:
+    """How to get rid of one installed copy, given its flavour.
+
+    ``rm`` is only correct for a stray console script. A pipx copy must go
+    through pipx, or the venv it lives in is left behind with no launcher.
+    """
+    if item.get("kind") == "pipx":
+        return "pipx uninstall local-file-sharer"
+    return f"rm {item['path']}"
+
+
 def remove_shadowing_copies(*, dry_run: bool = False) -> list[tuple[str, str]]:
     """Remove the extra `lfs` binaries that win PATH over the running one.
 
@@ -591,7 +602,8 @@ def remove_shadowing_copies(*, dry_run: bool = False) -> list[tuple[str, str]]:
             results.append((str(path), f"failed: {exc}"))
             con.print(f"[lfs.danger]✖ could not remove[/] [lfs.faint]{path}[/]  [lfs.muted]{exc}[/]")
     if any(result == "removed" for _p, result in results):
-        con.print("[lfs.muted]open a new shell (or run[/] [lfs.primary]hash -r[/][lfs.muted]) and try again[/]")
+        hint = platforms.rehash_hint()
+        con.print(f"[lfs.muted]then run[/] [lfs.primary]{hint}[/] [lfs.muted]and try again[/]")
     return results
 
 
@@ -780,8 +792,8 @@ def upgrade_from_git(ref: str | None = None, *, verbose: bool = False) -> int:
             )
             con.print(f"[lfs.muted]remove it with[/]  [lfs.primary]{how}[/]")
             con.print(
-                "[lfs.muted]then[/]  [lfs.primary]hash -r[/]  "
-                "[lfs.muted](or open a new session) and run[/] [lfs.primary]lfs[/]"
+                f"[lfs.muted]then[/]  [lfs.primary]{platforms.rehash_hint()}[/]  "
+                "[lfs.muted]and run[/] [lfs.primary]lfs[/]"
             )
         else:
             con.print(

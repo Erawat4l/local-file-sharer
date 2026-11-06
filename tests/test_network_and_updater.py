@@ -440,3 +440,42 @@ def test_fix_copies_clears_all_of_them_not_only_the_winner(tmp_path, monkeypatch
     monkeypatch.setattr(updater, "_first_on_path", lambda: str(bins["a"]))
     updater.remove_shadowing_copies()
     assert not any(p.exists() for p in bins.values()), "every stale copy should go"
+
+
+# ── the rehash command is per shell ─────────────────────────────────────────
+@pytest.mark.parametrize(
+    ("shell_path", "expected"),
+    [
+        ("/usr/bin/fish", "rehash"),
+        ("/bin/zsh", "hash -r"),
+        ("/bin/bash", "hash -r"),
+        ("/bin/sh", "command -v lfs"),
+        ("/usr/bin/pwsh", "$env:PATH = $env:PATH"),
+    ],
+)
+def test_the_shell_forgets_a_moved_binary_with_its_own_command(shell_path, expected, monkeypatch):
+    """`hash -r` in fish prints "fish: Unknown command: hash" -- advice that
+    fails in the shell it was printed for."""
+    from local_file_sharer import platforms
+
+    monkeypatch.setenv("SHELL", shell_path)
+    assert platforms.rehash_command() == expected
+
+
+def test_an_unknown_shell_falls_back_to_opening_a_new_one(monkeypatch):
+    from local_file_sharer import platforms
+
+    monkeypatch.setenv("SHELL", "/usr/bin/tcsh")
+    monkeypatch.setattr(platforms, "current_shell", lambda: "")
+    assert platforms.rehash_command() == ""
+    assert "open a new shell" in platforms.rehash_hint()
+
+
+def test_the_removal_command_matches_the_flavour():
+    from local_file_sharer import updater
+
+    assert updater.removal_command({"path": "/home/bin/lfs", "kind": "pip"}) == "rm /home/bin/lfs"
+    assert (
+        updater.removal_command({"path": "/home/.local/bin/lfs", "kind": "pipx"})
+        == "pipx uninstall local-file-sharer"
+    )
