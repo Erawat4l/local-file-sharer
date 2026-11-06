@@ -92,9 +92,10 @@ def test_banner_wordmark_shape():
 
 
 def test_banner_does_not_crash_without_tty():
+    """The subtitle is the hyphenated lowercase name, as in the demo gif."""
     out = render(banner.banner_renderable(build_theme("dark")))
     assert "LFS" in out or "█" in out
-    assert "LOCAL FILE SHARER" in out
+    assert "local-file-sharer" in out
 
 
 def test_banner_static_and_animate_are_safe(capsys):

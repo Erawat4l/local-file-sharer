@@ -60,6 +60,7 @@ SUBCOMMAND_NAMES = (
     "menu",
     "doctor",
     "config",
+    "configure",
     "theme",
     "completions",
     "completion",
@@ -176,6 +177,14 @@ def build_command_parsers() -> dict[str, argparse.ArgumentParser]:
     set_cmd.add_argument("key")
     set_cmd.add_argument("value")
     parsers["config"] = config
+
+    configure = argparse.ArgumentParser(
+        prog="lfs configure",
+        parents=[common],
+        description="set port, PIN, theme and download folder, then write the config",
+    )
+    configure.add_argument("--yes", action="store_true", help="accept every default, ask nothing")
+    parsers["configure"] = configure
 
     theme = argparse.ArgumentParser(
         prog="lfs theme", parents=[common], description="switch or preview the colour theme"
@@ -486,6 +495,69 @@ def cmd_config(cfg: Config, state: State, args: argparse.Namespace) -> int:
     return 2
 
 
+def cmd_configure(cfg: Config, state: State, args: argparse.Namespace) -> int:
+    """`lfs configure` — the guided setup, run once after installing.
+
+    Every question has a default that is already correct, so pressing Enter
+    through all of them leaves a working configuration. Nothing is written
+    until the end, and the file is only created if something differs from the
+    defaults.
+    """
+    from .config import init_config, set_value  # noqa: PLC0415
+    from .ui.console import console as make_console  # noqa: PLC0415
+
+    con = make_console()
+
+    def ask(question: str, default: str, hint: str = "") -> str:
+        if args.yes:
+            return default
+        if hint:
+            con.print(f"[lfs.muted]{hint}[/]")
+        try:
+            answer = input(f"  {question} [{default}]: ").strip()
+        except (EOFError, KeyboardInterrupt):
+            con.print("")
+            return default
+        return answer or default
+
+    con.print("[lfs.primary]configure[/]  [lfs.muted]press Enter to accept each default[/]")
+    con.print("")
+
+    port = ask("port", str(cfg.network.port), "which port the share listens on")
+    pin = ask("PIN (blank for none)", cfg.share.pin or "", "a 4-6 digit code guests must type")
+    theme_name = ask("theme (dark / light / mono)", cfg.theme, "how the terminal app is drawn")
+    folder = ask("starting folder (blank for the picker's default)", str(state.last_dir or ""), "where the picker opens")
+
+    # Validate before writing anything: a config that cannot load is worse than
+    # no configure step at all.
+    try:
+        port_value = int(port)
+        if not 1 <= port_value <= 65535:
+            raise ValueError
+    except ValueError:
+        con.print(f"[lfs.warning]![/] {port!r} is not a port number — keeping {cfg.network.port}")
+        port_value = cfg.network.port
+
+    if theme_name not in ("dark", "light", "mono"):
+        con.print(f"[lfs.warning]![/] unknown theme {theme_name!r} — keeping {cfg.theme}")
+        theme_name = cfg.theme
+
+    init_config(force=False)
+    set_value("network.port", str(port_value))
+    set_value("share.pin", pin)
+    set_value("theme", theme_name)
+    # The starting folder is session state, not configuration: it is
+    # remembered by the picker after every share, so it lives in state.json.
+    if folder:
+        state.remember_dir(folder)
+
+    con.print("")
+    con.print(f"[lfs.success]✓[/] configured  [lfs.muted]port {port_value} · theme {theme_name}[/]")
+    con.print(f"[lfs.muted]  file: {config_path()}[/]")
+    con.print("[lfs.muted]  next: ./run   (or lfs)[/]")
+    return 0
+
+
 def cmd_theme(cfg: Config, state: State, args: argparse.Namespace) -> int:
     from .theme_switch import show_theme, switch_theme
     from .ui.console import current_theme, set_theme
@@ -568,6 +640,7 @@ def main(argv: list[str] | None = None) -> int:
                 "menu": cmd_menu,
                 "doctor": cmd_doctor,
                 "config": cmd_config,
+                "configure": cmd_configure,
                 "theme": cmd_theme,
                 "completions": cmd_completions,
                 "completion": cmd_completions,

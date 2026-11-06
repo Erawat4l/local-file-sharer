@@ -153,13 +153,21 @@ terminal font makes `Erawat4l` hard to type — its last character is a lowercas
 
 ### Clone and run
 
-One clone, one directory named after the project, one command:
+Named `lfs`, because that is what you will type afterwards:
 
 ```bash
-git clone https://github.com/Erawat4l/local-file-sharer.git
-cd local-file-sharer
-./run
+git clone https://github.com/Erawat4l/local-file-sharer.git lfs
+cd lfs
+pip install -r requirements.txt   # dependencies (one step, no venv needed)
+lfs configure                     # optional: port, PIN, theme, download folder
+./run                             # or just: lfs
 ```
+
+`./run` builds a private `.venv`, installs the package into it in editable
+mode, and starts the app — so the command above works even if the
+`pip install -r` and `lfs configure` lines are skipped. They exist for people
+who want the dependencies somewhere specific, or who want to set the port and
+PIN before the first launch.
 
 On **Termux** install Python and pip first — `run` finds them, but cannot
 install them:

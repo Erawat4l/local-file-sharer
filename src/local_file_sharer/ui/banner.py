@@ -18,7 +18,7 @@ from rich.console import Group, RenderableType
 from rich.live import Live
 from rich.text import Text
 
-from .. import APP_NAME, APP_TAGLINE, __version__, platforms
+from .. import APP_NAME, APP_SLUG, APP_TAGLINE, __version__, platforms
 from . import console as console_mod
 from .theme import Theme, gradient_rgb, rgb_to_style
 
@@ -87,7 +87,7 @@ def logo(theme: Theme, *, offset: float = 0.0) -> Text:
 
 
 def subtitle(theme: Theme, *, offset: float = 0.0) -> Text:
-    text = f"{APP_NAME} v{__version__}  ·  {APP_TAGLINE}"
+    text = f"{APP_SLUG} v{__version__}  ·  {APP_TAGLINE}"
     return gradient_text(text, theme, offset=offset, bold=False)
 
 
@@ -119,6 +119,8 @@ def _frame(theme: Theme, offset: float, width: int) -> Text:
     out.append("\n\n")
     out.append(subtitle(theme, offset=offset * 1.6))
     out.append("\n")
+    # The gif rule stops under the end of the subtitle instead of running to
+    # the edge of the terminal: a short, deliberate line.
     rule_chars = "─" * max(10, min(width - 2, 72))
     stops = list(theme.gradient_stops or (theme.accent_rgb,))
     for index, char in enumerate(rule_chars):

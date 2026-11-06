@@ -181,14 +181,26 @@ def _greys(bright: bool) -> dict[str, str]:
     }
 
 
+#: The logo gradient from docs/assets/demo.gif: blue into cyan. Sampled from
+#: the reference frames rather than picked by eye.
+LOGO_BLUE: RGB = (98, 183, 246)   # #62B7F6
+LOGO_CYAN: RGB = (65, 217, 240)   # #41D9F0
+SUBTITLE_BLUE: RGB = (73, 187, 229)  # #49BBE5
+
+
 def _build_dark(accent: str = "white") -> Theme:
-    """Dark terminal: white is the accent, greys carry the structure."""
+    """Dark terminal: greys carry the structure, the logo keeps its blue.
+
+    The wordmark was white/grey for a while, which is not what the banner in
+    the README shows -- those two drifted apart. The gradient below is the one
+    in docs/assets/demo.gif.
+    """
     g = _greys(bright=True)
     return Theme(
         name="dark",
         accent_name="white",
         accent="bold bright_white",
-        accent_rgb=(255, 255, 255),
+        accent_rgb=SUBTITLE_BLUE,
         primary=g["primary"],
         secondary=g["secondary"],
         muted=g["muted"],
@@ -206,8 +218,8 @@ def _build_dark(accent: str = "white") -> Theme:
         selection=g["selection"],
         key=g["key"],
         link="underline bright_white",
-        gradient_stops=((255, 255, 255), (176, 176, 176), (255, 255, 255)),
-        logo_stops=((255, 255, 255), (144, 144, 144), (255, 255, 255)),
+        gradient_stops=(LOGO_BLUE, LOGO_CYAN, LOGO_BLUE),
+        logo_stops=(LOGO_BLUE, LOGO_CYAN, LOGO_BLUE),
     )
 
 

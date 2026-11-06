@@ -1,0 +1,10 @@
+# Runtime dependencies, for the plain-pip install path:
+#
+#     pip install -r requirements.txt
+#
+# Kept in step with [project].dependencies in pyproject.toml. `./run` and
+# `pip install .` do not need this file — they read pyproject.toml directly.
+rich>=13.7
+qrcode>=7.4
+# Python 3.9/3.10 have no tomllib; 3.11+ ignores this marker.
+tomli>=2.0; python_version < "3.11"
