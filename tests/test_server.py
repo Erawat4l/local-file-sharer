@@ -11,6 +11,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import zipfile
+from http import HTTPStatus
 from pathlib import Path
 
 import pytest
@@ -1375,3 +1376,77 @@ def test_the_player_speed_control_is_a_logo_with_the_rate_in_a_corner():
     assert "<svg" in rate, "the speed button has no icon"
     assert 'class="glyph" id="rate-label"' in rate, "the rate label moved"
     assert "<b id=" not in rate, "the rate should not be the button's only content"
+
+
+# ── stream mode must not make the other files unreachable ────────────────────
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """Report the 3xx instead of following it: the redirect IS what we test."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):  # noqa: ANN001
+        return None
+
+
+def _raw_get(server: ShareServer, path: str):
+    """``(status, headers, body)`` without following a redirect."""
+    opener = urllib.request.build_opener(_NoRedirect)
+    try:
+        response = opener.open(urllib.request.Request(url(server, path)), timeout=15)
+        return response.status, dict(response.headers), response.read().decode("utf-8", "replace")
+    except urllib.error.HTTPError as exc:
+        return exc.code, dict(exc.headers), exc.read().decode("utf-8", "replace")
+
+
+@pytest.fixture
+def stream_mixed_server(share_tree: Path, free_port: int):
+    """A stream share holding a film and something that is not playable."""
+    (share_tree / "movie.mp4").write_bytes(b"\0" * 4096)
+    (share_tree / "notes.txt").write_text("plain\n", encoding="utf-8")
+    manifest = Manifest.build([share_tree / "movie.mp4", share_tree / "notes.txt"], mode="stream")
+    srv = ShareServer(manifest, host="127.0.0.1", port=free_port)
+    srv.start()
+    assert srv.wait_until_ready(timeout=5)
+    yield srv
+    srv.stop()
+
+
+def test_stream_mode_does_not_hide_the_files_it_cannot_play(stream_mixed_server):
+    """`/` redirected straight to the player, and the player listed media only.
+
+    A film shared next to its subtitles therefore hid the subtitles completely:
+    the landing page bounced to the video and nothing on it linked back. The
+    redirect is only safe when the share is nothing but playable media.
+    """
+    status, headers, _body = _raw_get(stream_mixed_server, "/")
+    assert status == HTTPStatus.OK, "a mixed share must land on the list, not the player"
+    assert "location" not in {k.lower() for k in headers}
+
+    body = get(stream_mixed_server, "/").read().decode()
+    assert "notes.txt" in body, "the non-media file must be reachable"
+
+
+def test_stream_mode_still_opens_a_single_video_directly(share_tree: Path, free_port: int):
+    """The shortcut is the point of stream mode: one film, press play."""
+    (share_tree / "only.mp4").write_bytes(b"\0" * 4096)
+    manifest = Manifest.build([share_tree / "only.mp4"], mode="stream")
+    srv = ShareServer(manifest, host="127.0.0.1", port=free_port)
+    srv.start()
+    assert srv.wait_until_ready(timeout=5)
+    try:
+        status, headers, _ = _raw_get(srv, "/")
+        assert status in (HTTPStatus.FOUND, HTTPStatus.SEE_OTHER)
+        assert "/s/" in headers["Location"]
+        # ...and ?list=1 is the one URL that shows the list anyway, which is
+        # what the player's back link points at
+        listed, _, body = _raw_get(srv, "/?list=1")
+        assert listed == HTTPStatus.OK
+        assert "only.mp4" in body
+    finally:
+        srv.stop()
+
+
+def test_the_player_has_a_way_back_to_the_list():
+    """Without it the back link bounced from the player to the player."""
+    from local_file_sharer.transfer.server import load_assets
+
+    player = load_assets()["player.html"]
+    assert 'href="/?list=1"' in player, "the player needs a way back to the list"

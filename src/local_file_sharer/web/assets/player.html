@@ -66,6 +66,10 @@
       padding:0;color:var(--faint);font-size:10px;letter-spacing:.02em}
   }
   .spacer{flex:1}
+  .backlink{flex:0 0 auto;width:32px;height:32px;border-radius:50%;display:grid;
+    place-items:center;color:var(--dim);border:1px solid var(--line);
+    background:#111;text-decoration:none;transition:background .14s ease,color .14s ease}
+  .backlink:hover{background:#232323;color:var(--text)}
 
   .video-wrap{grid-area:stage;position:relative;z-index:1;width:100%;height:100%;
     min-height:0;margin:0;overflow:hidden;background:#000;
@@ -293,6 +297,8 @@
   .playlist li:hover{background:#141414}
   .playlist li.active{background:#161616;border-color:#3a3a3a}
   .playlist li.active a{color:var(--text)}
+  aside h3.also{margin-top:18px}
+  .playlist.also-files li a{color:var(--dim)}
   .stats{margin-top:18px;padding-top:16px;border-top:1px solid var(--line);display:grid;gap:10px}
   .stats .row{display:flex;justify-content:space-between;font-size:12.5px;color:var(--dim)}
   .stats .row b{font-family:var(--mono);color:var(--text);font-weight:500}
@@ -311,6 +317,11 @@
       <span class="badge">{{size}}</span>
       <span class="badge" id="speed">0 B/s</span>
       <div class="spacer"></div>
+      <a class="backlink" href="/?list=1" title="All files in this share" aria-label="All files">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M15 5l-7 7 7 7"/></svg>
+      </a>
       <span class="badge build" title="build of the player UI">{{version}} · {{build}}</span>
     </div>
 
@@ -420,6 +431,7 @@
     <ul class="playlist" id="playlist">
 {{playlist}}
     </ul>
+{{other_files}}
     <div class="stats">
       <div class="row"><span>buffered</span><b id="buffered">0%</b></div>
       <div class="row"><span>transferred</span><b id="sent">—</b></div>

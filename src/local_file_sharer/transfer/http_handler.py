@@ -551,7 +551,18 @@ class ShareRequestHandler(BaseHTTPRequestHandler):
             return
         if mode == "stream":
             media = [f for f in self.ctx.manifest.iter_files() if f.kind in ("video", "audio")]
-            if media:
+            # Only jump straight to the player when the player IS the share.
+            # Redirecting while other files were shared made them unreachable:
+            # `/` always bounced to the first video and the player page had no
+            # link back, so a photo or a PDF next to the film could not be
+            # opened at all. A list that can reach everything beats a shortcut
+            # that hides some of it.
+            everything = list(self.ctx.manifest.iter_files())
+            # `?list=1` is the escape hatch: without it the back link in the
+            # player bounced straight back to the player, so the share's list
+            # was unreachable for anyone who wanted the download or the size.
+            wanted_list = (self._query().get("list") or ["0"])[0] in ("1", "true", "yes")
+            if media and len(media) == len(everything) and not wanted_list:
                 self.redirect(f"/s/{media[0].file_id}")
                 return
         tracker = self.ctx.tracker
@@ -795,6 +806,10 @@ class ShareRequestHandler(BaseHTTPRequestHandler):
             self.redirect(f"/f/{file_id}")
             return
         siblings = [f for f in self.ctx.manifest.iter_files() if f.kind in ("video", "audio")]
+        # Everything the share contains, not just the playable parts: a film
+        # shared next to its subtitles had no way to reach the .srt, because
+        # the player only ever listed media.
+        others = [f for f in self.ctx.manifest.iter_files() if f.kind not in ("video", "audio")]
         playlist = "\n".join(
             f'<li data-id="{f.file_id}" class="{"active" if f.file_id == entry.file_id else ""}">'
             f'<a href="/s/{f.file_id}">{html.escape(f.rel.split("/")[-1])}</a>'
@@ -814,6 +829,7 @@ class ShareRequestHandler(BaseHTTPRequestHandler):
             .replace("{{download_url}}", f"/f/{entry.file_id}")
             .replace("{{base_url}}", html.escape(self.ctx.base_url))
             .replace("{{playlist_count}}", str(len(siblings)))
+            .replace("{{other_files}}", _other_files_block(others))
         )
         self.send_html(body)
 
@@ -1386,6 +1402,26 @@ def _inside_item(rel: str, items) -> str | None:  # noqa: ANN001
         if not item.is_dir and item.name == rel:
             return rel
     return None
+
+
+def _other_files_block(files) -> str:  # noqa: ANN001
+    """The non-playable files in a share, as links, for under the playlist.
+
+    A stream share that also contains a subtitle track, a PDF or a set of
+    photos used to hide them completely: the player listed media only, and `/`
+    redirected here, so those files were unreachable from the browser.
+    """
+    if not files:
+        return ""
+    rows = "\n".join(
+        f'<li><a href="/f/{f.file_id}" download>{html.escape(f.rel.split("/")[-1])}</a>'
+        f"<span>{html.escape(f.size_text)}</span></li>"
+        for f in files
+    )
+    return (
+        '<h3 class="also">Also in this share</h3>\n'
+        f'<ul class="playlist also-files">\n{rows}\n</ul>'
+    )
 
 
 def _page_number(query: dict[str, list[str]]) -> int:
