@@ -2,9 +2,8 @@
 # ─────────────────────────────────────────────────────────────────────────────
 #  local-file-sharer · run straight from a checkout
 #
-#    git clone -b arena/d7f4713b-local-file-sharer \
-#        https://github.com/Erawat4l/local-file-sharer.git lfs
-#    cd lfs
+#    git clone https://github.com/Erawat4l/local-file-sharer.git
+#    cd local-file-sharer
 #    ./run
 #
 #  First run creates .venv, installs the package into it in editable mode, then
@@ -44,6 +43,10 @@ case $self in
 esac
 cd "$HERE" || exit 1
 
+# Termux has no /tmp, so error capture needs a directory that exists there.
+# Cache inside the checkout: removable, and it is already gitignored.
+SCRATCH="$HERE/.lfs-tmp"
+mkdir -p "$SCRATCH" 2>/dev/null || SCRATCH="${TMPDIR:-$HERE}"
 VENV="$HERE/.venv"
 PY="$VENV/bin/python"
 LFS="$VENV/bin/lfs"
@@ -106,9 +109,9 @@ setup() {
 
     if [ ! -x "$PY" ]; then
         step "creating .venv with $("$py" --version 2>&1)"
-        if ! "$py" -m venv "$VENV" >/tmp/lfs-venv-out.$$ 2>&1; then
-            msg=$(cat /tmp/lfs-venv-out.$$ 2>/dev/null || true)
-            rm -f /tmp/lfs-venv-out.$$
+        if ! "$py" -m venv "$VENV" >"$SCRATCH"/venv-out 2>&1; then
+            msg=$(cat "$SCRATCH"/venv-out 2>/dev/null || true)
+            rm -f "$SCRATCH"/venv-out
             # Debian and Ubuntu ship venv as a separate package, and the error
             # ("ensurepip is not available") does not name it.
             case "$msg" in
@@ -121,7 +124,7 @@ setup() {
 $msg" ;;
             esac
         fi
-        rm -f /tmp/lfs-venv-out.$$
+        rm -f "$SCRATCH"/venv-out
         ok "created .venv"
     fi
 
@@ -136,9 +139,9 @@ $msg" ;;
 
     step "installing dependencies (rich, qrcode)"
     "$PY" -m pip install --quiet --upgrade pip >/dev/null 2>&1 || true
-    if ! "$PY" -m pip install --quiet --editable "$HERE" 2>/tmp/lfs-pip-error.$$; then
-        msg=$(cat /tmp/lfs-pip-error.$$ 2>/dev/null || true)
-        rm -f /tmp/lfs-pip-error.$$
+    if ! "$PY" -m pip install --quiet --editable "$HERE" 2>"$SCRATCH"/pip-error; then
+        msg=$(cat "$SCRATCH"/pip-error 2>/dev/null || true)
+        rm -f "$SCRATCH"/pip-error
         case "$msg" in
             *"Could not find a version"*|*"Temporary failure"*|*"Name or service"*)
                 die "cannot reach PyPI — check the connection and run ./run again" ;;
@@ -146,7 +149,7 @@ $msg" ;;
         printf '%s\n' "$msg" >&2
         die "install failed (full output above)"
     fi
-    rm -f /tmp/lfs-pip-error.$$
+    rm -f "$SCRATCH"/pip-error
     printf '%s' "$want" > "$stamp"
     ok "installed $("$PY" -c 'import local_file_sharer as m; print(m.__version__)')"
 }
@@ -176,13 +179,13 @@ case "${1:-}" in
         step "reinstalling from $BRANCH instead"
         "$PY" -m pip install --quiet --upgrade --force-reinstall --no-deps \
             "local-file-sharer @ git+https://github.com/$OWNER/$REPO.git@$BRANCH" \
-            2>/tmp/lfs-upgrade-error.$$ || {
-                msg=$(cat /tmp/lfs-upgrade-error.$$ 2>/dev/null || true)
-                rm -f /tmp/lfs-upgrade-error.$$
+            2>"$SCRATCH"/upgrade-error || {
+                msg=$(cat "$SCRATCH"/upgrade-error 2>/dev/null || true)
+                rm -f "$SCRATCH"/upgrade-error
                 printf '%s\n' "$msg" >&2
                 die "upgrade failed — see above. Nothing was changed."
             }
-        rm -f /tmp/lfs-upgrade-error.$$
+        rm -f "$SCRATCH"/upgrade-error
         ok "upgraded — run ./run"
         exit 0 ;;
     doctor)   setup; exec "$LFS" doctor ;;

@@ -86,3 +86,6 @@ tools/screenshots/inputs/
 # The copy at the repository root IS tracked on purpose: it is the download a
 # visitor needs, and GitHub cannot serve a file it does not have. Only the
 # build output under dist/ stays out of git.
+
+# error capture for run, since Termux has no /tmp
+.lfs-tmp/
