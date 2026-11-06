@@ -7,6 +7,13 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Added
+- `./run` — clone the repository, `cd` into it, run one command. The first run
+  builds a private `.venv`, installs the package in editable mode and starts
+  `lfs`; later runs go straight to the app. `./run upgrade` is `git pull` plus
+  re-install, and a plain `git pull` is enough because the install is editable
+  and `.venv` notices the new commit. Nothing is written outside the checkout.
+
 ### Changed
 - The CLI menu is grouped into SHARE / RECENT & FAVOURITES / SETTINGS, with a
   key gutter, an icon column and one aligned description column — the layout

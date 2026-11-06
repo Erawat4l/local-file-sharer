@@ -123,6 +123,30 @@ scrollback, and a live dashboard with speed, ETA, progress, devices and total se
 > Requirements: **Python 3.9+**. Everything else is optional (`aria2c`,
 > `tailscale`, `cloudflared` unlock extra features).
 
+### Clone and run (simplest)
+
+```bash
+git clone -b arena/d7f4713b-local-file-sharer https://github.com/Erawat4l/local-file-sharer.git lfs
+cd lfs
+./run
+```
+
+The first `./run` creates a `.venv` inside the checkout, installs rich and
+qrcode into it, and starts `lfs`. Nothing is installed system-wide, so removing
+it is `rm -rf .venv`, and every run after the first goes straight to the app.
+
+```bash
+./run                 # set up if needed, then start lfs
+./run setup           # set up only
+./run upgrade         # git pull, then re-install
+./run doctor          # check dependencies and network
+./run ~/Downloads     # any arguments go to lfs
+```
+
+Because the install is editable, a plain `git pull` is enough to update: the
+next `./run` sees the new commit and reinstalls itself. You can also symlink it
+onto your PATH (`ln -s ~/lfs/run ~/bin/lfs`) and use `lfs` from anywhere.
+
 ### Termux (Android)
 
 ```bash

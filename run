@@ -1,0 +1,167 @@
+#!/bin/sh
+# ─────────────────────────────────────────────────────────────────────────────
+#  local-file-sharer · run straight from a checkout
+#
+#    git clone -b arena/d7f4713b-local-file-sharer \
+#        https://github.com/Erawat4l/local-file-sharer.git lfs
+#    cd lfs
+#    ./run
+#
+#  First run creates .venv, installs the package into it in editable mode, then
+#  starts lfs. Every run after that goes straight to lfs — no install step, no
+#  checkout of anything, no network unless rich/qrcode are missing.
+#
+#  Because the install is editable, upgrading is just `git pull`:
+#
+#    git pull && ./run
+#
+#  Commands
+#    ./run              set up if needed, then start lfs
+#    ./run setup        set up only (useful in a script)
+#    ./run upgrade      git pull, then re-run setup
+#    ./run doctor       set up, then run `lfs doctor`
+#    ./run --help       this text
+#    ./run <anything>   passed straight to lfs, e.g. ./run ~/Downloads --mode serve
+#
+#  Nothing here touches your system Python: pip, rich and qrcode all live inside
+#  .venv, so an uninstall is `rm -rf .venv` and your device is unchanged.
+# ─────────────────────────────────────────────────────────────────────────────
+set -eu
+
+# Resolve symlinks, or `ln -s ~/lfs/run ~/bin/lfs` builds .venv inside ~/bin.
+# Portable: no readlink -f, which macOS lacks.
+self=$0
+while [ -L "$self" ]; do
+    link=$(readlink "$self") || break
+    case $link in
+        /*) self=$link ;;
+        *)  self=${self%/*}/$link ;;
+    esac
+done
+case $self in
+    */*) HERE=$(CDPATH= cd -- "${self%/*}" && pwd) ;;
+    *)   HERE=$(pwd) ;;
+esac
+cd "$HERE" || exit 1
+
+VENV="$HERE/.venv"
+PY="$VENV/bin/python"
+LFS="$VENV/bin/lfs"
+BRANCH="${LFS_BRANCH:-arena/d7f4713b-local-file-sharer}"
+
+# ── tiny output helpers ─────────────────────────────────────────────────────
+if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
+    B=$(printf '\033[1m'); D=$(printf '\033[2m'); G=$(printf '\033[32m')
+    Y=$(printf '\033[33m'); R=$(printf '\033[31m'); N=$(printf '\033[0m')
+else
+    B=""; D=""; G=""; Y=""; R=""; N=""
+fi
+say()  { printf '%s\n' "$*"; }
+step() { printf '%s→%s %s\n' "$D" "$N" "$*"; }
+ok()   { printf '%s✓%s %s\n' "$G" "$N" "$*"; }
+warn() { printf '%s!%s %s\n' "$Y" "$N" "$*"; }
+die()  { printf '%s✗%s %s\n' "$R" "$N" "$*" >&2; exit 1; }
+
+usage() {
+    # the header comment is the help text: keep one copy of the truth
+    if command -v sed >/dev/null 2>&1; then
+        sed -n '2,33p' "$self" | sed 's/^# \{0,1\}//'
+    else
+        printf '%s\n' "local-file-sharer: cd into the checkout and run ./run"
+    fi
+    exit 0
+}
+
+# ── 1. find a Python that can build a venv ──────────────────────────────────
+find_python() {
+    for candidate in python3 python; do
+        if command -v "$candidate" >/dev/null 2>&1; then
+            if "$candidate" -c 'import sys, venv; sys.exit(0 if sys.version_info >= (3, 9) else 1)' \
+                >/dev/null 2>&1; then
+                printf '%s' "$candidate"
+                return 0
+            fi
+        fi
+    done
+    return 1
+}
+
+need_python() {
+    if py=$(find_python); then
+        return 0
+    fi
+    printf '\n' >&2
+    die "no Python 3.9+ with venv support found.
+  Termux : pkg install python
+  Debian : sudo apt install python3 python3-venv
+  Fedora : sudo dnf install python3
+  macOS  : brew install python3   (or install the Xcode command line tools)"
+}
+
+# ── 2. set up the virtualenv ────────────────────────────────────────────────
+setup() {
+    need_python
+
+    if [ ! -x "$PY" ]; then
+        step "creating .venv with $("$py" --version 2>&1)"
+        if ! "$py" -m venv "$VENV" >/tmp/lfs-venv-out.$$ 2>&1; then
+            msg=$(cat /tmp/lfs-venv-out.$$ 2>/dev/null || true)
+            rm -f /tmp/lfs-venv-out.$$
+            # Debian and Ubuntu ship venv as a separate package, and the error
+            # ("ensurepip is not available") does not name it.
+            case "$msg" in
+                *ensurepip*|*python3-venv*|*"No module named venv"*)
+                    die "this Python is missing the venv module.
+  Debian/Ubuntu: sudo apt install python3-venv
+  Termux       : pkg install python   (it includes venv)
+  Fedora       : sudo dnf install python3" ;;
+                *) die "could not create .venv
+$msg" ;;
+            esac
+        fi
+        rm -f /tmp/lfs-venv-out.$$
+        ok "created .venv"
+    fi
+
+    # Editable install, so `git pull` is the whole upgrade path. Re-run only
+    # when something actually changed: a fresh checkout, or a commit that
+    # touched the packaging metadata.
+    stamp="$VENV/.lfs-stamp"
+    want=$(git -C "$HERE" rev-parse --short HEAD 2>/dev/null || echo "nogit")
+    if [ -x "$LFS" ] && [ -f "$stamp" ] && [ "$(cat "$stamp")" = "$want" ]; then
+        return 0
+    fi
+
+    step "installing dependencies (rich, qrcode)"
+    "$PY" -m pip install --quiet --upgrade pip >/dev/null 2>&1 || true
+    if ! "$PY" -m pip install --quiet --editable "$HERE" 2>/tmp/lfs-pip-error.$$; then
+        msg=$(cat /tmp/lfs-pip-error.$$ 2>/dev/null || true)
+        rm -f /tmp/lfs-pip-error.$$
+        case "$msg" in
+            *"Could not find a version"*|*"Temporary failure"*|*"Name or service"*)
+                die "cannot reach PyPI — check the connection and run ./run again" ;;
+        esac
+        printf '%s\n' "$msg" >&2
+        die "install failed (full output above)"
+    fi
+    rm -f /tmp/lfs-pip-error.$$
+    printf '%s' "$want" > "$stamp"
+    ok "installed $("$PY" -c 'import local_file_sharer as m; print(m.__version__)')"
+}
+
+# ── 3. dispatch ─────────────────────────────────────────────────────────────
+case "${1:-}" in
+    -h|--help|help) usage ;;
+    setup)    setup; say ""; ok "ready — run ./run"; exit 0 ;;
+    upgrade)
+        setup
+        step "pulling $BRANCH"
+        git -C "$HERE" pull --ff-only || die "git pull failed — resolve it, then run ./run"
+        rm -f "$VENV/.lfs-stamp"
+        setup
+        ok "upgraded — run ./run"
+        exit 0 ;;
+    doctor)   setup; exec "$LFS" doctor ;;
+    "")       setup; exec "$LFS" ;;
+    *)        setup; exec "$LFS" "$@" ;;
+esac
