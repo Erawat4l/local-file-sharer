@@ -153,11 +153,22 @@ terminal font makes `Erawat4l` hard to type — its last character is a lowercas
 
 ### Clone and run
 
+One clone, one directory named after the project, one command:
+
 ```bash
-git clone https://github.com/Erawat4l/local-file-sharer.git lfs
-cd lfs
+git clone https://github.com/Erawat4l/local-file-sharer.git
+cd local-file-sharer
 ./run
 ```
+
+On **Termux** install Python first — `run` finds it, but cannot install it:
+
+```bash
+pkg install python
+```
+
+Then the same three lines. `run` keeps its error output inside the checkout
+(`.lfs-tmp`), so it works on a device that has no `/tmp`.
 
 The first `./run` creates a `.venv` inside the checkout, installs rich and
 qrcode into it, and starts `lfs`. Nothing is installed system-wide, so removing
