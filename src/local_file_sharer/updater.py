@@ -108,6 +108,54 @@ def ref_has_package(ref: str, *, timeout: float = 6.0) -> bool:
         return True
 
 
+def installed_commit() -> str:
+    """The git commit pip actually installed, or ``""`` when unknown.
+
+    ``direct_url.json`` records ``commit_id`` for a VCS install, which is the
+    only way to tell one commit from another: this package reports the same
+    version number from every commit, so a version check cannot.
+    """
+    try:
+        import importlib.metadata as md  # noqa: PLC0415
+
+        direct = md.distribution("local-file-sharer").read_text("direct_url.json") or ""
+        payload = json.loads(direct)
+        vcs = payload.get("vcs_info") or {}
+        if isinstance(vcs, dict):
+            return str(vcs.get("commit_id") or "")
+    except Exception:  # noqa: BLE001
+        pass
+    return ""
+
+
+def remote_commit(ref: str, *, timeout: float = 6.0) -> str:
+    """The commit a branch points at on GitHub, or ``""`` when offline."""
+    url = f"https://api.github.com/repos/{REPO_SLUG}/commits/{ref}"
+    request = urllib.request.Request(
+        url,
+        headers={"Accept": "application/vnd.github+json", "User-Agent": f"local-file-sharer/{__version__}"},
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:  # noqa: S310
+            payload = json.loads(response.read().decode("utf-8", "replace"))
+        return str(payload.get("sha") or "")
+    except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, OSError, ValueError):
+        return ""
+
+
+def upgrade_result(before: str, ref: str) -> tuple[bool, str, str]:
+    """Did the install really change? Returns ``(changed, was, now)``.
+
+    pip can exit zero without installing anything (it did, for every upgrade
+    after the first, because the version never changes). Comparing the recorded
+    commit before and after is the only honest check.
+    """
+    now = installed_commit()
+    if not now:
+        return True, before, now  # nothing to compare: trust pip
+    return (now != before), before, now
+
+
 def resolve_ref(ref: str | None = None) -> tuple[str, str]:
     """Pick a branch that can actually be installed. Returns ``(ref, note)``."""
     if ref:
@@ -201,7 +249,10 @@ def run_with_progress(cmd: list[str], *, con=None, title: str = "upgrading") -> 
         return line
 
     # Never let a pip prompt block forever in a non-tty: it would hang a phone.
+    # PYTHONPATH is stripped because shipping the source tree to pip can make it
+    # resolve the old copy that is being replaced.
     env = dict(os.environ, PIP_DISABLE_PIP_VERSION_CHECK="1", PIP_PROGRESS_BAR="off")
+    env.pop("PYTHONPATH", None)
     try:
         process = subprocess.Popen(  # noqa: S603
             cmd,
@@ -265,8 +316,25 @@ def upgrade_from_git(ref: str | None = None) -> int:
         con.print(f"[lfs.warning]this is a standalone build — download the new one from {RELEASES_PAGE}[/]")
         return 1
     else:
-        cmd = [sys.executable, "-m", "pip", "install", "--upgrade", spec]
+        # --force-reinstall is not optional here. pip treats a git URL as a
+        # candidate version, and this package reports the same version from every
+        # commit, so `--upgrade` decides it is "already satisfied" and installs
+        # nothing — silently, with no error and no "Successfully installed" line.
+        # Every upgrade after the first was therefore a no-op. --no-deps keeps it
+        # fast: rich/qrcode are already present and do not need reinstalling.
+        cmd = [
+            sys.executable,
+            "-m",
+            "pip",
+            "install",
+            "--upgrade",
+            "--force-reinstall",
+            "--no-deps",
+            spec,
+        ]
     con.print(f"[lfs.muted]from[/]  [lfs.primary]{target}[/]  [lfs.faint]({GIT_URL})[/]")
+    before = installed_commit()
+    wanted = remote_commit(target)
     code, output = run_with_progress(cmd, con=con)
     if code == 127:
         con.print("[lfs.danger]could not run pip — install it, or re-run install.sh[/]")
@@ -284,7 +352,20 @@ def upgrade_from_git(ref: str | None = None) -> int:
         _show_failure(con, output)
         con.print(f"[lfs.muted]try a branch explicitly:[/] lfs upgrade --ref {DEFAULT_BRANCH}")
         return code
+    # pip exits 0 even when it installs nothing, so ask the record on disk what
+    # actually landed. This is what catches the silent no-op for good.
+    changed, was, now = upgrade_result(before, target)
+    if not changed:
+        con.print("[lfs.warning]  nothing changed[/]  [lfs.muted]already on the newest code[/]")
+        if now:
+            con.print(f"[lfs.muted]at {now[:7]}  ({target})[/]")
+        return 0
     con.print("[lfs.success]  upgraded[/]  [lfs.muted]restart `lfs` to use the new code[/]")
+    if now:
+        short_was = was[:7] if was else "unknown"
+        short_now = now[:7]
+        behind = f"  [lfs.faint](wanted {wanted[:7]})[/]" if wanted and wanted != now else ""
+        con.print(f"[lfs.muted]{short_was} → {short_now}[/]{behind}")
     return 0
 
 
@@ -487,8 +568,6 @@ def run_update(*, check_only: bool = False, yes: bool = False, channel: str = "s
         if answer not in ("", "y", "yes"):
             con.print("[lfs.muted]cancelled[/]")
             return 1
-    env = dict(os.environ)
-    env.pop("PYTHONPATH", None)
     try:
         code, output = run_with_progress(cmd, con=con)
     except (OSError, subprocess.SubprocessError) as exc:

@@ -209,3 +209,106 @@ def test_a_failed_upgrade_shows_the_reason():
     assert updater._phase_for("Installing collected packages: x", "build") == "install"
     assert updater._phase_for("Successfully installed x-1.0", "install") == "install"
     assert updater._phase_for("garbage", "install") == "install"
+
+
+# ── the silent no-op ─────────────────────────────────────────────────────────
+def test_pip_install_is_forced_to_reinstall(monkeypatch):
+    """`--upgrade` alone installs nothing, silently, and always has.
+
+    Every commit of this package reports the same version, so pip considers a
+    git requirement "already satisfied" and exits 0 without building a wheel.
+    The user sees an upgrade, runs `lfs`, and finds the old code. Proved against
+    a throwaway package: without the flag the import marker stayed at the old
+    value; with it, it changed.
+    """
+    seen = {}
+
+    def fake_run(cmd, **_kw):
+        seen["cmd"] = cmd
+        return 0, []
+
+    monkeypatch.setattr(updater, "run_with_progress", fake_run)
+    monkeypatch.setattr(updater, "detect_installer", lambda: "pip")
+    monkeypatch.setattr(updater, "resolve_ref", lambda ref: ("arena/x", ""))
+    updater.upgrade_from_git(None)
+    assert "--force-reinstall" in seen["cmd"]
+    # --no-deps: rich and qrcode are already there; reinstalling them is slow.
+    assert "--no-deps" in seen["cmd"]
+
+
+def test_a_real_change_is_reported_with_its_commits(capsys, monkeypatch):
+    monkeypatch.setattr(updater, "run_with_progress", lambda cmd, **kw: (0, []))
+    monkeypatch.setattr(updater, "detect_installer", lambda: "pip")
+    monkeypatch.setattr(updater, "resolve_ref", lambda ref: ("arena/x", ""))
+    monkeypatch.setattr(updater, "installed_commit", lambda: "b" * 40)
+    monkeypatch.setattr(updater, "remote_commit", lambda ref, **kw: "b" * 40)
+    monkeypatch.setattr(updater, "upgrade_result", lambda before, ref: (True, "a" * 40, "b" * 40))
+    assert updater.upgrade_from_git(None) == 0
+    out = capsys.readouterr().out
+    assert "upgraded" in out
+    assert "aaaaaaa" in out and "bbbbbbb" in out
+
+
+def test_pip_exiting_zero_without_installing_is_not_called_an_upgrade(capsys, monkeypatch):
+    """The exact failure the user hit: pip exits 0, nothing changed."""
+    monkeypatch.setattr(updater, "run_with_progress", lambda cmd, **kw: (0, []))
+    monkeypatch.setattr(updater, "detect_installer", lambda: "pip")
+    monkeypatch.setattr(updater, "resolve_ref", lambda ref: ("arena/x", ""))
+    monkeypatch.setattr(updater, "installed_commit", lambda: "c" * 40)
+    monkeypatch.setattr(updater, "remote_commit", lambda ref, **kw: "c" * 40)
+    monkeypatch.setattr(updater, "upgrade_result", lambda before, ref: (False, "c" * 40, "c" * 40))
+    assert updater.upgrade_from_git(None) == 0
+    out = capsys.readouterr().out
+    assert "nothing changed" in out
+    assert "upgraded" not in out.replace("nothing changed", "")
+
+
+def test_installed_commit_reads_the_vcs_commit_id(monkeypatch):
+    payload = {"url": "https://github.com/x/y", "vcs_info": {"vcs": "git", "commit_id": "f" * 40}}
+
+    class Dist:
+        def read_text(self, name):
+            return json.dumps(payload)
+
+    monkeypatch.setattr("importlib.metadata.distribution", lambda name: Dist())
+    assert updater.installed_commit() == "f" * 40
+
+
+def test_installed_commit_is_blank_when_unknown(monkeypatch):
+    """A non-git install has no commit; that must not crash the upgrade."""
+    monkeypatch.setattr("importlib.metadata.distribution", lambda name: (_ for _ in ()).throw(LookupError()))
+    assert updater.installed_commit() == ""
+
+
+def test_upgrade_result_trusts_pip_when_there_is_nothing_to_compare():
+    assert updater.upgrade_result("a" * 40, "x")[0] is True
+
+
+def test_pip_does_not_see_pythonpath(monkeypatch):
+    """A PYTHONPATH pointing at the source tree can shadow what pip installs."""
+    import subprocess
+
+    seen = {}
+
+    class FakePopen:
+        def __init__(self, cmd, **kw):
+            seen["env"] = kw.get("env") or {}
+            self.stdout = iter(())
+
+        def wait(self, timeout=None):
+            return 0
+
+        def poll(self):
+            return 0
+
+    monkeypatch.setenv("PYTHONPATH", "/home/user/local-file-sharer/src")
+    monkeypatch.setattr(subprocess, "Popen", FakePopen)
+    updater.run_with_progress(["pip"], con=_FakeConsole())
+    assert "PYTHONPATH" not in seen["env"]
+
+
+class _FakeConsole:
+    is_terminal = False
+
+    def print(self, *a, **k):
+        pass
