@@ -446,7 +446,10 @@ def test_fix_copies_clears_all_of_them_not_only_the_winner(tmp_path, monkeypatch
 @pytest.mark.parametrize(
     ("shell_path", "expected"),
     [
-        ("/usr/bin/fish", "rehash"),
+        # fish has no command hash at all, and its old `rehash` function is
+        # gone -- 4.x answers "fish: Unknown command: rehash". Printing either
+        # one is advice that fails in the shell it was printed for.
+        ("/usr/bin/fish", ""),
         ("/bin/zsh", "hash -r"),
         ("/bin/bash", "hash -r"),
         ("/bin/sh", "command -v lfs"),
@@ -460,6 +463,21 @@ def test_the_shell_forgets_a_moved_binary_with_its_own_command(shell_path, expec
 
     monkeypatch.setenv("SHELL", shell_path)
     assert platforms.rehash_command() == expected
+
+
+def test_fish_is_told_there_is_nothing_to_run(monkeypatch):
+    """Second time this bit: `rehash` does not exist in fish 4.x either.
+
+    Fish reads $PATH on every command, so the truthful hint names no command
+    and does not pretend a new shell is needed.
+    """
+    from local_file_sharer import platforms
+
+    monkeypatch.setattr(platforms, "current_shell", lambda: "fish")
+    hint = platforms.rehash_hint()
+    assert hint == "nothing to run — fish looks up lfs every time"
+    for wrong in ("rehash", "hash -r", "open a new shell"):
+        assert wrong not in hint
 
 
 def test_an_unknown_shell_falls_back_to_opening_a_new_one(monkeypatch):

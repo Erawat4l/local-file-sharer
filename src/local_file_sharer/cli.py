@@ -537,8 +537,19 @@ def _warn_about_shadowing_copy(con) -> None:  # noqa: ANN001
     con.print(
         f"[lfs.muted]  this is[/] [lfs.faint]{sys.argv[0] if sys.argv else 'lfs'}[/]"
         f"[lfs.muted] — remove the other with[/] [lfs.primary]{how}[/]"
-        f" [lfs.muted]then[/] [lfs.primary]{_platforms.rehash_hint()}[/]"
     )
+    hint = _platforms.rehash_hint()
+    if _platforms.current_shell() == "fish":
+        # Deleting the winner hands `lfs` to the *next* copy, not to this one.
+        # On Termux that next copy may be the one `$PREFIX/bin/lfs` now points
+        # at, so say that instead of leaving a bare `rm` to be interpreted.
+        con.print(
+            "[lfs.muted]  after that,[/] [lfs.primary]the one that answers "
+            "is whichever comes next on PATH[/][lfs.muted] — check with "
+            "[/][lfs.primary]command -v lfs[/]"
+        )
+    elif hint:
+        con.print(f"[lfs.muted]  then[/] [lfs.primary]{hint}[/]")
     con.print(
         "[lfs.faint]  or let it do both: lfs doctor --fix-copies"
         "   (quiet with LFS_NO_COPY_WARNING=1)"

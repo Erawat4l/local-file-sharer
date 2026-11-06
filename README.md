@@ -229,19 +229,23 @@ lfs doctor --fix-copies
 
 It removes only copies that shadow this one, and leaves a `pipx` install alone
 (printing `pipx uninstall local-file-sharer` instead, since deleting a pipx
-launcher by hand leaves a broken half-install). Then tell your shell to forget
-the old path — **the command differs per shell**, and the wrong one just prints
-an error:
+launcher by hand leaves a broken half-install). Some shells then need telling
+to forget the old path — **the command differs per shell**, and the wrong one
+just prints an error:
 
 | Shell | Command |
 |---|---|
-| fish | `rehash` |
+| fish | nothing — fish reads `$PATH` on every command |
 | bash / zsh | `hash -r` |
 | sh | `command -v lfs` |
 | PowerShell | `$env:PATH = $env:PATH` |
 
-Opening a new terminal works in every shell if you would rather not remember.
-`lfs doctor --fix-copies` prints the right command for the shell you ran it from.
+Two wrong answers have been printed here before, both for fish. `hash -r` is
+bash/zsh only (`fish: Unknown command: hash`), and `rehash` was a fish function
+that has since been removed (`fish: Unknown command: rehash`). In fish the
+correct answer is that no command is needed.
+
+`lfs doctor --fix-copies` prints the right line for the shell you ran it from.
 
 `lfs` also prints a one-line warning at startup when it detects this, so you are
 not left guessing. Silence it with `LFS_NO_COPY_WARNING=1`.

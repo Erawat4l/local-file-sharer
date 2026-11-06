@@ -492,12 +492,33 @@ case "${1:-}" in
         esac
         say ""
         say "  this copy:  $("$LFS" --version 2>/dev/null | head -1)"
-        if command -v lfs >/dev/null 2>&1; then
-            other=$(command -v lfs)
-            if [ "$(readlink -f "$other" 2>/dev/null || echo "$other")" != \
+
+        # Linking into a directory that loses to an earlier copy changes
+        # nothing a user can see: they run `lfs`, get the old one, and every
+        # fix since looks like it did not ship. So link into the directory
+        # their shell actually picks first, when that one is not already ours.
+        if other=$(command -v lfs 2>/dev/null) && [ -n "$other" ]; then
+            same=$(readlink -f "$other" 2>/dev/null || echo "$other")
+            mine=$(readlink -f "$LFS" 2>/dev/null || echo "$LFS")
+            if [ "$same" != "$mine" ]; then
+                first_dir=$(dirname "$other")
+                if [ -w "$first_dir" ]; then
+                    ln -sf "$LFS" "$first_dir/lfs"
+                    ok "pointed $first_dir/lfs at this copy (it was answering first)"
+                    say "  the old file is replaced, not deleted — nothing is lost"
+                else
+                    warn "another lfs answers your shell first: $other"
+                    say "  remove it, then run ./run install again:"
+                    say "    rm $other"
+                fi
+            fi
+        fi
+        if other=$(command -v lfs 2>/dev/null) && [ -n "$other" ]; then
+            if [ "$(readlink -f "$other" 2>/dev/null || echo "$other")" = \
                "$(readlink -f "$LFS" 2>/dev/null || echo "$LFS")" ]; then
-                warn "another lfs is earlier on PATH: $other"
-                say "  that one is older; use ./run, or remove it and open a new shell"
+                ok "your shell now runs this copy: lfs"
+            else
+                warn "your shell still runs a different lfs: $other"
             fi
         fi
         exit 0 ;;

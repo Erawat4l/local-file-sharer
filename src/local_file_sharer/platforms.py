@@ -101,14 +101,15 @@ def current_shell() -> str:
 def rehash_command() -> str:
     """The command that makes *this* shell forget a moved binary.
 
-    ``hash -r`` is bash/zsh only. In fish it is ``rehash``, and running the
-    bash one prints ``fish: Unknown command: hash`` -- advice that fails in the
-    shell it was printed for. Windows has no equivalent worth typing, so the
-    honest answer there is to open a new terminal.
+    ``hash -r`` is bash/zsh only; fish has no command hash at all and so has
+    nothing to clear. Fish *did* ship a ``rehash`` function once, but it was
+    dropped and 4.x answers ``fish: Unknown command: rehash``, so printing it
+    as advice is the same mistake as printing ``hash -r``: a command that
+    fails in the shell it was printed for. Fish resolves every external
+    command against $PATH on each use, so the honest answer is that nothing
+    needs running. Windows has no equivalent worth typing either.
     """
     shell = current_shell()
-    if shell == "fish":
-        return "rehash"
     if shell in ("bash", "zsh"):
         return "hash -r"
     if shell in ("pwsh", "powershell"):
@@ -120,6 +121,11 @@ def rehash_command() -> str:
 
 def rehash_hint() -> str:
     """A ready-to-print sentence: the right command, or the universal fallback."""
+    shell = current_shell()
+    if shell == "fish":
+        # Nothing to type, and telling a fish user to "open a new shell" is
+        # noise: the next `lfs` already picks up the change. Say what is true.
+        return "nothing to run — fish looks up lfs every time"
     command = rehash_command()
     if command:
         return f"{command}  (or open a new shell)"
