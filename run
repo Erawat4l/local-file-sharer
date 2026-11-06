@@ -80,12 +80,15 @@ usage() {
 # ── 1. find a Python that can build a venv ──────────────────────────────────
 find_python() {
     for candidate in python3 python; do
-        if command -v "$candidate" >/dev/null 2>&1; then
-            if "$candidate" -c 'import sys, venv; sys.exit(0 if sys.version_info >= (3, 9) else 1)' \
-                >/dev/null 2>&1; then
-                printf '%s' "$candidate"
-                return 0
-            fi
+        command -v "$candidate" >/dev/null 2>&1 || continue
+        # Version and the venv module only. ensurepip and pip are deliberately
+        # NOT required here: setup() knows how to work without them (Termux
+        # ships neither with `python`), and requiring them here meant a working
+        # interpreter was reported as missing.
+        if "$candidate" -c 'import sys, venv; sys.exit(0 if sys.version_info >= (3, 9) else 1)' \
+            >/dev/null 2>&1; then
+            printf '%s' "$candidate"
+            return 0
         fi
     done
     return 1
@@ -104,6 +107,32 @@ need_python() {
 }
 
 # ── 2. set up the virtualenv ────────────────────────────────────────────────
+# A cheap way to tell Termux apart from any other Linux: it sets $PREFIX to its
+# own root, and ships `pkg` there.
+is_termux() {
+    case "${PREFIX:-}" in
+        *com.termux*) return 0 ;;
+    esac
+    command -v pkg >/dev/null 2>&1 && [ -n "${ANDROID_ROOT:-}" ]
+}
+
+# Termux splits its Python up: the `python` package has venv but NOT pip, and
+# `python-pip` provides pip separately. Without it there is no ensurepip and no
+# pip, so a virtualenv cannot be bootstrapped by the usual route.
+termux_install_pip() {
+    is_termux || return 1
+    [ -z "${LFS_NO_AUTOINSTALL:-}" ] || return 1
+    command -v pkg >/dev/null 2>&1 || return 1
+    step "Termux keeps pip in a separate package — installing python-pip"
+    if pkg install -y python-pip >"$SCRATCH"/pkg-out 2>&1; then
+        ok "pip installed"
+        return 0
+    fi
+    warn "could not install it automatically:"
+    tail -3 "$SCRATCH"/pkg-out 2>/dev/null | sed 's/^/    /' >&2 || true
+    return 1
+}
+
 # Is there a working pip inside the venv? An interrupted or failed venv leaves
 # .venv/bin/python behind with no pip, and reusing that fails later with the
 # unhelpful "No module named pip".
@@ -118,39 +147,97 @@ venv_without_ensurepip() {
     "$py" -c 'import sys, venv, ensurepip' >"$SCRATCH"/venv-probe 2>&1
 }
 
+# pip, but only reachable from outside the venv (system site-packages).
+system_has_pip() {
+    "$py" -m pip --version >/dev/null 2>&1
+}
+
 # Last resort: pip runs, but only from outside the venv.
 bootstrap_pip() {
-    step "repairing pip inside .venv"
     if "$PY" -m ensurepip --upgrade >"$SCRATCH"/bootstrap 2>&1; then
         return 0
     fi
-    if [ -f "$py_home/get-pip.py" ]; then
-        if "$PY" "$py_home/get-pip.py" --quiet >"$SCRATCH"/bootstrap 2>&1; then
+    # A pip outside the venv can be used by the venv python (it installs into
+    # the venv, not into the system), so ask it to upgrade itself in place.
+    if "$py" -m pip --version >/dev/null 2>&1; then
+        if "$PY" -m pip --version >/dev/null 2>&1; then
+            return 0
+        fi
+    fi
+    # No pip anywhere. get-pip.py needs nothing but the standard library.
+    if [ -f "$SCRATCH/get-pip.py" ] || fetch_get_pip; then
+        if "$PY" "$SCRATCH/get-pip.py" >>"$SCRATCH"/bootstrap 2>&1; then
             return 0
         fi
     fi
     return 1
 }
 
+# Download get-pip.py with whatever this device has. python itself can do it, so
+# a missing curl is not fatal; curl/wget are tried after it because Termux has
+# its own CA bundle wired into them.
+fetch_get_pip() {
+    url="https://bootstrap.pypa.io/get-pip.py"
+    for tool in "$py" curl wget; do
+        case $tool in
+            "$py"|python*)
+                "$py" - "$url" "$SCRATCH/get-pip.py" >"$SCRATCH"/fetch 2>&1 <<'PYEOF' && return 0
+import sys, urllib.request
+url, dest = sys.argv[1], sys.argv[2]
+with urllib.request.urlopen(url, timeout=30) as r, open(dest, "wb") as f:
+    f.write(r.read())
+PYEOF
+                ;;
+            curl)
+                command -v curl >/dev/null 2>&1 || continue
+                curl -fsSL "$url" -o "$SCRATCH/get-pip.py" >"$SCRATCH"/fetch 2>&1 && return 0
+                ;;
+            wget)
+                command -v wget >/dev/null 2>&1 || continue
+                wget -q "$url" -O "$SCRATCH/get-pip.py" >"$SCRATCH"/fetch 2>&1 && return 0
+                ;;
+        esac
+    done
+    return 1
+}
+
+# Every way of making a venv, most reliable first. Each attempt keeps its own
+# output so a total failure can show what actually went wrong instead of a
+# guess — the first version of this guessed, and guessed wrongly.
 make_venv() {
+    : >"$SCRATCH"/venv-out
+
+    try_venv() {
+        printf '· %s\n' "$*" >>"$SCRATCH"/venv-out
+        "$@" >>"$SCRATCH"/venv-out 2>&1 && [ -x "$PY" ]
+    }
+
     if venv_without_ensurepip; then
-        "$py" -m venv "$VENV" >"$SCRATCH"/venv-out 2>&1
-        return $?
-    fi
-    # No ensurepip. If this Python has pip, borrow it: --system-site-packages
-    # lets the venv import the system pip and install into the venv itself.
-    if "$py" -m pip --version >/dev/null 2>&1; then
-        warn "this Python has no ensurepip — borrowing its pip instead"
+        try_venv "$py" -m venv "$VENV" && return 0
+    else
+        # No ensurepip: borrow pip from outside with --system-site-packages, so
+        # the venv can import it and install into itself.
+        if system_has_pip; then
+            warn "this Python has no ensurepip — borrowing its pip instead"
+            rm -rf "$VENV"
+            try_venv "$py" -m venv --without-pip --system-site-packages "$VENV" && return 0
+        fi
         rm -rf "$VENV"
-        "$py" -m venv --without-pip --system-site-packages "$VENV" >"$SCRATCH"/venv-out 2>&1 \
-            && [ -x "$PY" ] && return 0
+        try_venv "$py" -m venv --without-pip "$VENV" && return 0
     fi
-    "$py" -m venv --without-pip "$VENV" >"$SCRATCH"/venv-out 2>&1
+
+    # virtualenv brings its own bootstrap and does not need ensurepip at all.
+    if command -v virtualenv >/dev/null 2>&1; then
+        rm -rf "$VENV"
+        try_venv virtualenv --no-download "$VENV" && return 0
+        rm -rf "$VENV"
+        try_venv virtualenv "$VENV" && return 0
+    fi
+    return 1
 }
 
 setup() {
     need_python
-    py_home=$("$py" -c 'import sysconfig; print(sysconfig.get_path("stdlib"))' 2>/dev/null || echo "")
 
     # A venv that cannot pip is not a venv. Remake it rather than failing in a
     # later step with "No module named pip".
@@ -162,44 +249,62 @@ setup() {
     if [ ! -x "$PY" ]; then
         step "creating .venv with $("$py" --version 2>&1)"
         if ! make_venv; then
-            msg=$(cat "$SCRATCH"/venv-out 2>/dev/null || true)
-            rm -f "$SCRATCH"/venv-out "$SCRATCH"/venv-probe
-            case "$msg" in
-                *ensurepip*|*python3-venv*|*"No module named venv"*)
-                    die "this Python cannot create a virtualenv.
-  Termux  : pkg install python          (includes venv and pip)
-  Debian  : sudo apt install python3-venv
-  Fedora  : sudo dnf install python3
-  macOS   : brew install python3" ;;
-                *"No module named pip"*)
-                    die "the virtualenv was created without pip.
-  Termux  : pkg install python          (provides pip)
-  Debian  : sudo apt install python3-venv python3-pip" ;;
-                *)
-                    die "could not create .venv
-$msg" ;;
-            esac
+            # No pip and no ensurepip: on Termux that is one package away.
+            if termux_install_pip && make_venv; then
+                :
+            else
+                msg=$(tail -n 6 "$SCRATCH"/venv-out 2>/dev/null || true)
+                rm -f "$SCRATCH"/venv-probe
+                {
+                    printf '%s\n' "could not create .venv — the attempts made were:"
+                    printf '%s\n' "$msg" | sed 's/^/    /'
+                    printf '\n'
+                    if is_termux; then
+                        printf '%s\n' "  Termux keeps pip in its own package:"
+                        printf '%s\n' "      pkg install python-pip"
+                        printf '%s\n' "  then:"
+                        printf '%s\n' "      rm -rf .venv && ./run"
+                    else
+                        printf '%s\n' "  Debian : sudo apt install python3-venv python3-pip"
+                        printf '%s\n' "  Fedora : sudo dnf install python3"
+                        printf '%s\n' "  macOS  : brew install python3"
+                    fi
+                } >&2
+                exit 1
+            fi
         fi
         rm -f "$SCRATCH"/venv-out "$SCRATCH"/venv-probe
         ok "created .venv"
     fi
 
-    # Still no pip after all that (a venv made earlier by another tool, or a
-    # broken one we could not see). Fix it here, where the message is honest.
+    # Still no pip after all that (a venv made earlier by another tool, or one
+    # built with --without-pip). Fix it here, where the message is honest.
     if ! venv_has_pip; then
+        step "no pip inside .venv — bootstrapping it"
         if ! bootstrap_pip; then
-            msg=$(cat "$SCRATCH"/bootstrap 2>/dev/null || true)
-            rm -f "$SCRATCH"/bootstrap
+            # Termux: one package install, then the borrow path works.
+            if termux_install_pip; then
+                rm -rf "$VENV"
+                step "rebuilding .venv with the freshly installed pip"
+                if make_venv && bootstrap_pip; then
+                    :
+                fi
+            fi
+        fi
+        if ! venv_has_pip; then
+            msg=$(tail -n 6 "$SCRATCH"/bootstrap 2>/dev/null || true)
             {
-                printf '%s\n' "the virtualenv has no pip and it could not be repaired."
-                printf '%s\n' "$msg"
-                printf '%s\n' "  Termux  : pkg install python"
-                printf '%s\n' "  then    : rm -rf .venv && ./run"
+                printf '%s\n' "the virtualenv has no pip and it could not be bootstrapped."
+                printf '%s\n' "$msg" | sed 's/^/    /'
+                if is_termux; then
+                    printf '%s\n' "  Termux keeps pip in its own package:"
+                    printf '%s\n' "      pkg install python-pip"
+                    printf '%s\n' "  then:  rm -rf .venv && ./run"
+                fi
             } >&2
             exit 1
         fi
-        rm -f "$SCRATCH"/bootstrap
-        ok "pip repaired"
+        ok "pip ready"
     fi
 
     # Editable install, so `git pull` is the whole upgrade path. Re-run only
@@ -219,6 +324,9 @@ $msg" ;;
         case "$msg" in
             *"Could not find a version"*|*"Temporary failure"*|*"Name or service"*)
                 die "cannot reach PyPI — check the connection and run ./run again" ;;
+            "")
+                die "pip failed without printing anything. Run it directly to see why:
+  $PY -m pip install --editable $HERE" ;;
         esac
         printf '%s\n' "$msg" >&2
         die "install failed (full output above)"

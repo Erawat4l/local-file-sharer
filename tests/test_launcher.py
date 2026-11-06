@@ -40,23 +40,29 @@ def checkout(tmp_path: Path) -> Path:
 
 
 def fake_python(bin_dir: Path, script: str) -> None:
-    """Put a `python3` on PATH that is a shell script, not a real Python."""
+    """Put a `python3` *and* a `python` on PATH, both shell scripts.
+
+    Both, because `run` falls back to `python` when `python3` fails its probe —
+    a real interpreter in the sandbox would then answer for the fake one and
+    the test would silently pass for the wrong reason.
+    """
     bin_dir.mkdir(parents=True, exist_ok=True)
-    target = bin_dir / "python3"
-    target.write_text("#!/bin/sh\n" + script, encoding="utf-8")
-    target.chmod(0o755)
+    for name in ("python3", "python"):
+        target = bin_dir / name
+        target.write_text("#!/bin/sh\n" + script, encoding="utf-8")
+        target.chmod(0o755)
 
 
 def run_launcher(
-    checkout: Path, *args: str, path_prefix: Path | None = None, bare: bool = False
+    checkout: Path, *args: str, path_prefix: Path | None = None
 ) -> subprocess.CompletedProcess:
     env = dict(os.environ)
     env.pop("LFS_BRANCH", None)
     env["NO_COLOR"] = "1"
     if path_prefix is not None:
-        # `bare` keeps `python` (the other candidate) out of reach too, so the
-        # fake interpreter is the only one the launcher can find.
-        env["PATH"] = f"{path_prefix}:/usr/bin:/bin" if not bare else f"{path_prefix}:/bin-shim"
+        # The fake directory comes first and defines both `python3` and
+        # `python`; /usr/bin stays behind it for coreutils (rm, tail, sed).
+        env["PATH"] = f"{path_prefix}:/usr/bin:/bin"
     return subprocess.run(  # noqa: S603
         ["/bin/sh", str(checkout / "run"), *args],
         cwd=checkout,
@@ -109,7 +115,7 @@ def test_a_python_without_ensurepip_is_detected(checkout, tmp_path):
         '  *) exit 1 ;;\n'
         'esac\n',
     )
-    result = run_launcher(checkout, "setup", path_prefix=fake, bare=True)
+    result = run_launcher(checkout, "setup", path_prefix=fake)
     combined = result.stdout + result.stderr
     assert "pkg install python" in combined, "the fix must be named"
     assert "Termux" in combined
@@ -143,3 +149,113 @@ def test_it_uses_a_python_that_can_build_a_venv(checkout):
     assert "import sys, venv" in source
     assert "sys.version_info >= (3, 9)" in source
     assert sys.version_info >= (3, 9)
+
+
+# ── Termux: python without pip, and pip as a separate package ────────────────
+def test_termux_is_recognised_by_prefix(checkout):
+    """`$PREFIX=…com.termux…` is the reliable signal; nothing else is."""
+    source = (checkout / "run").read_text(encoding="utf-8")
+    assert "com.termux" in source
+    assert "python-pip" in source, "the package that actually provides pip must be named"
+
+
+def test_missing_pip_on_termux_installs_python_pip(checkout, tmp_path):
+    """Termux splits pip out: `python` has venv, `python-pip` has pip.
+
+    The old message said `pkg install python`, which installs nothing new and
+    leaves the user exactly where they started.
+    """
+    fake = tmp_path / "bin"
+    fake_python(
+        fake,
+        'case "$*" in\n'
+        '  *"import sys, venv; sys.exit"*) exit 0 ;;\n'
+        '  *"import sys, venv, ensurepip"*) exit 1 ;;\n'
+        '  *"-m pip"*) exit 1 ;;\n'
+        '  *"-m venv"*) echo "Error: could not create venv" >&2; exit 1 ;;\n'
+        '  *--version*) echo "Python 3.14.10" ;;\n'
+        '  *) exit 1 ;;\n'
+        'esac\n',
+    )
+    pkg = fake / "pkg"
+    pkg.write_text(
+        f'#!/bin/sh\necho "$@" >> {tmp_path}/pkgs\necho installed\n',
+        encoding="utf-8",
+    )
+    pkg.chmod(0o755)
+
+    env = dict(os.environ)
+    env.update(
+        PATH=f"{fake}:/bin-shim",
+        NO_COLOR="1",
+        ANDROID_ROOT="/system",
+        PREFIX="/data/data/com.termux/files/usr",
+    )
+    result = subprocess.run(  # noqa: S603
+        ["/bin/sh", str(checkout / "run"), "setup"],
+        cwd=checkout,
+        capture_output=True,
+        text=True,
+        timeout=120,
+        env=env,
+        check=False,
+    )
+    combined = result.stdout + result.stderr
+    assert "python-pip" in combined
+    calls = (tmp_path / "pkgs").read_text(encoding="utf-8") if (tmp_path / "pkgs").exists() else ""
+    assert "install" in calls and "python-pip" in calls, "it must actually install it"
+
+
+def test_a_failed_venv_shows_what_went_wrong(checkout, tmp_path):
+    """The old code guessed the reason from a case statement, and guessed wrong.
+
+    Whatever the interpreter said must reach the user, not be replaced by a
+    stock suggestion.
+    """
+    fake = tmp_path / "bin"
+    fake_python(
+        fake,
+        'case "$*" in\n'
+        '  *"import sys, venv; sys.exit"*) exit 0 ;;\n'
+        '  *"import sys, venv, ensurepip"*) exit 1 ;;\n'
+        '  *"-m pip"*) exit 1 ;;\n'
+        '  *"-m venv"*) echo "Permission denied: /system/lib64" >&2; exit 1 ;;\n'
+        '  *--version*) echo "Python 3.14.10" ;;\n'
+        '  *) exit 1 ;;\n'
+        'esac\n',
+    )
+    result = run_launcher(checkout, "setup", path_prefix=fake)
+    combined = result.stdout + result.stderr
+    assert "Permission denied" in combined, "the real error, not a guess"
+    assert "attempts made were" in combined
+
+
+def test_silent_pip_failure_prints_a_command_to_run(checkout):
+    """pip can fail with nothing on stderr; "output above" would be a lie."""
+    source = (checkout / "run").read_text(encoding="utf-8")
+    assert "pip failed without printing anything" in source
+    assert "pip install --editable" in source
+
+
+def test_python_without_ensurepip_is_not_reported_as_missing(checkout, tmp_path):
+    """A usable interpreter must not be rejected for lacking ensurepip.
+
+    find_python used to import venv *and* ensurepip, so a Termux python was
+    declared absent before setup could repair it.
+    """
+    fake = tmp_path / "bin"
+    fake_python(
+        fake,
+        'case "$*" in\n'
+        '  *"import sys, venv, ensurepip"*) exit 1 ;;\n'
+        '  *"import sys, venv; sys.exit"*) exit 0 ;;\n'
+        '  *"-m pip"*) exit 1 ;;\n'
+        '  *"-m venv"*) exit 1 ;;\n'
+        '  *--version*) echo "Python 3.14.10" ;;\n'
+        '  *) exit 1 ;;\n'
+        'esac\n',
+    )
+    result = run_launcher(checkout, "setup", path_prefix=fake)
+    combined = result.stdout + result.stderr
+    assert "no Python 3.9+" not in combined
+    assert "3.14.10" in combined, "it found the interpreter and used it"
