@@ -39,24 +39,34 @@ from .ui.picker_ui import run_picker
 # `?` so the screen answers one question instead of listing a control panel.
 # Icons are single-cell: a double-width emoji shifted every row on a phone.
 ACTIONS = [
-    ("1", "Download", "download", "v", "forced download · resumable · folders auto-zip"),
-    ("2", "Serve", "serve", "n", "web file browser for this device or the whole folder"),
-    ("3", "Stream", "stream", ">", "media player with instant seeking"),
-    ("4", "Torrent", "torrent", "t", ".torrent + magnet · built-in tracker + webseed"),
-    ("5", "Quit", "quit", "q", "leave the menu"),
+    ("1", "Download", "download", "↓", "forced download · resumable · folders auto-zip"),
+    ("2", "Serve", "serve", "◇", "web file browser for this device or the whole folder"),
+    ("3", "Stream", "stream", "▶", "media player with instant seeking"),
+    ("4", "Torrent", "torrent", "⤓", ".torrent + magnet · built-in tracker + webseed"),
 ]
 
 #: Shown by `?` — the same actions plus the maintenance commands.
 EXTRA_ACTIONS = [
-    ("r", "Recent", "recent", "*", "re-share a recently shared file"),
-    ("f", "Favourites", "favorites", "+", "jump to a favourite folder"),
-    ("c", "Config", "config", "c", "edit settings, theme and PIN"),
-    ("d", "Doctor", "doctor", "d", "check dependencies, firewall and network"),
-    ("t", "Theme", "theme", "t", "switch dark / light / mono"),
-    ("u", "Update", "update", "^", "install the newest code from GitHub"),
+    ("r", "Recent", "recent", "◷", "re-share a recently shared file"),
+    ("f", "Favourites", "favorites", "★", "jump to a favourite folder"),
+    ("c", "Config", "config", "⚙", "edit settings, theme and PIN"),
+    ("d", "Doctor", "doctor", "✚", "check dependencies, firewall and network"),
+    ("t", "Theme", "theme", "◑", "switch dark / light / mono"),
+    ("u", "Update", "update", "↑", "install the newest code from GitHub"),
     ("?", "Help", "help", "?", "keys, one-liners and troubleshooting"),
-    ("q", "Quit", "quit", "q", "leave the menu"),
+    ("q", "Quit", "quit", "⏻", "leave the menu"),
 ]
+
+#: The menu is grouped like the design: what you came to do, then the two
+#: shortlists, then the settings that used to sit in a second screen.
+SECTIONS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("SHARE", ("1", "2", "3", "4")),
+    ("RECENT & FAVOURITES", ("r", "f")),
+    ("SETTINGS", ("c", "d", "t", "u", "?", "q")),
+)
+_BY_KEY = {
+    key: (key, label, action, icon, desc) for key, label, action, icon, desc in ACTIONS + EXTRA_ACTIONS
+}
 
 ALL_ACTIONS = ACTIONS + EXTRA_ACTIONS
 
@@ -120,25 +130,39 @@ def render_menu(ctx: MenuContext) -> Group:
         head.append(name, style=theme.primary)
         head.append("\n" + right_text, style=theme.faint)
     blocks.append(head)
-    blocks.append(divider(width=min(width - 2, 76)))
+    # the rule runs the full width, like the design: a short one under a long
+    # header looked like a stray line
+    blocks.append(divider(width=max(20, width - 1)))
 
     blocks.append(info_panel(_status_lines(ctx.config), title="this device", border=theme.border_soft))
     blocks.append(Text(""))
 
-    table = Table.grid(padding=(0, 2))
-    table.add_column(width=3, no_wrap=True)
-    table.add_column(no_wrap=True)
-    table.add_column(overflow="ellipsis")
+    # Four columns, like the design: the key you press, its icon, the name, and
+    # what it does. The description shares one left edge on purpose — without a
+    # fixed name column it started wherever the longest label happened to end,
+    # which is what made the old menu look ragged.
+    name_width = max(len(_BY_KEY[key][1]) for _entries in SECTIONS for key in _entries[1])
     # a phone cannot hold "name + description" on one line, and letting the
-    # description wrap doubles the height of a five-row menu; drop it instead
-    show_desc = width >= 70
-    for key, label, _action, _icon, desc in ACTIONS:
-        table.add_row(
-            Text(key, style=theme.key),
-            Text(label, style=theme.secondary),
-            Text(desc if show_desc else "", style=theme.faint),
-        )
-    blocks.append(table)
+    # description wrap doubles the height of the menu; drop it instead
+    show_desc = width >= 62
+    show_sections = width >= 44
+    for heading, keys in SECTIONS:
+        if show_sections:
+            blocks.append(Text(f" {heading}", style=f"bold {theme.accent}"))
+        table = Table.grid(padding=(0, 1))
+        table.add_column(width=2, no_wrap=True, justify="right")
+        table.add_column(width=2, no_wrap=True)
+        table.add_column(width=name_width + 1, no_wrap=True)
+        table.add_column(overflow="ellipsis", no_wrap=True)
+        for key in keys:
+            _key, label, _action, icon, desc = _BY_KEY[key]
+            table.add_row(
+                Text(key, style=theme.key),
+                Text(icon, style=theme.secondary),
+                Text(label, style=theme.secondary),
+                Text(desc if show_desc else "", style=theme.faint),
+            )
+        blocks.append(table)
     blocks.append(Text(""))
     for line in wrap_command(
         "`lfs <path>` shares straight away · `?` for more commands",

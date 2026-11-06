@@ -42,7 +42,7 @@ from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 from typing import Callable
 
-from .. import APP_NAME, __version__, platforms
+from .. import APP_NAME, BUILD_STAMP, __version__, platforms
 from ..fmt import human_size
 from .manifest import FileEntry, Manifest, guess_mime, kind_of
 from .stats import TransferTracker
@@ -588,6 +588,7 @@ class ShareRequestHandler(BaseHTTPRequestHandler):
             .replace("{{parallel}}", "16")
             .replace("{{brand}}", APP_NAME)
             .replace("{{version}}", __version__)
+            .replace("{{build}}", BUILD_STAMP)
             .replace("{{peer}}", html.escape(self.ctx.peer_name or "this device"))
             .replace("{{can_upload}}", "true" if self.ctx.allow_upload else "false")
             .replace("{{device_count}}", str(len(tracker.active_devices())))
@@ -633,6 +634,7 @@ class ShareRequestHandler(BaseHTTPRequestHandler):
             .replace("{{base_url}}", html.escape(self.ctx.base_url))
             .replace("{{brand}}", APP_NAME)
             .replace("{{version}}", __version__)
+            .replace("{{build}}", BUILD_STAMP)
             .replace("{{can_upload}}", "true" if self.ctx.allow_upload else "false")
             .replace("{{search}}", html.escape(search))
             .replace("{{mode}}", self.ctx.manifest.mode)
@@ -739,6 +741,7 @@ class ShareRequestHandler(BaseHTTPRequestHandler):
             .replace("{{base_url}}", html.escape(self.ctx.base_url))
             .replace("{{brand}}", APP_NAME)
             .replace("{{version}}", __version__)
+            .replace("{{build}}", BUILD_STAMP)
             .replace("{{can_upload}}", "true" if self.ctx.allow_upload else "false")
             .replace("{{search}}", html.escape(search))
             .replace("{{mode}}", self.ctx.manifest.mode)
@@ -807,6 +810,7 @@ class ShareRequestHandler(BaseHTTPRequestHandler):
             .replace("{{poster}}", "")
             .replace("{{brand}}", APP_NAME)
             .replace("{{version}}", __version__)
+            .replace("{{build}}", BUILD_STAMP)
             .replace("{{download_url}}", f"/f/{entry.file_id}")
             .replace("{{base_url}}", html.escape(self.ctx.base_url))
             .replace("{{playlist_count}}", str(len(siblings)))

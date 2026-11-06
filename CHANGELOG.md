@@ -8,6 +8,13 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 ## [Unreleased]
 
 ### Changed
+- The CLI menu is grouped into SHARE / RECENT & FAVOURITES / SETTINGS, with a
+  key gutter, an icon column and one aligned description column — the layout
+  from docs/assets/demo.gif. Quit moved into SETTINGS next to Help.
+- Every web page shows a build stamp next to the version, so a stale copy of
+  the app is obvious at a glance instead of looking like a broken feature.
+
+### Changed
 - The player's controls are icons, not words, and fit one row on a phone.
 - The player stage takes the video's own shape: a 2.39:1 film fills a wide
   frame instead of sitting in black bands, and a 9:16 short fills a tall one.
