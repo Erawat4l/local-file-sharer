@@ -1,0 +1,70 @@
+name: Feature request
+description: Suggest a capability, a mode, or a polish item.
+title: "feat: "
+labels: ["enhancement", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        The runtime stays deliberately small: **pure Python + `rich` + `qrcode`**.
+        Ideas that need a third runtime dependency are still welcome — we just
+        need to agree on how they fit (usually as an optional tool that the app
+        detects, like `tailscale`, `cloudflared` or `aria2c`).
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: Describe the situation, not the implementation.
+      placeholder: |
+        I copy build artefacts to a colleague's Windows laptop daily. Today I run
+        `start dist/`, then hunt for the file in the browser list.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What would you like to happen?
+      placeholder: |
+        `start --mode download --oneshot dist/app.zip` that exits after the first
+        successful download.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you considered
+      placeholder: A shell watcher that kills the process, or `aria2c` on the other side.
+    validations:
+      required: false
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - File picker
+        - Download mode
+        - Serve mode
+        - Stream mode
+        - Torrent mode
+        - Web UIs
+        - CLI / theming / dashboard
+        - Network (LAN, Tailscale, Cloudflare)
+        - Packaging / installers / CI
+        - Docs
+        - Other
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Confirmations
+      options:
+        - label: I checked the roadmap in the README.
+          required: true
+        - label: I searched the existing issues and discussions.
+          required: true

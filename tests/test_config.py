@@ -1,0 +1,239 @@
+"""Configuration: defaults, TOML round-trip, env overrides, validation."""
+
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+import pytest
+
+from local_file_sharer.config import (
+    Config,
+    config_path,
+    dump_config,
+    get_value,
+    init_config,
+    load_config,
+    secrets_path,
+    set_value,
+)
+from local_file_sharer.errors import ConfigError
+
+
+def test_defaults():
+    cfg = Config()
+    assert cfg.theme == "dark"
+    assert cfg.network.port == 8080
+    assert cfg.speed.parallel_connections == 16
+    assert cfg.speed.use_sendfile is True
+    assert cfg.share.serve_mode == "download"
+    assert cfg.device2.enabled is False
+
+
+def test_init_and_reload():
+    path, created = init_config()
+    assert created is True
+    assert path == config_path()
+    assert path.is_file()
+    text = path.read_text()
+    assert "[network]" in text and "[speed]" in text and "[device2]" in text
+    _, created_again = init_config()
+    assert created_again is False
+    cfg = load_config(respect_env=False)
+    assert cfg.network.port == 8080
+
+
+def test_dump_round_trip(tmp_path: Path):
+    cfg = Config()
+    cfg.theme = "mono"
+    cfg.network.port = 9999
+    cfg.share.pin = "1234"
+    cfg.share.one_liners = ["curl", "aria2c"]
+    text = dump_config(cfg)
+    target = tmp_path / "config.toml"
+    target.write_text(text)
+    loaded = load_config(path=target, respect_env=False)
+    assert loaded.theme == "mono"
+    assert loaded.network.port == 9999
+    assert loaded.share.pin == "1234"
+    assert loaded.share.one_liners == ["curl", "aria2c"]
+
+
+def test_set_and_get_value():
+    init_config()
+    set_value("network.port", "9200")
+    assert get_value("network.port") == 9200
+    set_value("theme", "light")
+    assert get_value("theme") == "light"
+    set_value("share.allow_upload", "true")
+    assert get_value("share.allow_upload") is True
+
+
+def test_set_unknown_key():
+    init_config()
+    with pytest.raises(ConfigError):
+        set_value("network.nope", "1")
+    with pytest.raises(ConfigError):
+        set_value("doesnotexist", "1")
+
+
+def test_invalid_values_rejected():
+    init_config()
+    with pytest.raises(ConfigError):
+        set_value("network.port", "70000")
+    with pytest.raises(ConfigError):
+        set_value("theme", "chartreuse")
+
+
+def test_bad_toml_is_friendly(tmp_path: Path):
+    broken = tmp_path / "broken.toml"
+    broken.write_text("theme = = 'dark'\n")
+    with pytest.raises(ConfigError) as excinfo:
+        load_config(path=broken, respect_env=False)
+    assert "Could not parse" in excinfo.value.message
+    assert any("Fix" in hint for hint in excinfo.value.all_hints())
+
+
+def test_env_overrides(monkeypatch):
+    monkeypatch.setenv("LOCAL_FILE_SHARER_NETWORK__PORT", "9300")
+    monkeypatch.setenv("LOCAL_FILE_SHARER_THEME", "mono")
+    cfg = load_config()
+    assert cfg.network.port == 9300
+    assert cfg.theme == "mono"
+
+
+def test_unknown_keys_are_ignored(tmp_path: Path):
+    target = tmp_path / "future.toml"
+    target.write_text('theme = "light"\nfuture_key = 1\n[future_section]\nx = 2\n')
+    cfg = load_config(path=target, respect_env=False)
+    assert cfg.theme == "light"
+
+
+def test_secrets_are_gitignored_path():
+    assert secrets_path().name == "config.local.toml"
+    gitignore = Path(__file__).resolve().parents[1] / ".gitignore"
+    if not gitignore.is_file():  # running outside a checkout (installed sdist)
+        pytest.skip("no .gitignore next to the tests")
+    assert "config.local.toml" in gitignore.read_text()
+
+
+def test_speed_and_ui_clamped(tmp_path: Path):
+    target = tmp_path / "limits.toml"
+    target.write_text("[speed]\nparallel_connections = 999\nsocket_buffer = 1\n")
+    cfg = load_config(path=target, respect_env=False)
+    assert cfg.speed.parallel_connections == 64
+    assert cfg.speed.socket_buffer >= 64 * 1024
+
+
+def _toml_module():
+    """tomllib on 3.11+, tomli on 3.9/3.10 (a declared dev dependency)."""
+    try:
+        import tomllib  # type: ignore[import-not-found]
+    except ModuleNotFoundError:  # pragma: no cover - Python 3.9/3.10
+        tomli = pytest.importorskip("tomli")
+        return tomli
+    return tomllib
+
+
+def test_sdist_would_include_the_test_suite():
+    """`pip install <sdist> && pytest` must work: conftest.py is easy to lose.
+
+    setuptools copies `tests/*.py` as data files but silently skips conftest.py
+    unless it is listed, which left an sdist whose whole suite errored on a
+    missing `free_port` fixture.
+    """
+    tomllib = _toml_module()
+    root = Path(__file__).resolve().parents[1]
+    pyproject = root / "pyproject.toml"
+    if not pyproject.is_file():  # installed wheel, nothing to check
+        pytest.skip("no pyproject.toml next to the tests")
+
+    config = tomllib.loads(pyproject.read_text())
+    data_files = config.get("tool", {}).get("setuptools", {}).get("data-files", {})
+    patterns = [pattern for group in data_files.values() for pattern in group]
+    assert "tests/*.py" in patterns
+    assert ".gitignore" in patterns, "the secrets test reads it"
+
+
+def test_optional_dependency_groups_are_declared():
+    tomllib = _toml_module()
+    root = Path(__file__).resolve().parents[1]
+    pyproject = root / "pyproject.toml"
+    if not pyproject.is_file():
+        pytest.skip("no pyproject.toml next to the tests")
+
+    extras = tomllib.loads(pyproject.read_text())["project"]["optional-dependencies"]
+    assert {"dev", "shots"} <= set(extras)
+
+
+def test_sources_stay_compatible_with_python_39():
+    """The wheel claims >=3.9 but CI here only has 3.11, so check the AST."""
+    import subprocess
+    import sys
+
+    root = Path(__file__).resolve().parents[1]
+    script = root / "tools" / "check_compat.py"
+    if not script.is_file():
+        pytest.skip("compatibility checker not present")
+    result = subprocess.run(  # noqa: S603
+        [sys.executable, str(script)], capture_output=True, text=True, cwd=root, check=False
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_missing_toml_parser_degrades_gracefully(tmp_path, monkeypatch):
+    """On 3.9/3.10 the stdlib has no tomllib. Without the tomli backport:
+    default settings must still work, and a real config must fail *usefully*."""
+    from local_file_sharer import config as config_mod
+    from local_file_sharer.errors import ConfigError
+
+    monkeypatch.setattr(config_mod, "tomllib", None)
+
+    absent = tmp_path / "absent.toml"
+    assert config_mod._read_toml(absent) == {}  # noqa: SLF001
+
+    present = tmp_path / "present.toml"
+    present.write_text('theme = "mono"\n', encoding="utf-8")
+    with pytest.raises(ConfigError) as excinfo:
+        config_mod._read_toml(present)  # noqa: SLF001
+    assert any("tomli" in hint for hint in excinfo.value.hints)
+
+
+def test_config_set_hint_says_nothing_was_written():
+    """A bad argument is not a broken file: the advice must not point at one."""
+    from local_file_sharer.config import set_value
+    from local_file_sharer.errors import ConfigError
+
+    with pytest.raises(ConfigError) as excinfo:
+        set_value("network.port", "not-a-number")
+    hints = " ".join(excinfo.value.all_hints()).lower()
+    assert "nothing was written" in hints
+    assert "config show" in hints
+
+
+def test_a_broken_config_file_points_at_the_file():
+    """The opposite case: the file really is wrong, so say so."""
+    from local_file_sharer.config import load_config
+    from local_file_sharer.errors import ConfigError
+
+    config_path = Path(os.environ["HOME"]) / ".config" / "local-file-sharer" / "config.toml"
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    config_path.write_text('[network]\nport = "not-a-number"\n', encoding="utf-8")
+    try:
+        with pytest.raises(ConfigError) as excinfo:
+            load_config()
+        hints = " ".join(excinfo.value.all_hints()).lower()
+        assert "config file" in hints
+        assert "nothing was written" not in hints
+    finally:
+        config_path.unlink(missing_ok=True)
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX permissions only")
+def test_the_config_file_is_private_to_the_user():
+    """It can hold `share.pin`, so 0644 would show the PIN to every local user."""
+    from local_file_sharer.config import Config
+
+    target = Path(os.environ["HOME"]) / "private" / "config.toml"
+    Config().save(target)
+    assert target.stat().st_mode & 0o777 == 0o600

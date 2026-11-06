@@ -1,0 +1,38 @@
+#!/bin/sh
+# ─────────────────────────────────────────────────────────────────────────────
+#  local-file-sharer · one-step setup
+#
+#    ./setup
+#
+#  Does everything `./run` does, and one thing more: if this directory is not
+#  a checkout yet, it creates the virtualenv, installs the package into it and
+#  stops, telling you the exact line to run next.
+#
+#  (The clone itself cannot live here: to clone you already need the code that
+#  this script is part of. `git clone` + `./setup` is the pair.)
+#
+#  Nothing is written outside this directory.
+# ─────────────────────────────────────────────────────────────────────────────
+set -eu
+
+# The repository is the one place this script knows about. Written out once, so
+# there is no second copy to drift.
+OWNER="Erawat4l"          # ends with a lowercase L, not a digit
+REPO="local-file-sharer"
+BRANCH="${LFS_BRANCH:-arena/d7f4713b-local-file-sharer}"
+
+# Reuse ./run so the two entry points cannot disagree about how to build the venv.
+HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+cd "$HERE" || exit 1
+
+if [ -x "$HERE/run" ]; then
+    exec "$HERE/run" setup
+fi
+
+printf '%s\n' \
+    "no ./run next to this script — the checkout is incomplete." \
+    "" \
+    "  git clone -b $BRANCH https://github.com/$OWNER/$REPO.git" \
+    "" \
+    "then run ./setup inside it."
+exit 1

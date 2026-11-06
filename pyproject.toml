@@ -1,0 +1,119 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "local-file-sharer"
+version = "1.0.0"
+description = "Share files between your devices over Wi-Fi at maximum speed — a premium terminal file sharer for Termux/Android, Linux and Windows."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "Erawat4l", email = "erawat4l@users.noreply.github.com" }]
+keywords = ["file-sharing", "cli", "rich", "qrcode", "termux", "tailscale", "cloudflare", "http"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Environment :: Console",
+  "Intended Audience :: End Users/Desktop",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: Microsoft :: Windows",
+  "Operating System :: POSIX :: Linux",
+  "Operating System :: Android",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Communications :: File Sharing",
+  "Topic :: Terminals",
+]
+dependencies = [
+  "rich>=13.7",
+  "qrcode>=7.4",
+  # Python 3.9/3.10 have no tomllib; 3.11+ ignores this marker.
+  'tomli>=2.0; python_version < "3.11"',
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=7.4",
+  "tomli>=2.0; python_version < \"3.11\"",
+  "pytest-cov>=4.1",
+  "ruff>=0.3",
+]
+# Regenerating docs/assets needs the renderers; not needed to ship the package.
+shots = [
+  "fonttools>=4.50",
+  "pillow>=10.0",
+  "resvg-py>=0.3",
+]
+
+[project.scripts]
+lfs = "local_file_sharer.cli:main"
+local-file-sharer = "local_file_sharer.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/Erawat4l/local-file-sharer"
+Documentation = "https://github.com/Erawat4l/local-file-sharer#readme"
+Issues = "https://github.com/Erawat4l/local-file-sharer/issues"
+Changelog = "https://github.com/Erawat4l/local-file-sharer/blob/main/CHANGELOG.md"
+Source = "https://github.com/Erawat4l/local-file-sharer"
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+local_file_sharer = [
+  "web/assets/*.html",
+  "web/assets/static/*",
+  "py.typed",
+]
+
+[tool.setuptools.data-files]
+# Ship the test suite so `pip install <sdist>` + `pytest` works. setuptools
+# copies `tests/*.py` but skips conftest.py unless it is listed here, and it
+# never picks up tests/js/ on its own.
+"" = [".gitignore", "tests/*.py", "tests/js/*.js"]
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+addopts = "-ra -q"
+testpaths = ["tests"]
+filterwarnings = ["ignore::DeprecationWarning"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py39"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "C4", "SIM", "ARG", "RUF"]
+ignore = [
+  "E501",   # long lines are handled by the formatter / not worth failing CI over
+  "B008",   # function calls in argument defaults are intentional (rich styles)
+  "RUF001", "RUF002", "RUF003",  # ambiguous unicode in UI strings is intentional
+  "ARG001", # unused args in protocol-ish callbacks
+  "RUF100", # ``# noqa`` directives kept for optional security linters
+  "SIM105", # ``contextlib.suppress`` is not always clearer in this codebase
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["ARG", "SIM"]
+"src/local_file_sharer/transfer/http_handler.py" = ["ARG002"]
+"src/local_file_sharer/transfer/server.py" = ["ARG002"]
+"src/local_file_sharer/transfer/stats.py" = ["ARG002"]
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.coverage.run]
+source = ["local_file_sharer"]
+branch = true
+
+[tool.coverage.report]
+exclude_lines = ["pragma: no cover", "if TYPE_CHECKING:", "raise NotImplementedError"]

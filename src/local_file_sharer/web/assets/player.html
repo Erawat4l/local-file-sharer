@@ -1,0 +1,679 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#05080f">
+<meta name="robots" content="noindex, nofollow">
+<title>{{file_name}} · {{brand}} player</title>
+<link rel="icon" href="/favicon.ico">
+<style>
+  /* Self-contained player styling: full-bleed, cinema dark, monochrome. */
+  :root{
+    --bg:#000; --panel:#0a0a0a; --line:#232323;
+    --text:#f5f5f5; --dim:#a3a3a3; --faint:#6b6b6b;
+    --accent:#fff; --accent-2:#fff; --danger:#fff;
+    --mono:"JetBrains Mono","SF Mono",ui-monospace,monospace;
+    color-scheme:dark;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
+    font-family:"Inter","Segoe UI",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+  body{background:var(--bg)}
+  /* 100dvh follows mobile browser chrome instead of hiding behind it; the
+     grid may still grow past the viewport, so the page is allowed to scroll. */
+  .shell{display:grid;grid-template-columns:minmax(0,1fr) 330px;
+    grid-template-rows:100dvh;gap:0}
+  html{height:auto;min-height:100%}
+  /* The document scrolls, not the body: a body that is its own scroll
+     container with a 100dvh min-height swallows touch drags on Android. */
+  html{overflow-y:auto;-webkit-overflow-scrolling:touch}
+  body{min-height:100dvh;overflow-x:clip}
+  @media (max-width:980px){
+    .shell{grid-template-columns:1fr;grid-template-rows:auto}
+    /* no forced full height: a 2.39:1 film would sit in a tall black column */
+    .stage{min-height:0}
+  }
+
+  /* ── stage ── */
+  .stage{position:relative;display:flex;flex-direction:column;min-width:0;padding:18px 22px 0}
+  .topline{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+  .logo{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;font-family:var(--mono);font-size:13px;
+    background:#111;border:1px solid var(--line);color:var(--text)}
+  .title{font-weight:650;font-size:15px;letter-spacing:-.01em;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .badge{font-family:var(--mono);font-size:11px;padding:4px 9px;border-radius:999px;border:1px solid var(--line);color:var(--dim)}
+  .spacer{flex:1}
+
+  .video-wrap{position:relative;flex:0 1 auto;min-height:0;border-radius:18px;overflow:hidden;
+    background:#000;border:1px solid var(--line);box-shadow:0 30px 80px -40px rgba(0,0,0,.95)}
+  video,audio{width:100%;height:100%;display:block;background:#000}
+  video{object-fit:contain}
+
+  /* A fullscreen element is sized by the browser, so drop the padding, the
+     rounded card and the forced 100dvh row that make it look boxed in. A
+     :fullscreen element cannot use its own background to cover the page, so
+     the backdrop is painted on ::backdrop. */
+  .stage:fullscreen{padding:0;background:#000;display:flex;flex-direction:column}
+  .stage:fullscreen::backdrop{background:#000}
+  .stage:fullscreen .topline{padding:12px 18px;margin:0;background:linear-gradient(#000,#0000)}
+  .stage:fullscreen .video-wrap{flex:1;min-height:0;border:0;border-radius:0;box-shadow:none}
+  .stage:fullscreen .controls{padding-bottom:max(10px, env(safe-area-inset-bottom))}
+  /* fullscreen: keep the picture and the controls, drop the help text */
+  .stage:fullscreen .understage{display:none}
+  /* controls fade away while playing, exactly like a desktop player */
+  .stage.hide-cursor{cursor:none}
+  .stage.is-playing:not(.show-controls) .controls,
+  .stage.is-playing:not(.show-controls) .topline{opacity:0;pointer-events:none;
+    transform:translateY(6px)}
+  .stage .controls,
+  .stage .topline{transition:opacity .2s ease, transform .2s ease}
+  video:fullscreen{width:100vw;height:100vh;object-fit:contain;background:#000}
+  video::backdrop{background:#000}
+  .stage-audio .video-wrap{display:grid;place-items:center;background:#0a0a0a;
+    aspect-ratio:auto;max-width:100%;max-height:none;min-height:280px}
+  .stage-audio video{display:none}
+  .artwork{text-align:center;padding:28px}
+  .artwork .disc{width:180px;height:180px;margin:0 auto 18px;border-radius:50%;
+    background:conic-gradient(from 0deg, #0a0a0a, #1c1c1c, #0a0a0a, #2a2a2a, #0a0a0a);
+    border:1px solid var(--line);display:grid;place-items:center;font-size:54px;
+    animation:spin 9s linear infinite paused}
+  .playing .artwork .disc{animation-play-state:running}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .artwork h2{margin:0;font-size:17px}
+  /* A file this browser cannot decode: say so on the picture itself. The old
+     behaviour was a black rectangle with a Play button that did nothing and a
+     toast that vanished after 1.6s — indistinguishable from a broken app. */
+  .unsupported{position:absolute;inset:0;display:none;flex-direction:column;
+    align-items:center;justify-content:center;text-align:center;padding:26px;
+    gap:10px;background:#050505;overflow-y:auto}
+  .unsupported.show{display:flex}
+  .unsupported .glyph{width:56px;height:56px;margin:0 auto 4px;border-radius:16px;
+    display:grid;place-items:center;border:1px solid var(--line);background:#0d0d0d}
+  .unsupported h2{margin:0;font-size:16px;font-weight:600}
+  .unsupported p{margin:0;color:var(--dim);font-size:13px;line-height:1.55;max-width:34ch}
+  .unsupported .why{margin-top:2px;font-family:var(--mono);font-size:11px;color:var(--faint)}
+  .unsupported .acts{display:flex;gap:9px;justify-content:center;flex-wrap:wrap;margin-top:8px}
+  .unsupported a.act,.unsupported button.act{display:inline-flex;align-items:center;gap:7px;
+    padding:9px 15px;border-radius:10px;border:1px solid var(--line);background:#111;
+    color:var(--text);text-decoration:none;font-size:13px;font-weight:600;
+    font-family:inherit;cursor:pointer}
+  .unsupported a.act:hover,.unsupported button.act:hover{background:#1a1a1a}
+  .unsupported a.act.primary{background:#fff;color:#000;border-color:#fff}
+  .artwork p{margin:6px 0 0;color:var(--faint);font-family:var(--mono);font-size:12px}
+
+  /* custom controls */
+  .controls{margin-top:14px;padding:14px 16px;border-radius:16px;border:1px solid var(--line);
+    background:rgba(10,10,10,.82);backdrop-filter:blur(16px);display:grid;gap:10px}
+  .seekrow{display:flex;align-items:center;gap:10px;min-width:0}
+  .seekrow .t{flex:0 0 auto;font-variant-numeric:tabular-nums}
+  /* the slider stretches, but the tooltip is anchored to it, not the row */
+  .seekwrap{position:relative;flex:1;display:flex;align-items:center}
+  .seekwrap input[type=range]{width:100%}
+  .seek-tip{position:absolute;bottom:26px;left:0;transform:translateX(-50%);
+    padding:4px 8px;border-radius:6px;background:#fff;color:#000;font-family:var(--mono);
+    font-size:11.5px;font-weight:600;white-space:nowrap;pointer-events:none;
+    opacity:0;transition:opacity .12s ease}
+  .seek-tip.show{opacity:1}
+  button svg.i{width:16px;height:16px;fill:currentColor;display:block}
+  .t{font-family:var(--mono);font-size:11.5px;color:var(--dim);min-width:52px;text-align:center}
+  input[type=range]{-webkit-appearance:none;appearance:none;flex:1;height:22px;background:transparent;cursor:pointer}
+  input[type=range]::-webkit-slider-runnable-track{height:6px;border-radius:999px;
+    background:linear-gradient(90deg,var(--accent) var(--p,0%), rgba(255,255,255,.20) var(--p,0%))}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;border-radius:50%;
+    background:#fff;margin-top:-4px;box-shadow:0 0 0 4px rgba(255,255,255,.22)}
+  input[type=range]::-moz-range-track{height:6px;border-radius:999px;background:rgba(255,255,255,.2)}
+  input[type=range]::-moz-range-progress{height:6px;border-radius:999px;background:var(--accent)}
+  input[type=range]::-moz-range-thumb{width:14px;height:14px;border:0;border-radius:50%;background:#fff}
+
+  /* one row on a phone: 6 round buttons and the speed chip do not fit beside
+     the play button plus a volume slider, and wrapping pushed the download and
+     fullscreen buttons onto a second line where they were easy to miss. */
+  .buttons{display:flex;align-items:center;gap:6px;flex-wrap:nowrap;overflow:visible}
+  .buttons .spacer{display:none}
+  @media (min-width:820px){ .buttons{gap:8px} .buttons .spacer{display:block;flex:1} }
+  button{font-family:inherit;color:var(--text);background:#141414;
+    border:1px solid var(--line);border-radius:11px;padding:9px 13px;font-size:13px;cursor:pointer;
+    display:inline-flex;align-items:center;gap:7px;transition:background .14s ease,transform .14s ease}
+  button:hover{background:#232323;transform:translateY(-1px)}
+  button.primary{background:#f5f5f5;color:#000;border:0;font-weight:650}
+  /* Round icon buttons, like every other player: a picture is quicker to read
+     than the word "Full" or "PiP", and it stops the row wrapping on a phone. */
+  .round{width:40px;height:40px;padding:0;border-radius:50%;justify-content:center;
+    position:relative;flex:0 0 auto;text-decoration:none}
+  .round.primary{width:46px;height:46px}
+  @media (max-width:400px){
+    .buttons{gap:5px}
+    .round{width:38px;height:38px}
+    .round.primary{width:44px;height:44px}
+    #rate b{font-size:11.5px}
+  }
+  .round .i{width:21px;height:21px;fill:none;stroke:currentColor;stroke-width:1.8;
+    stroke-linecap:round;stroke-linejoin:round}
+  .round.primary .i{width:24px;height:24px;fill:currentColor;stroke:none}
+  .round .i .solid{fill:currentColor;stroke:none}
+  .round .i.off{display:none}
+  .round .glyph{position:absolute;font-size:8.5px;font-weight:700;letter-spacing:0;
+    bottom:9px;left:50%;transform:translateX(-50%);pointer-events:none}
+  .round#mute .i{width:20px}
+  #vol{width:88px;flex:0 0 auto}
+  @media (max-width:700px){ #vol{display:none} }   /* the mute button is enough */
+  #rate b{font-size:12.5px;font-weight:650;font-variant-numeric:tabular-nums}
+
+  /* ── the stage takes the video's own shape ────────────────────────────────
+     A fixed tall box letterboxes a wide film into a black band, and a portrait
+     clip into a thin strip. aspect-ratio is set from the file's metadata so the
+     frame fits the picture: landscape films get a wide stage, vertical shorts
+     get a tall one. */
+  .video-wrap{aspect-ratio:16 / 9;flex:0 1 auto;width:100%;max-height:calc(100dvh - 210px)}
+  .video-wrap.portrait{aspect-ratio:9 / 16;max-width:min(100%, 56dvh)}
+  .video-wrap.square{aspect-ratio:1 / 1;max-width:min(100%, 72dvh)}
+  .video-wrap.ultrawide{aspect-ratio:21 / 9}
+
+  .understage{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:14px 2px 20px;
+    color:var(--faint);font-size:12.5px}
+  @media (max-width:560px){
+    .understage span:last-child{display:none} /* keyboard hints are noise on a phone */
+  }
+  .understage a{color:var(--accent);text-decoration:none}
+  kbd{font-family:var(--mono);font-size:11px;padding:2px 6px;border-radius:6px;
+    border:1px solid var(--line);background:#1a1a1a;color:var(--dim)}
+
+  /* ── playlist ── */
+  aside{border-left:1px solid var(--line);background:rgba(6,6,6,.78);backdrop-filter:blur(18px);
+    padding:18px 16px;overflow:auto}
+  aside h3{margin:0 0 12px;font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:var(--faint)}
+  .playlist{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+  .playlist li{display:flex;align-items:center;gap:8px;justify-content:space-between;padding:9px 11px;
+    border-radius:10px;border:1px solid transparent;font-size:13px}
+  .playlist li a{color:var(--text);text-decoration:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .playlist li span{font-family:var(--mono);font-size:11px;color:var(--faint);flex:0 0 auto}
+  .playlist li:hover{background:#141414}
+  .playlist li.active{background:#161616;border-color:#3a3a3a}
+  .playlist li.active a{color:var(--text)}
+  .stats{margin-top:18px;padding-top:16px;border-top:1px solid var(--line);display:grid;gap:10px}
+  .stats .row{display:flex;justify-content:space-between;font-size:12.5px;color:var(--dim)}
+  .stats .row b{font-family:var(--mono);color:var(--text);font-weight:500}
+  .toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(16px);opacity:0;
+    background:rgba(11,17,32,.96);border:1px solid rgba(34,211,238,.45);padding:11px 18px;border-radius:11px;
+    font-size:13px;transition:.18s ease;z-index:50}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+</style>
+</head>
+<body>
+<div class="shell">
+  <main class="stage" id="stage">
+    <div class="topline">
+      <span class="logo">LFS</span>
+      <span class="title" title="{{file_name}}">{{file_name}}</span>
+      <span class="badge">{{size}}</span>
+      <span class="badge" id="speed">0 B/s</span>
+      <div class="spacer"></div>
+      <span class="badge" title="build of the player UI">{{version}} · {{build}}</span>
+    </div>
+
+    <div class="video-wrap">
+      <video id="player" playsinline preload="metadata" crossorigin="anonymous">
+        Your browser cannot play this file. Use the download link below.
+      </video>
+      <div class="artwork hidden" id="artwork">
+        <div class="disc"><svg viewBox="0 0 24 24" width="54" height="54" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V6l10-2v12"/><circle cx="6" cy="18" r="3"/><circle cx="16" cy="16" r="3"/></svg></div>
+        <h2>{{file_name}}</h2>
+        <p>{{mime}} · {{size}}</p>
+      </div>
+      <div class="unsupported" id="unsupported">
+        <div class="glyph"><svg viewBox="0 0 24 24" width="26" height="26" fill="none"
+             stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true">
+          <path d="M12 9v4M12 16.5v.5"/><circle cx="12" cy="12" r="9"/></svg></div>
+        <h2 id="unsupported-title">This browser cannot decode this file</h2>
+        <p id="unsupported-body">The file itself is fine. Download it and play it
+           locally — the transfer is lossless either way.</p>
+        <p class="why" id="unsupported-why"></p>
+        <div class="acts">
+          <a class="act primary" id="unsupported-dl" href="{{download_url}}" download>Download</a>
+          <button class="act" id="unsupported-retry" type="button">Try anyway</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="controls">
+      <div class="seekrow">
+        <span class="t" id="cur">0:00</span>
+        <div class="seekwrap">
+          <input id="seek" type="range" min="0" max="1000" value="0" step="1" aria-label="Seek">
+          <span class="seek-tip" id="seek-tip">0:00</span>
+        </div>
+        <span class="t" id="dur">—</span>
+      </div>
+      <div class="buttons">
+        <button class="round primary" id="play" aria-label="Play">
+          <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
+        </button>
+        <button class="round" id="back10" aria-label="Back 10 seconds" title="Back 10s">
+          <svg class="i" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M11 5 6.5 9 11 13"/><path d="M6.5 9H13a5.5 5.5 0 1 1 0 11h-3"/></svg>
+          <span class="glyph">10</span>
+        </button>
+        <button class="round" id="fwd10" aria-label="Forward 10 seconds" title="Forward 10s">
+          <svg class="i" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="m13 5 4.5 4-4.5 4"/><path d="M17.5 9H11a5.5 5.5 0 1 0 0 11h3"/></svg>
+          <span class="glyph">10</span>
+        </button>
+        <button class="round" id="mute" aria-label="Mute" title="Mute">
+          <svg class="i" id="vol-on" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M4 9.5h3L11.5 6v12L7 14.5H4z"/><path d="M15.5 9a4 4 0 0 1 0 6"/>
+            <path d="M18 6.5a7.5 7.5 0 0 1 0 11"/></svg>
+          <svg class="i off" id="vol-off" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M4 9.5h3L11.5 6v12L7 14.5H4z"/><path d="m16 9.5 5 5"/><path d="m21 9.5-5 5"/></svg>
+        </button>
+        <input id="vol" type="range" min="0" max="100" value="100" aria-label="Volume">
+        <div class="spacer"></div>
+        <button class="round" id="rate" aria-label="Playback speed" title="Playback speed"><b id="rate-label">1&times;</b></button>
+        <button class="round" id="pip" aria-label="Picture in picture" title="Picture in picture">
+          <svg class="i" viewBox="0 0 24 24" aria-hidden="true">
+            <rect x="3" y="5" width="18" height="14" rx="2.5"/>
+            <rect x="12" y="11" width="7" height="6" rx="1.2" class="solid"/></svg>
+        </button>
+        <a class="round" id="get" href="{{download_url}}" download aria-label="Download" title="Download">
+          <svg class="i" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M12 4v10"/><path d="m7.5 10.5 4.5 4 4.5-4"/><path d="M5 19h14"/></svg>
+        </a>
+        <button class="round" id="full" aria-label="Fullscreen" title="Fullscreen">
+          <svg class="i" id="full-on" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M4 9V4h5"/><path d="M20 9V4h-5"/><path d="M4 15v5h5"/><path d="M20 15v5h-5"/></svg>
+          <svg class="i off" id="full-off" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M9 4v5H4"/><path d="M15 4v5h5"/><path d="M9 20v-5H4"/><path d="M15 20v-5h5"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <div class="understage">
+      <span>Streaming with HTTP Range — seek anywhere instantly.</span>
+      <span class="spacer" style="flex:1"></span>
+      <span><kbd>space</kbd> play · <kbd>←</kbd><kbd>→</kbd> ±10s · <kbd>f</kbd> fullscreen · <kbd>m</kbd> mute</span>
+    </div>
+  </main>
+
+  <aside>
+    <h3>Playlist · {{playlist_count}}</h3>
+    <ul class="playlist" id="playlist">
+{{playlist}}
+    </ul>
+    <div class="stats">
+      <div class="row"><span>buffered</span><b id="buffered">0%</b></div>
+      <div class="row"><span>transferred</span><b id="sent">—</b></div>
+      <div class="row"><span>devices</span><b id="devices">1</b></div>
+      <div class="row"><span>format</span><b>{{mime}}</b></div>
+      <div class="row"><span>shape</span><b id="shape">—</b></div>
+    </div>
+    <p style="margin-top:18px;font-size:12px;color:var(--faint);line-height:1.55">
+      If the preview stays black, the codec is not supported by this browser
+      (common for MKV/HEVC). Download the file and play it locally — the transfer is lossless either way.
+    </p>
+  </aside>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+(() => {
+  const v = document.getElementById('player');
+  const stage = document.getElementById('stage');
+  const seek = document.getElementById('seek');
+  const cur = document.getElementById('cur');
+  const dur = document.getElementById('dur');
+  const playBtn = document.getElementById('play');
+  const toast = (m) => { const t = document.getElementById('toast'); t.textContent = m;
+    t.classList.add('show'); clearTimeout(window.__t); window.__t = setTimeout(() => t.classList.remove('show'), 1600); };
+
+  // The stream URL (identity-encoded so Range offsets are byte exact).
+  const src = '/f/{{file_id}}';
+  const mime = '{{mime}}';
+  const isAudio = mime.startsWith('audio/');
+  if (isAudio) {
+    stage.classList.add('stage-audio');
+    document.getElementById('artwork').classList.remove('hidden');
+  }
+  v.src = src;
+  v.load();
+
+  const clock = (s) => {
+    if (!isFinite(s)) return '—';
+    s = Math.max(0, Math.round(s));
+    const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), x = s % 60;
+    return h ? `${h}:${String(m).padStart(2,'0')}:${String(x).padStart(2,'0')}`
+             : `${m}:${String(x).padStart(2,'0')}`;
+  };
+
+  v.addEventListener('loadedmetadata', () => {
+    dur.textContent = clock(v.duration);
+    fitStageTo(v.videoWidth, v.videoHeight);
+    // restore last position so a reload keeps your place
+    const saved = parseFloat(localStorage.getItem('lfs-pos:' + location.pathname) || '0');
+    if (saved > 3 && saved < v.duration - 5) v.currentTime = saved;
+  });
+  v.addEventListener('timeupdate', () => {
+    if (v.duration) {
+      const pct = (v.currentTime / v.duration) * 100;
+      seek.value = String(Math.round(pct * 10));
+      seek.style.setProperty('--p', pct + '%');
+      cur.textContent = clock(v.currentTime);
+    }
+    if (Math.floor(v.currentTime) % 4 === 0) {
+      localStorage.setItem('lfs-pos:' + location.pathname, String(v.currentTime));
+    }
+  });
+  // swap only the glyph: the button has no text label any more, and keeping
+  // the element means no layout shift when it changes.
+  const setGlyph = (el, path) => el.querySelector('svg').firstElementChild.setAttribute('d', path);
+  const PLAY_PATH = 'M8 5v14l11-7z';
+  const PAUSE_PATH = 'M7 5h4v14H7zM13 5h4v14h-4z';
+  v.addEventListener('play', () => {
+    setGlyph(playBtn, PAUSE_PATH);
+    playBtn.setAttribute('aria-label', 'Pause');
+    stage.classList.add('playing');
+  });
+  v.addEventListener('pause', () => {
+    setGlyph(playBtn, PLAY_PATH);
+    playBtn.setAttribute('aria-label', 'Play');
+    stage.classList.remove('playing');
+  });
+  v.addEventListener('progress', () => {
+    if (!v.buffered.length || !v.duration) return;
+    const end = v.buffered.end(v.buffered.length - 1);
+    document.getElementById('buffered').textContent = Math.round((end / v.duration) * 100) + '%';
+  });
+  // ── when this browser cannot decode the file ──────────────────────────────
+  // MKV/HEVC/DivX are ordinary formats that Chrome and Safari refuse. The old
+  // handler flashed a toast for 1.6s and left a black rectangle, which reads as
+  // "the app is broken". Show a panel that names the codec and offers a way out.
+  const CODEC_NAMES = {
+    hevc: 'HEVC / H.265', h265: 'HEVC / H.265', x265: 'HEVC / H.265',
+    h264: 'H.264 / AVC', avc1: 'H.264 / AVC', x264: 'H.264 / AVC',
+    av1: 'AV1', av01: 'AV1', vp9: 'VP9', vp8: 'VP8',
+    mpeg4: 'MPEG-4 Part 2 (DivX/XviD)', xvid: 'MPEG-4 Part 2 (DivX/XviD)',
+  };
+  const containerName = () => {
+    const ext = (mime.split('/')[1] || '').toLowerCase();
+    return { 'x-matroska': 'MKV', mp4: 'MP4', quicktime: 'MOV',
+             'x-msvideo': 'AVI', webm: 'WebM', ogg: 'OGG' }[ext] || ext.toUpperCase();
+  };
+  // Ask the element what it can decode rather than guessing from the extension:
+  // every phone records HEVC, and a MOV of H.264 plays fine.
+  const codecHint = () => {
+    const probes = [
+      ['hevc', 'video/mp4; codecs="hvc1.1.6.L93.B0"'],
+      ['hevc', 'video/mp4; codecs="hev1.1.6.L93.B0"'],
+      ['av1', 'video/mp4; codecs="av01.0.05M.08"'],
+      ['h264', 'video/mp4; codecs="avc1.42E01E"'],
+    ];
+    return probes
+      .filter(([, type]) => v.canPlayType(type))
+      .map(([name]) => CODEC_NAMES[name] || name)
+      .join(' / ');
+  };
+  // HEVC is the common one: phones record it and many browsers refuse it, so
+  // name the codec rather than mumbling "this format".
+  const OFFENDERS = { mp4: 'HEVC / H.265', 'x-matroska': 'HEVC or DivX',
+                      'x-msvideo': 'DivX / XviD', quicktime: 'HEVC / H.265' };
+  const showUnsupported = () => {
+    const why = document.getElementById('unsupported-why');
+    const native = codecHint();
+    const ext = (mime.split('/')[1] || '').toLowerCase();
+    if (native) {
+      why.textContent = `likely ${OFFENDERS[ext] || 'an unsupported codec'} — this browser plays ${native}`;
+    } else {
+      why.textContent = `${containerName()} · ${mime}`;
+    }
+    document.getElementById('unsupported').classList.add('show');
+    document.getElementById('unsupported-body').hidden = false;
+    stage.classList.remove('playing');
+    setGlyph(playBtn, PLAY_PATH);
+    // the seek bar cannot move if there is nothing to seek
+    seek.disabled = true;
+  };
+  const hideUnsupported = () => {
+    document.getElementById('unsupported').classList.remove('show');
+    seek.disabled = false;
+  };
+  v.addEventListener('loadedmetadata', () => hideUnsupported());
+  v.addEventListener('error', () => {
+    // MEDIA_ERR_SRC_NOT_SUPPORTED (4) is the codec case; anything else is a
+    // network or decode problem and gets its own wording.
+    const code = v.error ? v.error.code : 0;
+    showUnsupported();
+    if (code !== 4) {
+      document.getElementById('unsupported-title').textContent = 'Playback failed';
+      document.getElementById('unsupported-body').textContent =
+        'The stream stopped or was interrupted. Reload to try again, or download the file.';
+      document.getElementById('unsupported-retry').hidden = true;
+    }
+    toast('This browser cannot play this format');
+  });
+  // "Try anyway": some browsers report a failure the file does not have.
+  document.getElementById('unsupported-retry').addEventListener('click', () => {
+    hideUnsupported();
+    v.load();
+    v.play().catch(() => showUnsupported());
+  });
+
+  // ── seek preview: show the time under the cursor before committing ─────────
+  const seekTip = document.getElementById('seek-tip');
+  const tipFor = (event) => {
+    if (!v.duration) return;
+    const box = seek.getBoundingClientRect();
+    const ratio = Math.min(1, Math.max(0, (event.clientX - box.left) / box.width));
+    seekTip.textContent = clock(ratio * v.duration);
+    seekTip.style.left = (ratio * 100) + '%';
+    seekTip.classList.add('show');
+  };
+  seek.addEventListener('pointermove', tipFor);
+  seek.addEventListener('pointerdown', tipFor);
+  seek.addEventListener('pointerleave', () => seekTip.classList.remove('show'));
+
+  // ── controls: a tap shows and hides them, the timer only tidies up ────────
+  // Before, they only ever faded on a 2.2s timer and only in fullscreen, so a
+  // tap did nothing visible: the controls were already there, and nothing the
+  // finger did could dismiss them. Tapping the picture now toggles them, which
+  // is what every phone player does.
+  let hideTimer;
+  // Whether the *user* dismissed them, as opposed to the idle timer. Without
+  // this, the mouse movement that precedes every click re-shows the controls,
+  // so a tap always saw them visible and always hid them — the second tap did
+  // nothing, which is exactly the bug this was meant to fix.
+  let userHidden = false;
+  const controlsShown = () => stage.classList.contains('show-controls');
+  const showControls = () => {
+    stage.classList.add('show-controls');
+    stage.classList.remove('hide-cursor');
+    clearTimeout(hideTimer);
+    hideTimer = setTimeout(hideControls, 2600);
+  };
+  const hideControls = () => {
+    if (v.paused) return;                  // never hide from a paused player
+    stage.classList.remove('show-controls');
+    stage.classList.add('hide-cursor');
+    userHidden = true;
+  };
+  const dismissByTap = () => {
+    if (userHidden || !controlsShown()) {
+      userHidden = false;
+      showControls();                      // second tap brings them back
+    } else {
+      clearTimeout(hideTimer);
+      hideControls();
+    }
+  };
+  // was that a tap, or the end of a drag/scroll?
+  let tapStart = null;
+  stage.addEventListener('pointerdown', (e) => {
+    tapStart = {
+      x: e.clientX, y: e.clientY, t: Date.now(), dragging: false,
+      onChrome: !!e.target.closest('.controls, .topline, a, button, input'),
+    };
+  });
+  stage.addEventListener('pointermove', (e) => {
+    // a mouse reveals on movement unless the user dismissed them on purpose;
+    // a finger only reveals mid-drag, because tapping is its reveal
+    if (e.pointerType && e.pointerType !== 'mouse') return;
+    if (userHidden) return;
+    if (tapStart) {
+      if (Math.hypot(e.clientX - tapStart.x, e.clientY - tapStart.y) > 12) tapStart.dragging = true;
+      return;
+    }
+    showControls();
+  });
+  stage.addEventListener('pointerup', (e) => {
+    if (!tapStart) return;
+    const moved = Math.hypot(e.clientX - tapStart.x, e.clientY - tapStart.y);
+    const quick = Date.now() - tapStart.t < 500;
+    const onChrome = tapStart.onChrome || !!e.target.closest('.controls, .topline, a, button, input');
+    tapStart = null;
+    if (moved > 12 || !quick || onChrome) return;
+    dismissByTap();
+  });
+  // a finger dragging the seek bar must not fire the auto-hide mid-drag
+  document.getElementById('seek').addEventListener('pointerdown', () => clearTimeout(hideTimer));
+  v.addEventListener('play', () => {
+    stage.classList.add('is-playing');
+    userHidden = false;
+    showControls();
+  });
+  v.addEventListener('pause', () => {
+    stage.classList.remove('is-playing', 'hide-cursor');
+    userHidden = false;
+    stage.classList.add('show-controls');
+    clearTimeout(hideTimer);
+  });
+  document.addEventListener('fullscreenchange', () => { userHidden = false; showControls(); });
+
+  // ── the stage matches the picture, not a fixed 16:9 box ───────────────────
+  // A 2.39:1 film in a 16:9 box leaves black bands; a 9:16 short in the same
+  // box is a postage stamp. Read the real dimensions and shape the frame.
+  function fitStageTo(width, height) {
+    const wrap = stage.querySelector('.video-wrap');
+    if (!wrap || !width || !height) return;
+    const ratio = width / height;
+    wrap.classList.remove('portrait', 'square', 'ultrawide');
+    if (ratio < 0.85) wrap.classList.add('portrait');
+    else if (ratio < 1.15) wrap.classList.add('square');
+    else if (ratio > 2.0) wrap.classList.add('ultrawide');
+    // exact ratio, so film bars disappear instead of being cropped
+    if (ratio >= 0.85) wrap.style.aspectRatio = `${width} / ${height}`;
+    const kind = ratio < 0.85 ? 'short' : ratio < 1.15 ? 'square' : 'wide';
+    document.getElementById('shape').textContent =
+      `${width}×${height} · ${kind}`;
+  }
+
+  // ── remember and restore the volume, and the position on every change ──────
+  const savedVol = localStorage.getItem('lfs-vol');
+  if (savedVol !== null) { v.volume = Number(savedVol); document.getElementById('vol').value = v.volume * 100; }
+  v.addEventListener('volumechange', () => localStorage.setItem('lfs-vol', String(v.volume)));
+  window.addEventListener('beforeunload', () => {
+    if (v.duration) localStorage.setItem('lfs-pos:' + location.pathname, String(v.currentTime));
+  });
+  // a resume prompt is friendlier than silently jumping mid-file
+  addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowUp') { v.volume = Math.min(1, v.volume + 0.05); document.getElementById('vol').value = v.volume * 100; }
+    if (e.key === 'ArrowDown') { v.volume = Math.max(0, v.volume - 0.05); document.getElementById('vol').value = v.volume * 100; }
+  });
+
+  seek.addEventListener('input', () => {
+    const pct = Number(seek.value) / 10;
+    seek.style.setProperty('--p', pct + '%');
+    if (v.duration) v.currentTime = (pct / 100) * v.duration;
+  });
+  playBtn.addEventListener('click', () => (v.paused ? v.play() : v.pause()));
+  document.getElementById('back10').addEventListener('click', () => { v.currentTime = Math.max(0, v.currentTime - 10); });
+  document.getElementById('fwd10').addEventListener('click', () => { v.currentTime = Math.min(v.duration || 1e9, v.currentTime + 10); });
+  // Set the flag only: paintVolume() owns the icon. Writing textContent here
+  // deleted the two <svg> glyphs and left the word "mute" in their place.
+  document.getElementById('mute').addEventListener('click', () => { v.muted = !v.muted; });
+  document.getElementById('vol').addEventListener('input', (e) => {
+    v.volume = e.target.value / 100;
+    v.muted = v.volume === 0;
+  });
+  // one icon for "sound on", one for "muted", so the button says what it is
+  const paintVolume = () => {
+    const silent = v.muted || v.volume === 0;
+    document.getElementById('vol-on').classList.toggle('off', silent);
+    document.getElementById('vol-off').classList.toggle('off', !silent);
+    document.getElementById('vol').value = silent ? 0 : v.volume * 100;
+    document.getElementById('mute').setAttribute('aria-label', silent ? 'Unmute' : 'Mute');
+  };
+  v.addEventListener('volumechange', paintVolume);
+  paintVolume();
+  const rates = [1, 1.25, 1.5, 2, 0.75];
+  let rateIdx = 0;
+  document.getElementById('rate').addEventListener('click', () => {
+    rateIdx = (rateIdx + 1) % rates.length;
+    v.playbackRate = rates[rateIdx];
+    // the label lives in a <b> inside the round button; replacing the whole
+    // button's text would delete the element the label lives in
+    document.getElementById('rate-label').textContent = rates[rateIdx] + '\u00d7';
+  });
+  // Fullscreen the stage (video + controls), not just the video, so the seek
+  // bar and volume stay reachable. iOS Safari has no element fullscreen for
+  // anything but <video>, so fall back to its native player.
+  const goFullscreen = async () => {
+    if (document.fullscreenElement || document.webkitFullscreenElement) {
+      await (document.exitFullscreen?.() ?? document.webkitExitFullscreen?.());
+      return;
+    }
+    try {
+      if (stage.requestFullscreen) await stage.requestFullscreen();
+      else if (stage.webkitRequestFullscreen) stage.webkitRequestFullscreen();
+      else if (v.webkitEnterFullscreen) v.webkitEnterFullscreen();
+      else toast('Fullscreen is not available in this browser');
+    } catch (err) {
+      // some browsers refuse a request made from a keyboard shortcut or a
+      // stale gesture; retrying from the tap is the only fix, so say so.
+      try { v.webkitEnterFullscreen?.(); } catch (e) { toast('Fullscreen was blocked'); }
+    }
+  };
+  document.getElementById('full').addEventListener('click', goFullscreen);
+  // double-click the picture to toggle, like every desktop player
+  v.addEventListener('dblclick', goFullscreen);
+  // No click-to-pause on the picture: a tap is "show/hide the controls", which
+  // is what every phone player does. It used to pause the video, so tapping to
+  // dismiss the controls stopped playback instead — that was the complaint.
+  document.addEventListener('fullscreenchange', () => {
+    const on = Boolean(document.fullscreenElement);
+    stage.classList.toggle('is-fullscreen', on);
+    document.getElementById('full-on').classList.toggle('off', on);
+    document.getElementById('full-off').classList.toggle('off', !on);
+    // keep the video sized after the layout flips
+    requestAnimationFrame(() => v.dispatchEvent(new Event('resize')));
+  });
+  document.getElementById('pip').addEventListener('click', async () => {
+    try { await v.requestPictureInPicture(); } catch (e) { toast('Picture-in-picture unavailable'); }
+  });
+
+  document.addEventListener('keydown', (e) => {
+    if (e.target.tagName === 'INPUT') return;
+    if (e.code === 'Space') { e.preventDefault(); v.paused ? v.play() : v.pause(); }
+    if (e.code === 'ArrowRight') v.currentTime = Math.min(v.duration || 1e9, v.currentTime + 10);
+    if (e.code === 'ArrowLeft') v.currentTime = Math.max(0, v.currentTime - 10);
+    if (e.key === 'f') goFullscreen();
+    if (e.key === 'm') { v.muted = !v.muted; }
+  });
+
+  // live transfer stats
+  const fmt = (n) => { const u=['B','KB','MB','GB','TB']; let i=0;
+    while (n>=1024 && i<u.length-1){n/=1024;i++;} return (i===0?n.toFixed(0):n.toFixed(1))+' '+u[i]; };
+  let last = 0, lastT = Date.now();
+  async function poll() {
+    try {
+      const s = await (await fetch('/api/stats', { cache: 'no-store' })).json();
+      const now = Date.now(), dt = Math.max(0.3, (now - lastT) / 1000);
+      const inst = Math.max(0, (s.bytes_sent - last) / dt);
+      last = s.bytes_sent; lastT = now;
+      const sp = s.speed > 0 ? s.speed : inst;
+      document.getElementById('speed').textContent = sp > 0 ? fmt(sp) + '/s' : '0 B/s';
+      document.getElementById('sent').textContent = fmt(s.bytes_sent);
+      document.getElementById('devices').textContent = s.device_count || 1;
+    } catch (e) {}
+  }
+  setInterval(poll, 1500); poll();
+})();
+</script>
+</body>
+</html>

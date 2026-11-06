@@ -1,0 +1,1272 @@
+"""End-to-end HTTP tests against a real server on a loopback port."""
+
+from __future__ import annotations
+
+import http.cookiejar
+import io
+import json
+import re
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+import zipfile
+from pathlib import Path
+
+import pytest
+
+from local_file_sharer.fmt import human_size
+from local_file_sharer.transfer.manifest import Manifest
+from local_file_sharer.transfer.server import ShareServer
+
+
+@pytest.fixture
+def server(share_tree: Path, free_port: int):
+    manifest = Manifest.build([share_tree / "hello.txt", share_tree / "photos", share_tree / "clip.mp4"])
+    srv = ShareServer(manifest, host="127.0.0.1", port=free_port)
+    srv.start()
+    assert srv.wait_until_ready(timeout=5)
+    yield srv
+    srv.stop()
+
+
+def url(server: ShareServer, path: str) -> str:
+    return f"http://127.0.0.1:{server.port}{path}"
+
+
+def get(server: ShareServer, path: str, headers: dict | None = None):
+    request = urllib.request.Request(url(server, path), headers=headers or {})
+    return urllib.request.urlopen(request, timeout=15)
+
+
+def test_health_and_disabled_caching(server):
+    response = get(server, "/healthz")
+    assert response.status == 200
+    payload = json.load(response)
+    assert payload["ok"] is True
+    assert "no-store" in response.headers["Cache-Control"]
+    assert response.headers["Pragma"] == "no-cache"
+
+
+def test_index_page_shows_subfolders_as_folders(server):
+    """A shared folder's sub-folders are cards; their contents are not listed."""
+    body = get(server, "/").read().decode()
+    # photos/2024/ is the only sub-folder of the share
+    assert body.count('class="card folder"') == 1
+    assert 'href="/folder/2024"' in body
+    assert "1 file" in body
+    # files one level down are listed; files inside a sub-folder never are
+    assert "one.jpg" in body
+    assert "three.txt" not in body
+    # the shared folder's own name is not repeated on each card
+    assert "photos/one.jpg" not in body
+
+
+def test_a_share_of_many_folders_lists_each_one(share_tree, free_port):
+    """Sharing a parent folder lists its sub-folders, not every file inside."""
+    manifest = Manifest.build([share_tree])
+    srv = ShareServer(manifest, host="127.0.0.1", port=free_port)
+    srv.start()
+    try:
+        assert srv.wait_until_ready(timeout=5)
+        body = get(srv, "/").read().decode()
+    finally:
+        srv.stop()
+    assert 'href="/folder/photos"' in body
+    assert 'href="/folder/empty"' not in body  # nothing to download
+    assert body.count('class="card folder"') == 1
+    assert body.count('class="card file"') == 3  # hello.txt, data.bin, clip.mp4
+    for hidden in ("one.jpg", "two.png", "three.txt"):
+        assert hidden not in body
+
+
+def test_folder_zip_downloads_only_that_folder(server):
+    """Clicking a folder downloads that folder, not the whole share."""
+    response = get(server, "/folder/2024")
+    assert response.headers["Content-Type"] == "application/zip"
+    archive = zipfile.ZipFile(io.BytesIO(response.read()))
+    assert archive.testzip() is None
+    # rooted inside the folder, so it opens straight onto its contents
+    assert archive.namelist() == ["three.txt"]
+
+
+def test_a_folder_card_opens_that_folder(server):
+    """/browse/<sub-folder> lists that folder, and nested paths work too."""
+    body = get(server, "/browse/2024").read().decode()
+    assert "three.txt" in body
+    assert "one.jpg" not in body
+    # /d/<id> still serves the whole folder item, not just the sub-folder
+    manifest = json.load(get(server, "/api/manifest"))
+    folder = next(item for item in manifest["items"] if item["kind"] == "folder")
+    # /d/<id> shows that folder's own level: its loose files and one card for
+    # each sub-folder. It must NOT flatten three.txt out of 2024 — that is what
+    # turned big shares into thousands of loose rows on one page.
+    full = get(server, "/d/" + folder["id"]).read().decode()
+    assert "one.jpg" in full
+    assert "2024" in full
+    assert "three.txt" not in full
+
+
+def test_browse_rejects_an_unknown_folder(server):
+    with pytest.raises(urllib.error.HTTPError) as caught:
+        get(server, "/browse/not-a-real-folder")
+    assert caught.value.code == 404
+
+
+def test_folder_zip_rejects_unknown_and_empty(server):
+    for path, wanted in [("/folder/nope", 404), ("/folder/empty", 404), ("/folder/", 404)]:
+        with pytest.raises(urllib.error.HTTPError) as caught:
+            get(server, path)
+        assert caught.value.code == wanted
+
+
+def test_manifest_api(server):
+    payload = json.load(get(server, "/api/manifest"))
+    assert payload["file_count"] == 5
+    assert payload["total_bytes"] > 0
+    assert payload["items"]
+
+
+def test_file_download(server, share_tree):
+    payload = json.load(get(server, "/api/manifest"))
+    entry = next(f for f in payload["files"] if f["name"] == "hello.txt")
+    body = get(server, f"/f/{entry['id']}").read()
+    assert body == (share_tree / "hello.txt").read_bytes()
+    head = urllib.request.urlopen(urllib.request.Request(url(server, f"/f/{entry['id']}"), method="HEAD"))
+    assert head.headers["Content-Length"] == str(len(body))
+    assert head.headers["Accept-Ranges"] == "bytes"
+
+
+@pytest.mark.parametrize(
+    ("header", "expected"),
+    [
+        ("bytes=0-9", 10),
+        ("bytes=10-19", 10),
+        ("bytes=-10", 10),
+    ],
+)
+def test_range_requests(server, header, expected):
+    entry = json.load(get(server, "/api/manifest"))["files"][0]
+    response = get(server, f"/f/{entry['id']}", {"Range": header})
+    assert response.status == 206
+    assert len(response.read()) == expected
+    assert "Content-Range" in response.headers
+
+
+def test_unsatisfiable_range(server):
+    entry = json.load(get(server, "/api/manifest"))["files"][0]
+    with pytest.raises(urllib.error.HTTPError) as excinfo:
+        get(server, f"/f/{entry['id']}", {"Range": "bytes=99999999-"})
+    assert excinfo.value.code == 416
+
+
+def test_etag_revalidation(server):
+    entry = json.load(get(server, "/api/manifest"))["files"][0]
+    first = get(server, f"/f/{entry['id']}")
+    etag = first.headers["ETag"]
+    with pytest.raises(urllib.error.HTTPError) as excinfo:
+        get(server, f"/f/{entry['id']}", {"If-None-Match": etag})
+    assert excinfo.value.code == 304
+
+
+def test_multi_range_multipart(server):
+    entry = json.load(get(server, "/api/manifest"))["files"][0]
+    response = get(server, f"/f/{entry['id']}", {"Range": "bytes=0-4,10-14"})
+    assert response.status == 206
+    assert response.headers["Content-Type"].startswith("multipart/byteranges")
+    body = response.read()
+    assert body.count(b"Content-Range") == 2
+
+
+def test_whole_share_zip(server):
+    response = get(server, "/download/all.zip")
+    data = response.read()
+    archive = zipfile.ZipFile(io.BytesIO(data))
+    assert archive.testzip() is None
+    assert len(archive.namelist()) == 5
+
+
+def test_zip_resume(server):
+    complete = get(server, "/download/all.zip").read()
+    cut = len(complete) // 2
+    part = get(server, "/download/all.zip", {"Range": f"bytes={cut}-"}).read()
+    archive = zipfile.ZipFile(io.BytesIO(complete[:cut] + part))
+    assert archive.testzip() is None
+
+
+def test_folder_browser(server):
+    payload = json.load(get(server, "/api/manifest"))
+    folder = next(i for i in payload["items"] if i["kind"] == "folder")
+    body = get(server, f"/d/{folder['id']}").read().decode()
+    assert "one.jpg" in body
+    # three.txt lives one level down in 2024/, so it is behind that folder card
+    assert "three.txt" not in body
+    assert "/browse/2024" in body
+    zipped = get(server, f"/zip/{folder['id']}").read()
+    assert zipfile.ZipFile(io.BytesIO(zipped)).testzip() is None
+
+
+def test_player_page(server):
+    payload = json.load(get(server, "/api/manifest"))
+    video = next(f for f in payload["files"] if f["name"].endswith(".mp4"))
+    body = get(server, f"/s/{video['id']}").read().decode()
+    assert "Playlist" in body
+    assert video["id"] in body
+
+
+def test_static_css_and_qr(server):
+    css = get(server, "/static/app.css")
+    assert css.status == 200
+    assert len(css.read()) > 1000
+    qr = get(server, "/api/qr?data=hello%20world")
+    assert qr.status == 200
+    assert b"<svg" in qr.read()
+
+
+def test_404_page_is_friendly(server):
+    with pytest.raises(urllib.error.HTTPError) as excinfo:
+        get(server, "/nope")
+    assert excinfo.value.code == 404
+    body = excinfo.value.read().decode()
+    assert "LOCAL FILE SHARER" in body
+
+
+def test_path_traversal_blocked(server):
+    with pytest.raises(urllib.error.HTTPError) as excinfo:
+        get(server, "/static/../pyproject.toml")
+    assert excinfo.value.code in (400, 404)
+
+
+def test_stats_endpoint_counts_transfers(server):
+    entry = json.load(get(server, "/api/manifest"))["files"][0]
+    get(server, f"/f/{entry['id']}").read()
+    stats = json.load(get(server, "/api/stats"))
+    assert stats["bytes_sent"] > 0
+    assert stats["device_count"] >= 1
+    assert stats["requests"] >= 1
+
+
+def test_pin_protection(share_tree, free_port):
+    manifest = Manifest.build([share_tree / "hello.txt"])
+    server = ShareServer(manifest, host="127.0.0.1", port=free_port, pin="4242")
+    server.start()
+    try:
+        assert server.wait_until_ready(timeout=5)
+        with pytest.raises(urllib.error.HTTPError) as excinfo:
+            get(server, "/")
+        assert excinfo.value.code == 401
+        assert "PIN" in excinfo.value.read().decode()
+        # healthz stays open so the dashboard can poll
+        assert get(server, "/healthz").status == 200
+        # ?pin= sets a cookie-free access for this request
+        body = get(server, "/?pin=4242").read()
+        assert b"hello.txt" in body
+    finally:
+        server.stop()
+
+
+def test_expired_share(share_tree, free_port):
+    import time
+
+    manifest = Manifest.build([share_tree / "hello.txt"], expires_at=time.time() - 1)
+    server = ShareServer(manifest, host="127.0.0.1", port=free_port)
+    server.start()
+    try:
+        assert server.wait_until_ready(timeout=5)
+        with pytest.raises(urllib.error.HTTPError) as excinfo:
+            get(server, "/")
+        assert excinfo.value.code == 410
+        assert "expired" in excinfo.value.read().decode().lower()
+    finally:
+        server.stop()
+
+
+def test_upload_disabled_by_default(share_tree, free_port):
+    manifest = Manifest.build([share_tree / "hello.txt"])
+    server = ShareServer(manifest, host="127.0.0.1", port=free_port)
+    server.start()
+    try:
+        assert server.wait_until_ready(timeout=5)
+        request = urllib.request.Request(
+            url(server, "/api/upload?name=evil.txt"), data=b"payload", method="POST"
+        )
+        with pytest.raises(urllib.error.HTTPError) as excinfo:
+            urllib.request.urlopen(request, timeout=10)
+        assert excinfo.value.code == 403
+    finally:
+        server.stop()
+
+
+def test_upload_enabled(share_tree, free_port, tmp_path):
+    manifest = Manifest.build([share_tree / "hello.txt"])
+    uploads = tmp_path / "uploads"
+    server = ShareServer(manifest, host="127.0.0.1", port=free_port, allow_upload=True, upload_dir=uploads)
+    server.start()
+    try:
+        assert server.wait_until_ready(timeout=5)
+        request = urllib.request.Request(
+            url(server, "/api/upload?name=incoming.txt"), data=b"payload", method="POST"
+        )
+        payload = json.load(urllib.request.urlopen(request, timeout=10))
+        assert payload["ok"] is True
+        assert (uploads / "incoming.txt").read_bytes() == b"payload"
+    finally:
+        server.stop()
+
+
+def test_serve_mode_routes_to_browser(share_tree, free_port):
+    manifest = Manifest.build([share_tree / "photos"], mode="serve")
+    server = ShareServer(manifest, host="127.0.0.1", port=free_port)
+    server.start()
+    try:
+        assert server.wait_until_ready(timeout=5)
+        body = get(server, "/").read().decode()
+        assert "web file server" in body
+        assert "one.jpg" in body
+    finally:
+        server.stop()
+
+
+def test_stream_mode_redirects_to_player(share_tree, free_port):
+    manifest = Manifest.build([share_tree / "clip.mp4"], mode="stream")
+    server = ShareServer(manifest, host="127.0.0.1", port=free_port)
+    server.start()
+    try:
+        assert server.wait_until_ready(timeout=5)
+        body = get(server, "/").read().decode()
+        assert "Playlist" in body or "player" in body.lower()
+    finally:
+        server.stop()
+
+
+def test_pin_brute_force_is_throttled(share_tree, free_port):
+    """Wrong PINs must not be free: after a few failures the client is locked out."""
+    manifest = Manifest.build([share_tree / "hello.txt"])
+    server = ShareServer(manifest, host="127.0.0.1", port=free_port, pin="4242")
+    server.start()
+    try:
+        assert server.wait_until_ready(timeout=5)
+        for _ in range(6):
+            with pytest.raises(urllib.error.HTTPError):
+                get(server, "/?pin=0000")
+        with pytest.raises(urllib.error.HTTPError) as excinfo:
+            get(server, "/?pin=4242")
+        assert excinfo.value.code == 429
+        assert b"Too many attempts" in excinfo.value.read()
+        context = server.context
+        client = next(iter(context._locked_until))
+        context.note_success(client)
+        assert context.locked_for(client) == 0
+        assert b"hello.txt" in get(server, "/?pin=4242").read()
+    finally:
+        server.stop()
+
+
+def test_auth_cookie_is_sent_with_the_login_page(share_tree, free_port):
+    """A successful ``?pin=`` must set the cookie on the *same* response."""
+    manifest = Manifest.build([share_tree / "hello.txt"])
+    server = ShareServer(manifest, host="127.0.0.1", port=free_port, pin="4242")
+    server.start()
+    try:
+        assert server.wait_until_ready(timeout=5)
+        with urllib.request.urlopen(url(server, "/?pin=4242"), timeout=10) as response:
+            cookie = response.headers.get("Set-Cookie") or ""
+            body = response.read()
+        assert "lfs_auth=" in cookie and "HttpOnly" in cookie and "SameSite=Lax" in cookie
+        assert b"hello.txt" in body
+        value = cookie.split("lfs_auth=", 1)[1].split(";", 1)[0]
+        request = urllib.request.Request(url(server, "/"), headers={"Cookie": f"lfs_auth={value}"})
+        with urllib.request.urlopen(request, timeout=10) as response:
+            assert response.status == 200
+    finally:
+        server.stop()
+
+
+def test_expiry_endpoints_stay_open(share_tree, free_port):
+    """An expired share must still answer /healthz and /api/expired."""
+    import time
+
+    manifest = Manifest.build([share_tree / "hello.txt"], expires_at=time.time() - 1)
+    server = ShareServer(manifest, host="127.0.0.1", port=free_port)
+    server.start()
+    try:
+        assert server.wait_until_ready(timeout=5)
+        assert get(server, "/healthz").status == 200
+        payload = json.load(get(server, "/api/expired"))
+        assert payload["expired"] is True
+    finally:
+        server.stop()
+
+
+def test_download_headers_and_revalidation(server):
+    """The wire contract the README promises (ranges, ETag, no caching)."""
+    entry = json.load(get(server, "/api/manifest"))["files"][0]
+    with urllib.request.urlopen(url(server, f"/f/{entry['id']}"), timeout=10) as response:
+        headers = {k.lower(): v for k, v in response.headers.items()}
+        response.read()
+    assert headers["accept-ranges"] == "bytes"
+    assert int(headers["content-length"]) == entry["bytes"]
+    assert entry["size"] == human_size(entry["bytes"])
+    assert headers["etag"].startswith('"')
+    assert "no-store" in headers["cache-control"]
+    assert headers["content-type"].startswith(("text/", "application/"))
+
+    request = urllib.request.Request(
+        url(server, f"/f/{entry['id']}"), headers={"If-None-Match": headers["etag"]}
+    )
+    with pytest.raises(urllib.error.HTTPError) as excinfo:
+        urllib.request.urlopen(request, timeout=10)
+    assert excinfo.value.code == 304
+
+    ranged = urllib.request.Request(
+        url(server, f"/f/{entry['id']}"), headers={"Range": "bytes=2-5", "If-Range": headers["etag"]}
+    )
+    with urllib.request.urlopen(ranged, timeout=10) as response:
+        assert response.status == 206
+        assert len(response.read()) == 4
+
+
+def test_head_request_matches_get(server):
+    entry = json.load(get(server, "/api/manifest"))["files"][0]
+    request = urllib.request.Request(url(server, f"/f/{entry['id']}"), method="HEAD")
+    with urllib.request.urlopen(request, timeout=10) as response:
+        assert response.status == 200
+        assert int(response.headers["Content-Length"]) == entry["bytes"]
+        assert response.read() == b""
+
+
+def test_one_wrong_pin_does_not_lock_the_right_one(share_tree, free_port):
+    """A mistyped PIN must not make the correct PIN look broken."""
+    manifest = Manifest.build([share_tree / "hello.txt"])
+    server = ShareServer(manifest, host="127.0.0.1", port=free_port, pin="4242")
+    server.start()
+    try:
+        assert server.wait_until_ready(timeout=5)
+        with pytest.raises(urllib.error.HTTPError) as excinfo:
+            get(server, "/?pin=0001")
+        assert excinfo.value.code == 401
+        body = excinfo.value.read()
+        assert b"Wrong PIN" in body
+        assert b"Too many attempts" not in body
+
+        # ...and the very next attempt with the right PIN succeeds, immediately.
+        assert b"hello.txt" in get(server, "/?pin=4242").read()
+    finally:
+        server.stop()
+
+
+def test_lockout_page_explains_the_wait_even_for_a_correct_pin(share_tree, free_port):
+    """During a lockout the page must say so — never a bare 'wrong PIN'."""
+    from local_file_sharer.transfer.http_handler import FREE_PIN_ATTEMPTS
+
+    manifest = Manifest.build([share_tree / "hello.txt"])
+    server = ShareServer(manifest, host="127.0.0.1", port=free_port, pin="4242")
+    server.start()
+    try:
+        assert server.wait_until_ready(timeout=5)
+        for _ in range(FREE_PIN_ATTEMPTS):
+            with pytest.raises(urllib.error.HTTPError):
+                get(server, "/?pin=0001")
+
+        with pytest.raises(urllib.error.HTTPError) as excinfo:
+            get(server, "/?pin=4242")
+        assert excinfo.value.code == 429
+        # RFC 6585: say how long to wait, so a script (or a person) need not guess.
+        assert excinfo.value.headers["Retry-After"].isdigit()
+        assert int(excinfo.value.headers["Retry-After"]) >= 1
+        body = excinfo.value.read()
+        assert b"Too many attempts" in body
+        # It must not claim the PIN was wrong when nobody submitted one.
+        assert b"Wrong PIN" not in body
+    finally:
+        server.stop()
+
+
+def test_login_form_post_sets_the_cookie_on_the_redirect(share_tree, free_port):
+    """The browser posts the PIN, gets a 302 to '/', and must already be logged in."""
+    manifest = Manifest.build([share_tree / "hello.txt"])
+    server = ShareServer(manifest, host="127.0.0.1", port=free_port, pin="4242")
+    server.start()
+    try:
+        assert server.wait_until_ready(timeout=5)
+        body = urllib.parse.urlencode({"pin": "4242"}).encode()
+        request = urllib.request.Request(
+            f"http://127.0.0.1:{server.port}/",
+            data=body,
+            method="POST",
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+        )
+        # A redirect that is followed and still asks for the PIN is the bug. A
+        # browser keeps the cookie automatically, so the opener needs a jar.
+        jar = http.cookiejar.CookieJar()
+        opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
+        with opener.open(request, timeout=5) as response:
+            assert response.status == 200
+            assert b"hello.txt" in response.read()
+        assert [c.name for c in jar if c.name == "lfs_auth"] == ["lfs_auth"]
+    finally:
+        server.stop()
+
+
+def test_cookie_survives_a_manual_redirect_hop(share_tree, free_port):
+    """Same thing without urllib's redirect handling, so the header itself is checked."""
+    manifest = Manifest.build([share_tree / "hello.txt"])
+    server = ShareServer(manifest, host="127.0.0.1", port=free_port, pin="4242")
+    server.start()
+    try:
+        assert server.wait_until_ready(timeout=5)
+        body = urllib.parse.urlencode({"pin": "4242"}).encode()
+        request = urllib.request.Request(
+            f"http://127.0.0.1:{server.port}/",
+            data=body,
+            method="POST",
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+        )
+        opener = urllib.request.build_opener(_NoRedirect)
+        with pytest.raises(urllib.error.HTTPError) as excinfo:
+            opener.open(request, timeout=5)
+        assert excinfo.value.code in (302, 303)
+        assert "lfs_auth=" in (excinfo.value.headers.get("Set-Cookie") or "")
+    finally:
+        server.stop()
+
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, *args, **kwargs):  # noqa: ANN002, ANN003, D102
+        return None
+
+
+def test_client_ip_only_trusts_x_forwarded_for_from_loopback():
+    """A client must not be able to pick its own lockout identity.
+
+    `X-Forwarded-For` is only meaningful when a proxy sets it. A LAN client
+    sending it directly used to hand the server a fresh address per request and
+    so reset its PIN budget forever.
+    """
+    from local_file_sharer.transfer.http_handler import ShareRequestHandler, _is_loopback
+
+    assert _is_loopback("127.0.0.1") is True
+    assert _is_loopback("::1") is True
+    assert _is_loopback("192.168.1.42") is False
+    assert _is_loopback("garbage") is False
+
+    def ip_of(peer: str, forwarded: str) -> str:
+        fake = object.__new__(ShareRequestHandler)
+        fake.client_address = (peer, 50000)
+        fake.headers = {"X-Forwarded-For": forwarded} if forwarded else {}
+        return ShareRequestHandler.client_ip(fake)
+
+    # A remote client claiming to be someone else is not believed.
+    assert ip_of("192.168.1.42", "10.9.9.9") == "192.168.1.42"
+    # A real local proxy is believed, because that is the only way it can work.
+    assert ip_of("127.0.0.1", "203.0.113.7, 10.0.0.1") == "203.0.113.7"
+    # No header at all: always the peer address.
+    assert ip_of("192.168.1.42", "") == "192.168.1.42"
+
+
+def test_two_shares_in_one_process_do_not_share_a_lockout(share_tree, free_port):
+    """Attacking one share must not lock the user out of the next one."""
+    first = ShareServer(
+        Manifest.build([share_tree / "hello.txt"]), host="127.0.0.1", port=free_port, pin="4242"
+    )
+    first.start()
+    try:
+        assert first.wait_until_ready(timeout=5)
+        for _ in range(6):
+            with pytest.raises(urllib.error.HTTPError):
+                get(first, "/?pin=0000")
+        with pytest.raises(urllib.error.HTTPError) as excinfo:
+            get(first, "/?pin=4242")
+        assert excinfo.value.code == 429
+    finally:
+        first.stop()
+
+    second = ShareServer(
+        Manifest.build([share_tree / "hello.txt"]), host="127.0.0.1", port=free_port + 1, pin="9999"
+    )
+    second.start()
+    try:
+        assert second.wait_until_ready(timeout=5)
+        assert second.context.locked_for("127.0.0.1") == 0
+        assert b"hello.txt" in get(second, "/?pin=9999").read()
+    finally:
+        second.stop()
+
+
+@pytest.mark.parametrize(
+    "path_template",
+    ["/f/{file}", "/download/all.zip", "/api/manifest", "/raw/hello.txt", "/webseed/hello.txt", "/torrent"],
+)
+def test_an_expired_share_serves_no_bytes_anywhere(share_tree, free_port, path_template):
+    """Expiry must hold on every route, not just the index page."""
+    import time
+
+    manifest = Manifest.build([share_tree / "hello.txt"], expires_at=time.time() - 1)
+    server = ShareServer(manifest, host="127.0.0.1", port=free_port)
+    server.start()
+    try:
+        assert server.wait_until_ready(timeout=5)
+        entry = next(iter(manifest.iter_files()))
+        path = path_template.format(file=entry.file_id)
+        with pytest.raises(urllib.error.HTTPError) as excinfo:
+            get(server, path)
+        assert excinfo.value.code == 410
+        assert b"hello" not in excinfo.value.read().lower()
+    finally:
+        server.stop()
+
+
+def test_expiry_cannot_be_bypassed_with_a_range_request(share_tree, free_port):
+    import time
+
+    manifest = Manifest.build([share_tree / "hello.txt"], expires_at=time.time() - 1)
+    server = ShareServer(manifest, host="127.0.0.1", port=free_port)
+    server.start()
+    try:
+        assert server.wait_until_ready(timeout=5)
+        entry = next(iter(manifest.iter_files()))
+        request = urllib.request.Request(url(server, f"/f/{entry.file_id}"), headers={"Range": "bytes=0-4"})
+        with pytest.raises(urllib.error.HTTPError) as excinfo:
+            urllib.request.urlopen(request, timeout=5)
+        assert excinfo.value.code == 410
+    finally:
+        server.stop()
+
+
+def test_healthz_and_the_expired_api_stay_reachable_after_expiry(share_tree, free_port):
+    """A monitor must still be able to tell an expired share from a dead one."""
+    import time
+
+    manifest = Manifest.build([share_tree / "hello.txt"], expires_at=time.time() - 1)
+    server = ShareServer(manifest, host="127.0.0.1", port=free_port)
+    server.start()
+    try:
+        assert server.wait_until_ready(timeout=5)
+        assert json.loads(get(server, "/healthz").read())["ok"] is True
+        assert json.loads(get(server, "/api/expired").read())["expired"] is True
+    finally:
+        server.stop()
+
+
+def test_a_share_that_has_not_expired_still_serves(share_tree, free_port):
+    import time
+
+    manifest = Manifest.build([share_tree / "hello.txt"], expires_at=time.time() + 120)
+    server = ShareServer(manifest, host="127.0.0.1", port=free_port)
+    server.start()
+    try:
+        assert server.wait_until_ready(timeout=5)
+        assert b"hello.txt" in get(server, "/").read()
+        remaining = json.loads(get(server, "/api/expired").read())
+        assert remaining["expired"] is False
+        assert 110 < remaining["ttl"] <= 120, f"ttl should be counting down, got {remaining['ttl']}"
+    finally:
+        server.stop()
+
+
+def test_a_share_with_many_files_zips_completely(tmp_path, free_port):
+    """Hundreds of entries exercise the central directory, not just one file."""
+    root = tmp_path / "many"
+    root.mkdir()
+    for index in range(400):
+        (root / f"file_{index:04d}.txt").write_text(f"content {index}", encoding="utf-8")
+
+    server = ShareServer(Manifest.build([root]), host="127.0.0.1", port=free_port)
+    server.start()
+    try:
+        assert server.wait_until_ready(timeout=5)
+        data = get(server, "/download/all.zip").read()
+        archive = zipfile.ZipFile(io.BytesIO(data))
+        assert len(archive.namelist()) == 400
+        assert archive.testzip() is None
+        for index in (0, 199, 399):
+            entry = f"many/file_{index:04d}.txt"
+            assert archive.read(entry) == f"content {index}".encode()
+    finally:
+        server.stop()
+
+
+def test_a_deep_range_returns_the_right_offsets(tmp_path, free_port):
+    """Resuming a large archive deep inside must not shift the offset."""
+    root = tmp_path / "big"
+    root.mkdir()
+    payload = bytes(range(256)) * 4096  # 1 MiB, non-repeating at every scale
+    (root / "payload.bin").write_bytes(payload)
+
+    server = ShareServer(Manifest.build([root]), host="127.0.0.1", port=free_port)
+    server.start()
+    try:
+        assert server.wait_until_ready(timeout=5)
+        whole = get(server, "/download/all.zip").read()
+        archive = zipfile.ZipFile(io.BytesIO(whole))
+        assert archive.read("big/payload.bin") == payload
+
+        # Local header sits at 0; find the payload inside the archive and ask for
+        # a window straddling it, exactly as a resuming client would.
+        offset = whole.index(payload[:1024])
+        start, end = offset + 1000, offset + 2000
+        window = get(server, "/download/all.zip", {"Range": f"bytes={start}-{end}"}).read()
+        assert window == whole[start : end + 1]
+        assert window == payload[1000:2001]
+    finally:
+        server.stop()
+
+
+def test_stats_are_not_public_on_a_pin_protected_share(share_tree, free_port):
+    """`/api/stats` was exempt, and it names files and shows visitor IPs."""
+    manifest = Manifest.build([share_tree / "hello.txt"])
+    server = ShareServer(manifest, host="127.0.0.1", port=free_port, pin="4242")
+    server.start()
+    try:
+        assert server.wait_until_ready(timeout=5)
+        with pytest.raises(urllib.error.HTTPError) as excinfo:
+            get(server, "/api/stats")
+        assert excinfo.value.code == 401
+        assert b"hello" not in excinfo.value.read().lower()
+
+        # Logged in, the page's live counter still works.
+        import http.cookiejar
+
+        jar = http.cookiejar.CookieJar()
+        opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
+        opener.open(url(server, "/?pin=4242"), timeout=5).read()
+        payload = json.loads(opener.open(url(server, "/api/stats"), timeout=5).read())
+        assert "bytes_sent" in payload and "uptime" in payload
+    finally:
+        server.stop()
+
+
+def test_healthz_stays_public_so_a_monitor_can_poll_it(share_tree, free_port):
+    """Gating stats must not take the cheap liveness probe with it."""
+    manifest = Manifest.build([share_tree / "hello.txt"])
+    server = ShareServer(manifest, host="127.0.0.1", port=free_port, pin="4242")
+    server.start()
+    try:
+        assert server.wait_until_ready(timeout=5)
+        assert json.loads(get(server, "/healthz").read())["ok"] is True
+    finally:
+        server.stop()
+
+
+def test_only_three_routes_are_reachable_without_the_pin(share_tree, free_port):
+    """A future 'just exempt this one too' must fail here, loudly.
+
+    /healthz, /favicon.ico and /robots.txt are deliberately public. Everything
+    else — including the API surface — has to stay behind the PIN.
+    """
+    manifest = Manifest.build([share_tree / "hello.txt"])
+    server = ShareServer(manifest, host="127.0.0.1", port=free_port, pin="4242", allow_upload=True)
+    server.start()
+    try:
+        assert server.wait_until_ready(timeout=5)
+        entry = next(iter(manifest.iter_files()))
+        item = manifest.items[0]
+        candidates = [
+            "/",
+            "/index.html",
+            "/static/app.css",
+            f"/f/{entry.file_id}",
+            f"/download/{entry.file_id}",
+            "/download/all.zip",
+            f"/zip/{item.item_id}",
+            f"/raw/{entry.rel}",
+            "/api/manifest",
+            "/api/links",
+            "/api/stats",
+            "/api/qr",
+            "/api/expiry",
+            "/api/expired",
+            "/torrent",
+            "/announce",
+            "/scrape",
+            f"/webseed/{entry.rel}",
+        ]
+        reachable = []
+        for path in candidates:
+            try:
+                response = urllib.request.urlopen(url(server, path), timeout=5)
+            except urllib.error.HTTPError:
+                continue
+            reachable.append((path, response.status))
+            response.read()
+        assert reachable == [], f"reachable without the PIN: {reachable}"
+    finally:
+        server.stop()
+
+
+def test_only_the_error_page_css_answers_after_expiry(share_tree, free_port):
+    """The expired page needs CSS; a monitor needs healthz and /api/expired.
+
+    Everything else must go quiet, or an expired link keeps serving the share.
+    """
+    import time
+
+    manifest = Manifest.build([share_tree / "hello.txt"], expires_at=time.time() - 1)
+    server = ShareServer(manifest, host="127.0.0.1", port=free_port)
+    server.start()
+    try:
+        assert server.wait_until_ready(timeout=5)
+        entry = next(iter(manifest.iter_files()))
+        candidates = [
+            "/",
+            "/index.html",
+            f"/f/{entry.file_id}",
+            "/download/all.zip",
+            "/raw/hello.txt",
+            "/webseed/hello.txt",
+            "/api/manifest",
+            "/api/stats",
+            "/api/links",
+            "/api/qr",
+            "/torrent",
+            "/announce",
+            "/scrape",
+            "/static/app.css",  # expected to answer: the 410 page needs it
+            "/api/expiry",  # not exempt: it is the countdown API
+        ]
+        reachable = []
+        for path in candidates:
+            try:
+                response = urllib.request.urlopen(url(server, path), timeout=5)
+            except urllib.error.HTTPError:
+                continue
+            reachable.append(path)
+            response.read()
+        assert sorted(reachable) == ["/static/app.css"], f"these answered after expiry: {reachable}"
+    finally:
+        server.stop()
+
+
+def test_the_tracker_counts_exactly_what_it_sends(tmp_path, free_port):
+    """Every download path goes through this; a race here would be invisible."""
+    import threading
+
+    root = tmp_path / "s"
+    root.mkdir()
+    size = 120_000
+    (root / "a.bin").write_bytes(b"\xab" * size)
+    server = ShareServer(Manifest.build([root]), host="127.0.0.1", port=free_port)
+    server.start()
+    assert server.wait_until_ready(timeout=5)
+    try:
+        entry = next(iter(server.context.manifest.iter_files()))
+        target = url(server, f"/f/{entry.file_id}")
+
+        assert json.loads(get(server, "/api/stats").read())["bytes_sent"] == 0
+        assert len(urllib.request.urlopen(target, timeout=30).read()) == size
+        after_one = json.loads(get(server, "/api/stats").read())
+        assert after_one["bytes_sent"] == size
+        assert after_one["files"] == [{"name": "a.bin", "sent": size, "total": size}]
+
+        threads = [
+            threading.Thread(target=lambda: urllib.request.urlopen(target, timeout=30).read())
+            for _ in range(8)
+        ]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+
+        # The client sees EOF the moment the last byte lands, but the server
+        # records it in a `finally` a few milliseconds later. Reading /api/stats
+        # straight after join() can catch the counter one transfer short, which
+        # looked like lost bytes and failed only under full-suite load.
+        deadline = time.monotonic() + 5
+        while True:
+            final = json.loads(get(server, "/api/stats").read())
+            if final["bytes_sent"] >= size * 9 or time.monotonic() > deadline:
+                break
+            time.sleep(0.02)
+        assert final["bytes_sent"] == size * 9, "concurrent sends must not lose bytes"
+        assert final["requests"] == 9
+        assert final["peak_speed"] >= 0
+    finally:
+        server.stop()
+
+
+@pytest.mark.parametrize(
+    "name,expected",
+    [
+        ("clip.mp4", "video"),
+        ("CLIP.MP4", "video"),
+        ("song.mp3", "audio"),
+        ("photo.jpg", "image"),
+        ("notes.pdf", "document"),
+        ("notes.md", "document"),
+        ("bundle.zip", "archive"),
+        ("bundle.tar.gz", "archive"),
+        ("app.apk", "archive"),
+        ("blob.bin", "other"),
+    ],
+)
+def test_filter_kind_buckets(name, expected):
+    """The web filter offers six chips, so file kinds collapse into six buckets."""
+    from local_file_sharer.transfer.http_handler import _filter_kind
+
+    assert _filter_kind(Path(name)) == expected
+    assert _filter_kind(name) == expected, "str callers must work too"
+
+
+def test_cards_carry_a_filter_kind(tmp_path, free_port):
+    """The chips filter on data-kind, so every card needs one."""
+    root = tmp_path / "mix"
+    root.mkdir()
+    for name in ("a.mp4", "b.jpg", "c.pdf", "d.zip", "e.bin"):
+        (root / name).write_bytes(b"x" * 10)
+    server = ShareServer(Manifest.build([root]), host="127.0.0.1", port=free_port)
+    server.start()
+    assert server.wait_until_ready(timeout=5)
+    try:
+        page = get(server, "/").read().decode()
+        kinds = set(re.findall(r'class="card file" data-kind="([a-z]+)"', page))
+        assert kinds == {"video", "image", "document", "archive", "other"}
+    finally:
+        server.stop()
+
+
+def test_nested_files_never_appear_at_their_grandparent_level(tmp_path, free_port):
+    """The bug that made big shares unreadable.
+
+    A 17,000-file phone was rendered as 17,001 flat cards on one page because
+    every file inside every sub-folder was listed at the root. Each level must
+    show only its own children.
+    """
+    root = tmp_path / "phone"
+    deep = root / "DCIM" / "Camera"
+    deep.mkdir(parents=True)
+    for i in range(5):
+        (deep / f"IMG_{i}.jpg").write_bytes(b"x" * 10)
+    (root / "notes.txt").write_text("hi", encoding="utf-8")
+    server = ShareServer(Manifest.build([root]), host="127.0.0.1", port=free_port)
+    server.start()
+    assert server.wait_until_ready(timeout=5)
+    try:
+        top = get(server, "/").read().decode()
+        # the folder is a card; none of the five photos leak to the root
+        assert 'class="card folder"' in top
+        assert 'data-name="dcim"' in top.lower()
+        for i in range(5):
+            assert f"IMG_{i}.jpg" not in top
+        # drilling in shows the next level only
+        dcim = get(server, "/browse/DCIM").read().decode()
+        assert "Camera/" in dcim
+        assert "IMG_0.jpg" not in dcim
+        camera = get(server, "/browse/DCIM/Camera").read().decode()
+        assert "IMG_0.jpg" in camera
+    finally:
+        server.stop()
+
+
+def test_a_huge_folder_is_paged(tmp_path, free_port):
+    """A folder with 150 files returns one page of 60, not all 150 at once."""
+    root = tmp_path / "many"
+    root.mkdir()
+    for i in range(150):
+        (root / f"f{i:03d}.txt").write_text("x", encoding="utf-8")
+    server = ShareServer(Manifest.build([root]), host="127.0.0.1", port=free_port)
+    server.start()
+    assert server.wait_until_ready(timeout=5)
+    try:
+        first = get(server, "/").read().decode()
+        assert first.count('class="card file"') == 60
+        assert "page 1 of 3" in first
+        assert 'href="?p=2"' in first
+        second = get(server, "/?p=2").read().decode()
+        assert second.count('class="card file"') == 60
+        last = get(server, "/?p=3").read().decode()
+        assert last.count('class="card file"') == 30
+        assert "f149.txt" in last
+        # a page past the end clamps instead of 500ing or showing nothing
+        assert get(server, "/?p=999").read().decode().count('class="card file"') == 30
+    finally:
+        server.stop()
+
+
+def test_empty_folder_message_is_hidden_when_there_are_files(server):
+    """The "this folder is empty" note must not sit under a populated list.
+
+    The flag was inverted, so every folder that had contents also printed
+    "This folder is empty — or the filter matched nothing." right underneath
+    them, which read as a broken page.
+    """
+    payload = json.load(get(server, "/api/manifest"))
+    folder = next(i for i in payload["items"] if i["kind"] == "folder")
+    body = get(server, f"/d/{folder['id']}").read().decode()
+    assert re.search(r'<div id="empty" class="hidden', body), "empty note must be hidden"
+
+
+def test_folder_rows_carry_a_download_target_not_the_browse_page(tmp_path, free_port):
+    """ "Download selected" must not save HTML.
+
+    A folder row's href is its browse page — an HTML document. Selecting rows
+    and pressing Download used to fetch exactly that, so the user ended up with
+    ``Camera.html`` instead of ``Camera.zip``. Every row therefore advertises
+    its real download URL in ``data-dl``.
+    """
+    root = tmp_path / "phone"
+    (root / "DCIM" / "Camera").mkdir(parents=True)
+    (root / "DCIM" / "Camera" / "a.jpg").write_bytes(b"x" * 10)
+    server = ShareServer(Manifest.build([root]), host="127.0.0.1", port=free_port)
+    server.start()
+    assert server.wait_until_ready(timeout=5)
+    try:
+        body = get(server, "/browse/DCIM").read().decode()
+        folder_row = re.search(r'<a class="row folder"[^>]*>', body).group(0)
+        # the href is a page for humans …
+        assert 'href="/browse/DCIM/Camera"' in folder_row
+        # … and data-dl is the archive for downloads
+        assert 'data-dl="/folder/DCIM/Camera"' in folder_row
+        # the row says what it will be called, so the browser cannot guess .html
+        assert 'data-name="Camera"' in folder_row
+
+        # and the advertised URL really is a zip
+        response = get(server, "/folder/DCIM/Camera")
+        assert response.headers["Content-Type"] == "application/zip"
+        assert response.read(2) == b"PK"
+    finally:
+        server.stop()
+
+
+def test_file_rows_carry_their_own_download_target(tmp_path, free_port):
+    root = tmp_path / "files"
+    root.mkdir()
+    (root / "holiday.jpg").write_bytes(b"\xff\xd8" + b"x" * 40)
+    server = ShareServer(Manifest.build([root]), host="127.0.0.1", port=free_port)
+    server.start()
+    assert server.wait_until_ready(timeout=5)
+    try:
+        body = get(server, "/").read().decode()
+        card = re.search(r'<article class="card file"[^>]*>', body).group(0)
+        file_id = re.search(r'data-id="([a-f0-9]+)"', card).group(1)
+        assert f'data-dl="/f/{file_id}"' in card
+        assert 'data-filename="holiday.jpg"' in card
+        # the visible button names the file too, so no page can be saved by mistake
+        assert 'download="holiday.jpg"' in body
+    finally:
+        server.stop()
+
+
+def test_no_template_placeholder_ever_reaches_the_browser(tmp_path, free_port):
+    """A raw "{{pager}}" appeared on the page once. It must be impossible now."""
+    root = tmp_path / "ph"
+    root.mkdir()
+    for i in range(70):
+        (root / f"f{i:02d}.txt").write_text("x", encoding="utf-8")
+    server = ShareServer(Manifest.build([root]), host="127.0.0.1", port=free_port)
+    server.start()
+    assert server.wait_until_ready(timeout=5)
+    try:
+        for path in ("/", "/?p=2", "/browse", "/download/all.zip"):
+            try:
+                body = get(server, path).read()
+            except urllib.error.HTTPError:
+                continue
+            if path.endswith(".zip"):
+                continue
+            assert b"{{" not in body, f"unresolved placeholder on {path}"
+    finally:
+        server.stop()
+
+
+def test_a_placeholder_with_no_handler_is_blanked(tmp_path, free_port):
+    """Even a template placeholder nobody filled in must not reach the user."""
+    root = tmp_path / "ph2"
+    root.mkdir()
+    (root / "a.txt").write_text("x", encoding="utf-8")
+    server = ShareServer(Manifest.build([root]), host="127.0.0.1", port=free_port)
+    server.start()
+    server.wait_until_ready(timeout=5)
+    try:
+        from local_file_sharer.transfer.http_handler import _PLACEHOLDER_RE
+
+        assert _PLACEHOLDER_RE.sub("", "<p>{{pager}}</p><p>{{not_a_real_tag}}</p>") == "<p></p><p></p>"
+        assert _PLACEHOLDER_RE.sub("", "<p>keep 2 {{braces}} trimmed</p>") == "<p>keep 2  trimmed</p>"
+    finally:
+        server.stop()
+
+
+def test_the_page_scrolls_the_document_not_the_body(server):
+    """Scrolling is the document's job — a scrolling <body> breaks touch drags.
+
+    "I cant scroll on the page" on Android: a body with min-height:100dvh and
+    overflow-y:auto becomes its own scroll container that never moves, so a
+    finger drag has nothing to grab. The CSS must leave the document as the
+    scroller.
+    """
+    css = get(server, "/static/app.css").read().decode()
+    body_block = re.search(r"\nbody\s*\{(.*?)\}", css, re.S).group(1)
+    assert "overflow-y" not in body_block or "overflow-y: auto" not in body_block, (
+        "body must not be a scroll container"
+    )
+    html_block = re.search(r"\nhtml\s*\{(.*?)\}", css, re.S).group(1)
+    assert "overflow-y: auto" in html_block
+    assert "-webkit-overflow-scrolling: touch" in html_block
+
+
+def test_the_player_also_scrolls_the_document():
+    """The player has its own inline CSS and had the same body-scroll trap."""
+    from local_file_sharer.transfer.server import load_assets
+
+    player = load_assets()["player.html"]
+    assert "body{min-height:100dvh;overflow-y:auto" not in player, "body must not scroll"
+    assert "html{overflow-y:auto" in player
+    assert "-webkit-overflow-scrolling:touch" in player
+
+
+# ── media rows must reach the player, not start a download ───────────────────
+@pytest.fixture
+def media_server(share_tree: Path, free_port: int):
+    """A shared folder holding a video, so /d/<id> actually lists rows."""
+    folder = share_tree / "history"
+    folder.mkdir()
+    (folder / "movie.mp4").write_bytes(b"\0" * 4096)
+    (folder / "song.mp3").write_bytes(b"\0" * 2048)
+    (folder / "notes.txt").write_text("plain\n", encoding="utf-8")
+    manifest = Manifest.build([folder], mode="serve")
+    srv = ShareServer(manifest, host="127.0.0.1", port=free_port)
+    srv.start()
+    assert srv.wait_until_ready(timeout=5)
+    yield srv, manifest.items[0].item_id
+    srv.stop()
+
+
+def _rows(body: str) -> list[tuple[str, str, str]]:
+    """``(href, kind, data-dl)`` for every row on a browser page."""
+    out = []
+    for tag in re.findall(r"<a class=\"row\"[^>]*>", body):
+        href = re.search(r'href="([^"]+)"', tag)
+        kind = re.search(r'data-kind="([^"]+)"', tag)
+        dl = re.search(r'data-dl="([^"]+)"', tag)
+        if href and kind:
+            out.append((href.group(1), kind.group(1), dl.group(1) if dl else ""))
+    return out
+
+
+def test_a_video_row_inside_a_folder_links_to_the_player(media_server):
+    """Folder browsing is where people actually pick a movie.
+
+    Every row used to point at /f/<id>, the raw bytes, so tapping a video in a
+    folder started a download and the player was unreachable from there.
+    """
+    server, item_id = media_server
+    rows = _rows(get(server, "/d/" + item_id).read().decode())
+    video = [row for row in rows if row[1] == "video"]
+    assert video, f"expected a video row, got {rows}"
+    for href, _kind, _dl in video:
+        assert href.startswith("/s/"), f"video row points at {href}, which downloads"
+
+
+def test_an_audio_row_inside_a_folder_links_to_the_player(media_server):
+    server, item_id = media_server
+    rows = _rows(get(server, "/d/" + item_id).read().decode())
+    audio = [row for row in rows if row[1] == "audio"]
+    assert audio
+    for href, _kind, _dl in audio:
+        assert href.startswith("/s/")
+
+
+def test_the_media_row_keeps_a_download_url(media_server):
+    """The ↓ cell is the escape hatch: getting the file copy stays one tap."""
+    server, item_id = media_server
+    rows = _rows(get(server, "/d/" + item_id).read().decode())
+    for _href, kind, dl in rows:
+        assert dl.startswith("/f/"), f"{kind} row lost its download URL"
+
+
+def test_a_text_row_still_downloads(media_server):
+    """Only media opens a player; everything else keeps the old behaviour."""
+    server, item_id = media_server
+    rows = _rows(get(server, "/d/" + item_id).read().decode())
+    text = [row for row in rows if row[1] in ("text", "file")]
+    assert text
+    for href, kind, _dl in text:
+        assert href.startswith("/f/"), f"{kind} row should download, not open a player"
+
+
+def test_the_player_explains_an_undecodable_file(media_server):
+    """A black rectangle reads as "the app is broken", so the player must talk.
+
+    HEVC is what every modern phone records and most browsers refuse; the old
+    page flashed a toast for 1.6 seconds and then looked dead.
+    """
+    server, item_id = media_server
+    rows = _rows(get(server, "/d/" + item_id).read().decode())
+    href = next(href for href, kind, _ in rows if kind == "video")
+    body = get(server, href).read().decode()
+    assert 'id="unsupported"' in body
+    assert "cannot decode" in body
+    # the panel needs a working way out
+    assert 'id="unsupported-dl"' in body
+    assert "Try anyway" in body
+    # and it must ask the browser which codecs it has, instead of guessing
+    assert "canPlayType" in body
+    assert "HEVC" in body
+
+
+def test_a_media_card_opens_the_player(share_tree, free_port):
+    """The card body was a dead <div>: only the small buttons did anything.
+
+    Cards (as opposed to rows) are what the landing page of a normal download
+    share shows, so this is the first thing most people tap.
+    """
+    folder = share_tree / "media"
+    folder.mkdir()
+    (folder / "movie.mp4").write_bytes(b"\0" * 4096)
+    (folder / "notes.txt").write_text("plain\n", encoding="utf-8")
+    manifest = Manifest.build([folder])  # download mode -> cards
+    server = ShareServer(manifest, host="127.0.0.1", port=free_port)
+    server.start()
+    try:
+        assert server.wait_until_ready(timeout=5)
+        body = get(server, "/").read().decode()
+        linked = re.findall(r'<a class="card-main" href="(/s/[^"]+)"', body)
+        assert linked, "no media card body links to the player"
+        # a text file has no player, so its body must not point at one
+        assert body.count('class="card-main"') > len(linked)
+    finally:
+        server.stop()
+
+
+def _player_page(server) -> str:
+    """The player HTML for the video the media fixture created."""
+    item_id = json.load(get(server, "/api/manifest"))["items"][0]["id"]
+    rows = _rows(get(server, "/d/" + item_id).read().decode())
+    href = next(href for href, kind, _ in rows if kind == "video")
+    return get(server, href).read().decode()
+
+
+def test_the_player_uses_icons_not_a_row_of_words(media_server):
+    """A phone row of text buttons wrapped onto three lines and got mis-tapped."""
+    server, _item_id = media_server
+    body = _player_page(server)
+    # every control is a round icon button
+    assert body.count('class="round') >= 7
+    # the words that used to be printed on them are gone from the control row
+    # (the codec panel keeps a text Download button on purpose: it is the only
+    # action there, and a lone icon would be a puzzle)
+    controls = body.split('<div class="buttons">')[1].split("</div>")[0]
+    for word in (">Full<", ">PiP<", ">Play<", ">Download<", ">vol<"):
+        assert word not in controls, f"{word} is still a text button"
+
+
+def test_the_player_stage_adapts_to_the_video_shape(media_server):
+    """A 2.39:1 film must not sit in a 16:9 box with black bands, and a 9:16
+    short must not be a postage stamp. The player reads the real dimensions."""
+    server, _item_id = media_server
+    body = _player_page(server)
+    assert "fitStageTo" in body
+    assert "videoWidth" in body and "videoHeight" in body
+    for shape in ("portrait", "square", "ultrawide"):
+        assert shape in body
+
+
+def test_a_tap_toggles_the_controls_and_never_pauses(media_server):
+    """The reported bug: tapping to hide the controls paused the video instead,
+    and the controls only came back on a timer."""
+    server, _item_id = media_server
+    body = _player_page(server)
+    assert "dismissByTap" in body
+    assert "userHidden" in body
+    # the old click-to-pause handler bound to the picture must be gone; the
+    # play button and the spacebar keep that exact expression on purpose
+    assert "v.addEventListener('click'" not in body

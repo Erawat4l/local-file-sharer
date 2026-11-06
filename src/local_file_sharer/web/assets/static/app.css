@@ -1,0 +1,320 @@
+/* ─────────────────────────────────────────────────────────────────────────
+   LOCAL FILE SHARER · shared design system
+   Monochrome: black, white and greys, one weight of accent = contrast.
+   No frameworks, no build step, no CDN.
+   ───────────────────────────────────────────────────────────────────────── */
+:root {
+  --bg: #000;
+  --bg-2: #0a0a0a;
+  --panel: #0d0d0d;
+  --panel-solid: #111;
+  --panel-2: #141414;
+  --line: #262626;
+  --line-strong: #3d3d3d;
+  --text: #f5f5f5;
+  --text-dim: #a3a3a3;
+  --text-faint: #6b6b6b;
+  --accent: #f5f5f5;
+  --accent-2: #d4d4d4;
+  --accent-3: #a3a3a3;
+  --danger: #f5f5f5;
+  --warn: #d4d4d4;
+  --radius: 14px;
+  --radius-sm: 10px;
+  --shadow: 0 18px 44px -30px rgba(0, 0, 0, 0.95);
+  --font: "Inter", "Segoe UI", system-ui, -apple-system, "Helvetica Neue", sans-serif;
+  --mono: "JetBrains Mono", "SF Mono", "Cascadia Code", ui-monospace, monospace;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+
+/* Scrolling must never depend on a wrapper's height: the document owns the
+   scroll, nothing sets height:100% or position:fixed on a container. */
+html {
+  margin: 0;
+  padding: 0;
+  height: auto;
+  /* explicit: the document is the scroller, which is what touch drags act on */
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  background: var(--bg);
+  -webkit-text-size-adjust: 100%;
+  scrollbar-color: var(--line-strong) var(--bg);
+}
+body {
+  margin: 0;
+  padding: 0;
+  min-height: 100dvh;
+  /* Do NOT scroll the body. Making <body> its own scroll container (with a
+     min-height and overflow-y:auto) is the classic way to break touch
+     scrolling on Android: the page has a 100dvh box that never moves, so a
+     drag has nothing to scroll and only the inner content shifts. The document
+     itself scrolls instead; overflow-x is clipped rather than hidden so a wide
+     child can never turn the whole page into a sideways canvas. */
+  overflow-x: clip;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* a single hairline wash at the top, no gradients or glow */
+body {
+  background-image: radial-gradient(900px 420px at 50% -12%, #13131300, transparent), linear-gradient(180deg, #0b0b0b, var(--bg) 260px);
+  background-repeat: no-repeat;
+  background-attachment: scroll;
+}
+
+a { color: var(--text); text-decoration: none; border-bottom: 1px solid var(--line-strong); }
+a:hover { color: #fff; border-bottom-color: #fff; }
+::selection { background: #fff; color: #000; }
+
+.wrap { position: relative; z-index: 1; max-width: 1180px; margin: 0 auto; padding: 26px 22px 64px; }
+
+/* ── top bar ───────────────────────────────────────────────────────────── */
+.topbar {
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  padding: 14px 18px; margin-bottom: 26px;
+  border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--panel); backdrop-filter: blur(18px) saturate(140%);
+  box-shadow: var(--shadow);
+}
+.brand { display: flex; align-items: center; gap: 12px; font-weight: 700; letter-spacing: -0.01em; }
+.logo {
+  width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center;
+  background: #fff;
+  border: 1px solid #fff;
+  font-family: var(--mono); font-size: 14px; font-weight: 700; color: #000;
+}
+.brand small { display: block; font-weight: 500; font-size: 11.5px; color: var(--text-faint); letter-spacing: 0.08em; text-transform: uppercase; }
+.topbar .spacer { flex: 1; }
+.chip {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 6px 12px; border-radius: 999px; font-size: 12.5px;
+  border: 1px solid var(--line); background: var(--panel-2); color: var(--text-dim);
+}
+.chip b { color: var(--text); font-weight: 600; }
+/* filter row: the chips are buttons, not links, so they need the resets that
+   an <a> gets for free */
+.chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 14px; }
+button.chip { font-family: inherit; cursor: pointer; transition: border-color 0.14s ease, color 0.14s ease, background 0.14s ease; }
+button.chip:hover { border-color: var(--line-strong); color: var(--text); }
+button.chip.on { background: #fff; border-color: #fff; color: #000; font-weight: 600; }
+button.chip:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+.chip.accent { border-color: #fff; color: #fff; background: #121212; }
+.chip.warn { border-color: var(--line-strong); color: var(--text-dim); background: #121212; }
+.dot { width: 6px; height: 6px; border-radius: 50%; background: #fff; animation: pulse 2.4s ease-in-out infinite; }
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+
+/* ── hero ──────────────────────────────────────────────────────────────── */
+.hero { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(280px, 0.9fr); gap: 22px; margin-bottom: 26px; }
+@media (max-width: 880px) { .hero { grid-template-columns: 1fr; } }
+.card {
+  border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--panel); padding: 20px;
+}
+.card.tight { padding: 16px; }
+.hero h1 { margin: 0 0 8px; font-size: clamp(24px, 4vw, 40px); letter-spacing: -0.03em; line-height: 1.08; }
+.hero h1 .grad { color: #fff; }
+.hero p.lead { color: var(--text-dim); margin: 0 0 20px; font-size: 15px; line-height: 1.6; max-width: 52ch; }
+.hero-meta { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 20px; }
+.stat-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 12px; margin: 18px 0; }
+.stat {
+  padding: 14px 16px; border-radius: var(--radius-sm); border: 1px solid var(--line);
+  background: var(--panel);
+}
+.stat .k { font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.09em; color: var(--text-faint); }
+.stat .v { font-family: var(--mono); font-size: 20px; margin-top: 4px; color: var(--text); }
+.stat .v small { font-size: 12px; color: var(--text-faint); }
+
+/* ── buttons ───────────────────────────────────────────────────────────── */
+.actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 10px 16px; border-radius: 10px; font-weight: 600; font-size: 13.5px;
+  border: 1px solid #fff; cursor: pointer; transition: background 0.14s ease, color 0.14s ease;
+  font-family: inherit; color: #000; background: #fff; box-shadow: none;
+}
+.btn:hover { background: #d4d4d4; border-color: #d4d4d4; color: #000; }
+.btn:active { background: #bfbfbf; }
+.btn.alt { background: #d4d4d4; border-color: #d4d4d4; color: #000; }
+.btn.ghost {
+  background: transparent; border-color: var(--line-strong); color: var(--text);
+  box-shadow: none; font-weight: 500;
+}
+.btn.ghost:hover { background: #fff; border-color: #fff; color: #000; }
+.btn.sm { padding: 7px 12px; font-size: 12.5px; border-radius: 10px; }
+.btn[disabled] { opacity: 0.55; cursor: progress; }
+
+/* ── QR ────────────────────────────────────────────────────────────────── */
+.qr-card { display: grid; gap: 14px; justify-items: center; text-align: center; }
+.qr-frame {
+  padding: 12px; border-radius: 12px; background: #fff;
+  box-shadow: 0 0 0 1px var(--line-strong);
+}
+.qr-frame img { width: 216px; height: 216px; display: block; image-rendering: pixelated; }
+.qr-caption { font-family: var(--mono); font-size: 12.5px; color: var(--text-dim); word-break: break-all; }
+.copy-row { display: flex; gap: 8px; width: 100%; }
+.copy-row input {
+  flex: 1; min-width: 0; font-family: var(--mono); font-size: 12.5px; padding: 10px 12px;
+  border-radius: 10px; border: 1px solid var(--line); background: #0a0a0a; color: var(--text-dim);
+}
+
+/* ── file cards ────────────────────────────────────────────────────────── */
+.section-head { display: flex; align-items: baseline; gap: 12px; margin: 0 0 14px; flex-wrap: wrap; }
+/* the search box needs the full row on a phone: sharing the line with the
+   heading and the item count clipped its placeholder mid-word */
+@media (max-width: 520px) {
+  .section-head input[type="search"] { flex: 1 1 100%; max-width: none !important; order: 3; }
+  .section-head h2 { flex: 0 0 auto; }
+}
+.section-head h2 { font-size: 16px; margin: 0; letter-spacing: -0.01em; }
+.section-head .count { font-size: 12.5px; color: var(--text-faint); }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
+.card.file, .card.folder {
+  display: flex; align-items: center; gap: 12px; padding: 13px 15px;
+  transition: border-color 0.16s ease, background 0.16s ease;
+}
+/* the name owns the free width; buttons never squeeze it to "loo…" */
+.card.file .card-main, .card.folder .card-main {
+  flex: 1 1 auto; min-width: 0; color: var(--text); border-bottom: 0;
+}
+.card-main:hover h3 { text-decoration: underline; text-underline-offset: 3px; }
+/* on a phone the two buttons drop below the name instead of truncating it */
+@media (max-width: 460px) {
+  .card.file, .card.folder { flex-wrap: wrap; }
+  .card.file .card-main, .card.folder .card-main { flex: 1 1 60%; }
+  .card-actions { flex: 1 1 100%; margin-left: 52px; }
+  .card-actions .btn { flex: 1 1 auto; }
+  .full { display: none; }
+}
+.card.file:hover { border-color: var(--line-strong); background: var(--panel-2); }
+.card-icon {
+  width: 40px; height: 40px; flex: 0 0 40px; display: grid; place-items: center;
+  border-radius: 10px; color: var(--text-dim);
+  background: #161616; border: 1px solid var(--line);
+}
+.ico { display: block; }
+
+/* inline glyphs in chips and buttons: sized in em so they scale with the
+   text, and inheriting currentColor so they invert with the theme */
+svg.i { width: 1.05em; height: 1.05em; flex: 0 0 auto; vertical-align: -0.15em; }
+.btn svg.i, .chip svg.i { display: inline-block; }
+@media (max-width: 420px) {
+  /* the phone has no room for the count; the number is repeated on the page */
+  .btn .wide-only { display: none; }
+}
+@media (max-width: 520px) {
+  /* wrapped inline buttons came out ragged — "Download all" short, the zip
+     button longer, both left-hugging. Stacked full-width rows read as one
+     column instead of an accident. */
+  .actions-wrap { display: flex; justify-content: flex-end; align-items: flex-end; }
+  .actions { flex-direction: column; align-items: stretch; flex: 1 1 auto; }
+  .actions > .btn { flex: 0 0 auto; min-width: 0; }
+  .actions > .btn, .actions > a.btn { width: 100%; }
+}
+.logo svg.i { width: 18px; height: 18px; }
+.card-main { min-width: 0; flex: 1; }
+.card-main h3 { margin: 0; font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.card-main p { margin: 3px 0 0; font-size: 12px; color: var(--text-faint); font-family: var(--mono); }
+.card-actions { display: flex; gap: 6px; }
+
+/* ── progress ──────────────────────────────────────────────────────────── */
+.progress { height: 6px; border-radius: 999px; background: #1f1f1f; overflow: hidden; }
+.progress > i {
+  display: block; height: 100%; width: 0%;
+  background: #fff;
+  transition: width 0.25s ease;
+}
+
+/* ── tables / rows (server browser) ────────────────────────────────────── */
+.list { border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; background: var(--panel); }
+.list-head {
+  display: grid; grid-template-columns: 1fr 120px 44px; gap: 12px; padding: 11px 18px;
+  font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--text-faint);
+  border-bottom: 1px solid var(--line); background: #0a0a0a;
+}
+.row {
+  /* icon · name · size · action. The server script prepends a checkbox to every
+     row at runtime, and the grid used to have three columns for four spans, so
+     each row wrapped onto two lines and the name was squeezed into the size
+     column — the "shattered" listing. Columns are explicit and the name takes
+     whatever is left. */
+  display: grid; grid-template-columns: 16px 20px minmax(0, 1fr) auto 20px;
+  gap: 10px; align-items: center;
+  padding: 11px 18px; color: var(--text); border-bottom: 1px solid #1a1a1a;
+  transition: background 0.12s ease;
+}
+.row > .pick { margin: 0; }
+/* the server script tags every row it adds a checkbox to */
+.row:not(.has-pick) { grid-template-columns: 20px minmax(0, 1fr) auto 20px; }
+.row:last-child { border-bottom: 0; }
+.row:hover { background: #141414; color: #fff; }
+.row-icon { font-size: 17px; }
+.row-name { display: flex; align-items: center; gap: 10px; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 14px; }
+.row-size { font-family: var(--mono); font-size: 12.5px; color: var(--text-dim); text-align: right; white-space: nowrap; }
+.row-get { text-align: right; color: var(--accent); font-size: 16px; }
+@media (max-width: 620px) {
+  .row { grid-template-columns: 16px 18px minmax(0, 1fr) auto 16px; gap: 8px; padding: 11px 12px; }
+  .row:not(.has-pick) { grid-template-columns: 18px minmax(0, 1fr) auto 16px; }
+  .list-head { grid-template-columns: minmax(0, 1fr) 76px 32px; padding: 11px 12px; }
+}
+
+/* ── inputs ────────────────────────────────────────────────────────────── */
+input[type="search"], input[type="text"], input[type="password"] {
+  font-family: inherit; font-size: 14px; color: var(--text);
+  background: #0a0a0a; border: 1px solid var(--line);
+  border-radius: 10px; padding: 10px 14px; outline: none; width: 100%;
+}
+input:focus { border-color: #fff; box-shadow: 0 0 0 3px #ffffff1a; }
+
+/* ── dropzone ──────────────────────────────────────────────────────────── */
+.dropzone {
+  margin-top: 18px; padding: 26px; text-align: center; border-radius: var(--radius);
+  border: 1.5px dashed var(--line-strong); color: var(--text-dim); font-size: 13.5px;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.dropzone.drag { border-color: #fff; background: #121212; color: #fff; }
+
+/* ── footer ────────────────────────────────────────────────────────────── */
+footer { margin-top: 34px; display: flex; gap: 12px; flex-wrap: wrap; align-items: center; color: var(--text-faint); font-size: 12.5px; }
+footer .spacer { flex: 1; }
+kbd {
+  font-family: var(--mono); font-size: 11px; padding: 2px 6px; border-radius: 6px;
+  border: 1px solid var(--line-strong); background: #141414; color: var(--text-dim);
+}
+
+/* ── misc ──────────────────────────────────────────────────────────────── */
+.muted { color: var(--text-faint); }
+.mono { font-family: var(--mono); }
+.hidden { display: none !important; }
+.toast {
+  position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%) translateY(20px);
+  padding: 11px 18px; border-radius: 10px; background: #fff;
+  border: 1px solid #fff; color: #000; font-size: 13.5px; font-weight: 500;
+  opacity: 0; transition: opacity 0.2s ease, transform 0.2s ease; z-index: 60;
+  box-shadow: 0 20px 50px -20px rgba(0, 0, 0, 0.9);
+}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+.error-page { display: grid; place-items: center; min-height: 100dvh; padding: 24px; }
+.error-page main { text-align: center; max-width: 520px; padding: 30px; }
+.error-page h1 { font-size: 72px; margin: 0; color: #fff; letter-spacing: -0.04em; }
+.error-page p { color: var(--text-dim); line-height: 1.6; }
+.error-page .hint { font-family: var(--mono); font-size: 12.5px; color: var(--text-faint); }
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}
+
+/* ── paging ────────────────────────────────────────────────────────────── */
+/* A 17,000-file folder used to render every card at once. Pages keep the
+   response small and the page scrollable. */
+.pager {
+  display: flex; align-items: center; justify-content: center; gap: 14px;
+  margin: 18px 0 4px; flex-wrap: wrap;
+}
+.pager .pager-count { font-size: 12.5px; color: var(--text-dim); }
+.pager .btn.disabled { opacity: 0.4; cursor: default; }
+.row.folder .row-name { font-weight: 600; }

@@ -1,0 +1,88 @@
+# ── Python ────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+sdist/
+wheels/
+*.egg-info/
+.eggs/
+.installed.cfg
+*.egg
+MANIFEST
+
+# ── Virtual environments ──────────────────────────────────────────────────
+.venv/
+venv/
+env/
+ENV/
+.python-version
+
+# ── Tests / tooling ───────────────────────────────────────────────────────
+.pytest_cache/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+.tox/
+.nox/
+.ruff_cache/
+.mypy_cache/
+.dmypy.json
+
+# ── PyInstaller / standalone builds ───────────────────────────────────────
+*.spec.bak
+*.exe
+*.exe.sha256
+*.bin
+*.pkg
+build-artifacts/
+
+# ── local-file-sharer runtime + secrets (NEVER commit these) ──────────────
+# Device 2 SSH details, LAN/public IPs, tokens and per-machine overrides.
+config.local.toml
+*.local.toml
+.env
+.env.*
+secrets.toml
+device2.toml
+*.pem
+*.key
+*.ppk
+id_rsa*
+id_ed25519*
+.ssh/
+# Runtime state: recents, favourites, dashboards, share logs
+.local-file-sharer/
+state.json
+share-state.json
+*.log
+logs/
+# Generated shares and torrents
+*.torrent
+shares/
+
+# ── Editors / OS ──────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── Docs assets that are generated locally ────────────────────────────────
+docs/_build/
+docs/.vitepress/cache/
+
+# ── Screenshot tool inputs (fonts, Twemoji, demo files) ───────────────────
+tools/screenshots/inputs/
+
+# ── Single-file installer ────────────────────────────────────────────────
+# The copy at the repository root IS tracked on purpose: it is the download a
+# visitor needs, and GitHub cannot serve a file it does not have. Only the
+# build output under dist/ stays out of git.

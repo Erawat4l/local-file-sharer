@@ -1,0 +1,366 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#05080f">
+<meta name="robots" content="noindex, nofollow">
+<meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate">
+<title>{{title}} · {{brand}}</title>
+<link rel="icon" href="/favicon.ico">
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+<div class="wrap">
+
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">LFS</span>
+      <span>{{brand}}<small>download station</small></span>
+    </div>
+    <span class="chip accent"><span class="dot"></span> live</span>
+    <span class="chip">mode <b>{{mode}}</b></span>
+    <span class="chip"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg> <b id="expiry">{{expiry}}</b></span>
+    <div class="spacer"></div>
+    <span class="chip"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M3 20c0-3 2.7-5 6-5s6 2 6 5"/><path d="M16 6a3 3 0 0 1 0 6"/><path d="M18 20c0-2-1-3.5-2.5-4"/></svg> <b id="devices">{{device_count}}</b> devices</span>
+    <span class="chip">{{version}}</span>
+  </header>
+
+  <section class="hero">
+    <div class="card">
+      <h1>Download <span class="grad">everything</span>, fast.</h1>
+      <p class="lead">
+        {{file_count}} files · {{total_size}} shared from <span class="mono">{{peer}}</span>.
+        Grab one file, several at once with 16 parallel connections, or pull the whole
+        share as a single resumable <span class="mono">.zip</span>.
+      </p>
+
+      <div class="stat-row">
+        <div class="stat"><div class="k">files</div><div class="v">{{file_count}}</div></div>
+        <div class="stat"><div class="k">total size</div><div class="v">{{total_size}}</div></div>
+        <div class="stat"><div class="k">connections</div><div class="v">{{parallel}} <small>parallel</small></div></div>
+        <div class="stat"><div class="k">speed</div><div class="v" id="speed">—</div></div>
+      </div>
+
+      <div class="actions">
+        <button class="btn" id="download-all"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"/><path d="M7 11l5 5 5-5"/><path d="M5 20h14"/></svg> Download all<span class="wide-only"> · {{parallel}} connections</span></button>
+        <a class="btn alt" href="{{zip_url}}" id="zip-link"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h16v12H4z"/><path d="M3 4h18v4H3z"/><path d="M10 12h4"/></svg> Everything as .zip</a>
+        <button class="btn ghost" id="copy-command"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg> Copy curl one-liner</button>
+        <button class="btn ghost" id="copy-aria"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true"><path d="M13 3L5 14h6l-1 7 8-11h-6z"/></svg> aria2c -x16</button>
+        {{torrent_links}}
+      </div>
+
+      <div style="margin-top:18px">
+        <div class="progress"><i id="progress-bar"></i></div>
+        <div style="display:flex;justify-content:space-between;margin-top:8px" class="mono muted">
+          <span id="progress-text">idle</span>
+          <span id="eta">—</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="card qr-card">
+      <div class="qr-frame">
+        <img id="qr" alt="QR code for this share" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'/%3E">
+      </div>
+      <div class="copy-row">
+        <input id="share-url" value="{{base_url}}" readonly aria-label="Share URL">
+        <button class="btn ghost sm" id="copy-url">Copy</button>
+      </div>
+      <div class="qr-caption">scan to open on another device</div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <h2>Shared files</h2>
+      <span class="count">{{file_count}} items · {{total_size}}</span>
+      <div class="spacer" style="flex:1"></div>
+      <input id="filter" type="search" placeholder="Search name or type — try mp4" style="max-width:260px">
+    </div>
+    <div class="chips" id="kind-filters" role="group" aria-label="Filter by type">
+      <button class="chip on" data-filter="all" type="button">All</button>
+      <button class="chip" data-filter="video" type="button">Video</button>
+      <button class="chip" data-filter="image" type="button">Images</button>
+      <button class="chip" data-filter="audio" type="button">Audio</button>
+      <button class="chip" data-filter="document" type="button">Documents</button>
+      <button class="chip" data-filter="archive" type="button">Archives</button>
+    </div>
+    <div class="grid" id="file-grid">
+{{files}}
+    </div>
+{{pager}}
+    <div id="empty" class="hidden muted" style="padding:30px;text-align:center">No files match that filter.</div>
+  </section>
+
+  {{upload_section}}
+
+  <footer>
+    <span>{{brand}} {{version}}</span>
+    <span class="muted">·</span>
+    <span class="muted">resumable · range requests · zero-copy sendfile</span>
+    <div class="spacer"></div>
+    <span class="muted">powered by pure Python + rich</span>
+  </footer>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(() => {
+  // Measured on loopback against this server: 1 conn 4.3 GB/s, 4 -> 5.6,
+  // 8 -> 5.4, 16 -> 5.1, 32 -> 4.4. The knee is 4-8 connections; past it the
+  // extra sockets cost more than they add, and every one of them costs the
+  // phone a thread and a file handle. 8 is the sweet spot, and a smaller file
+  // gets fewer (see `want` below) so a 2 MB file is not split 8 ways.
+  const CL = 8; // parallel connections: the measured knee, not a round number
+  const files = Array.from(document.querySelectorAll('.card.file')).map(el => ({
+    id: el.dataset.id,
+    name: el.querySelector('h3').textContent.trim(),
+    url: `/f/${el.dataset.id}`,
+    size: el.querySelector('p').textContent.trim(),
+  }));
+
+  const $ = (id) => document.getElementById(id);
+  const toast = (msg) => {
+    const el = $('toast'); el.textContent = msg; el.classList.add('show');
+    clearTimeout(window.__toast); window.__toast = setTimeout(() => el.classList.remove('show'), 1900);
+  };
+  const copy = async (text, label) => {
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        const ta = document.createElement('textarea');
+        ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+        document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove();
+      }
+      toast(label || 'Copied to clipboard');
+    } catch (e) { toast('Copy failed — select manually'); }
+  };
+
+  // ── QR (rendered locally so the page works offline) ─────────────────────
+  async function renderQR(text) {
+    try {
+      const res = await fetch('/api/qr?data=' + encodeURIComponent(text));
+      if (!res.ok) throw new Error('no qr');
+      const svg = await res.text();
+      $('qr').src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+    } catch (e) { /* keep the placeholder */ }
+  }
+  const base = $('share-url').value;
+  if (base) renderQR(base);
+
+  // ── parallel download (16 connections) ─────────────────────────────────
+  // A single TCP stream is limited by the bandwidth-delay product: on a normal
+  // Wi-Fi link it stalls out a few MB/s no matter how fast the link is, which
+  // is exactly the "2.5 MB/s on the same Wi-Fi" report. Splitting the file into
+  // ranges and fetching them at once uses the link properly.
+  //
+  // Whole files used to be held in memory as an ArrayBuffer, so this was only
+  // ever safe for small ones. Where the browser supports the File System Access
+  // API the pieces are written straight to disk instead, which means a 4 GB
+  // video downloads at full link speed without exhausting the tab.
+  const MAX_PARALLEL_BYTES = 8 * 1024 ** 3;   // refuse anything bigger (sanity)
+  const MEMORY_LIMIT = 64 * 1024 * 1024;      // buffer in memory only under this
+
+  async function pickSaveHandle(name) {
+    if (!window.showSaveFilePicker) return null;
+    // A user gesture is what allows the picker; the caller runs from a click.
+    try {
+      return await window.showSaveFilePicker({ suggestedName: name });
+    } catch (e) {
+      return null;   // user cancelled, or the picker is blocked
+    }
+  }
+
+  async function saveViaStream(handle, file, parts) {
+    const writable = await handle.createWritable();
+    // Written out of order is not allowed, so run the pieces in order but keep
+    // all of them in flight: each chunk resolves as it arrives and is appended
+    // as soon as it is its turn.
+    const pending = parts.map(p =>
+      fetch(file.url, { headers: { Range: `bytes=${p.start}-${p.end}` }, cache: 'no-store' })
+        .then(r => { if (!r.ok && r.status !== 206) throw new Error('range ' + r.status); return r.arrayBuffer(); })
+    );
+    for (let i = 0; i < pending.length; i++) {
+      const buf = await pending[i];
+      await writable.write(new Uint8Array(buf));
+      $('progress-bar').style.width = ((i + 1) / pending.length * 100).toFixed(1) + '%';
+      $('progress-text').textContent = `${file.name} · part ${i + 1}/${pending.length}`;
+    }
+    await writable.close();
+  }
+
+  async function downloadParallel(file) {
+    try {
+      // The file picker only opens while the user's click is still "live", and
+      // awaiting a network call burns that window. So ask for the destination
+      // first and only then negotiate with the server.
+      const handle = await pickSaveHandle(file.name);
+      const head = await fetch(file.url, { method: 'HEAD', cache: 'no-store' });
+      const len = parseInt(head.headers.get('content-length') || '0', 10);
+      if (!len || !head.headers.get('accept-ranges') || len > MAX_PARALLEL_BYTES) {
+        window.location.href = file.url; return;
+      }
+      const want = Math.min(CL, Math.max(1, Math.ceil(len / (1024 * 1024))));
+      const chunk = Math.ceil(len / want);
+      const parts = [];
+      for (let i = 0; i < want; i++) {
+        const start = i * chunk;
+        const end = Math.min(len - 1, start + chunk - 1);
+        if (start > end) break;
+        parts.push({ start, end });
+      }
+      if (handle) {                       // straight to disk: no size limit
+        await saveViaStream(handle, file, parts);
+        $('progress-text').textContent = `${file.name} · saved`;
+        toast('Saved ' + file.name);
+        return;
+      }
+      if (len > MEMORY_LIMIT) {           // no disk API: do not risk the tab
+        window.location.href = file.url;
+        toast('Large file: using a single stream');
+        return;
+      }
+      // Fire every range at once: `await` inside the loop would serialise the
+      // connections into one, which defeats the whole point.
+      const blob = new Array(parts.length);
+      let done = 0;
+      await Promise.all(parts.map(async (p, i) => {
+        const r = await fetch(file.url, { headers: { Range: `bytes=${p.start}-${p.end}` }, cache: 'no-store' });
+        if (!r.ok && r.status !== 206) throw new Error('range failed: ' + r.status);
+        blob[i] = await r.arrayBuffer();
+        done += 1;
+        $('progress-bar').style.width = (done / parts.length * 100).toFixed(1) + '%';
+        $('progress-text').textContent = `${file.name} · part ${done}/${parts.length}`;
+      }));
+      const url = URL.createObjectURL(new Blob(blob));
+      const a = document.createElement('a');
+      a.href = url; a.download = file.name; document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 30000);
+      $('progress-text').textContent = `${file.name} · saved`;
+      toast('Saved ' + file.name);
+    } catch (e) {
+      window.location.href = file.url; // fall back to a normal download
+    }
+  }
+
+  // every card gets a fast download button; the plain <a download> stays as
+  // the no-JavaScript fallback
+  document.querySelectorAll('.card.file').forEach(card => {
+    const btn = card.querySelector('.card-actions a[download]');
+    if (!btn) return;
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      const f = files.find(x => x.id === card.dataset.id);
+      if (f) downloadParallel(f);
+    });
+  });
+
+  $('download-all').addEventListener('click', async () => {
+    const btn = $('download-all');
+    btn.disabled = true;
+    for (const [i, f] of files.entries()) {
+      $('progress-text').textContent = `queued ${i + 1}/${files.length} · ${f.name}`;
+      await downloadParallel(f);
+      await new Promise(r => setTimeout(r, 260));
+    }
+    btn.disabled = false;
+    toast('All downloads started');
+  });
+
+  const mkCmd = (list, baseUrl) => list.map(f => `curl -O ${baseUrl.replace(/\/$/, '')}/f/${f.id}`).join(' \n  ');
+  $('copy-command').addEventListener('click', () =>
+    copy(`curl -L -O ${base}download/all.zip`, 'curl command copied'));
+  $('copy-aria').addEventListener('click', () =>
+    copy(`aria2c -x16 -s16 -k1M ${base}download/all.zip`, 'aria2c command copied'));
+  $('copy-url').addEventListener('click', () => copy(base, 'Link copied'));
+  document.querySelectorAll('[data-copy]').forEach(btn =>
+    btn.addEventListener('click', () => copy(btn.dataset.copy, 'Magnet link copied')));
+
+  // ── search + type filter ────────────────────────────────────────────────
+  // Typing "mp4" must find clip.mp4 even though the card says "clip.mp4" and
+  // "video". Substring on the whole name already covers the extension, but
+  // people also search the other way round ("video"), so both the name and the
+  // type label are matched. Every term must match: "sad mp4" narrows.
+  const state = { q: '', kind: 'all' };
+  function textOf(el) {
+    return [
+      el.dataset.name || '',
+      (el.querySelector('h3') || {}).textContent || '',
+      el.dataset.kind || '',
+      (el.querySelector('p') || {}).textContent || '',
+    ].join(' ').toLowerCase();
+  }
+  function applyFilter() {
+    const terms = state.q.split(/\s+/).filter(Boolean);
+    let shown = 0;
+    document.querySelectorAll('#file-grid .card').forEach(el => {
+      const hay = textOf(el);
+      const hitText = terms.every(t => hay.includes(t));
+      const hitKind = state.kind === 'all' || el.dataset.kind === state.kind;
+      const hit = hitText && hitKind;
+      el.classList.toggle('hidden', !hit);
+      if (hit) shown++;
+    });
+    $('empty').classList.toggle('hidden', shown !== 0);
+    $('empty').textContent = state.q || state.kind !== 'all'
+      ? 'No files match that.'
+      : 'This folder is empty.';
+  }
+  $('filter').addEventListener('input', (e) => {
+    state.q = e.target.value.toLowerCase().trim();
+    applyFilter();
+  });
+  document.querySelectorAll('#kind-filters .chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      state.kind = chip.dataset.filter;
+      document.querySelectorAll('#kind-filters .chip').forEach(c =>
+        c.classList.toggle('on', c === chip));
+      applyFilter();
+    });
+  });
+
+  // ── live stats (no full page reloads) ──────────────────────────────────
+  let lastBytes = 0, lastTs = Date.now();
+  async function poll() {
+    try {
+      const r = await fetch('/api/stats', { cache: 'no-store' });
+      const s = await r.json();
+      const now = Date.now();
+      const dt = Math.max(0.2, (now - lastTs) / 1000);
+      const inst = Math.max(0, (s.bytes_sent - lastBytes) / dt);
+      lastBytes = s.bytes_sent; lastTs = now;
+      const speed = s.speed > 0 ? s.speed : inst;
+      $('speed').textContent = speed > 0 ? fmt(speed) + '/s' : '—';
+      $('devices').textContent = s.device_count;
+      const { sent, total } = s.transferred || {};
+      if (total) {
+        $('progress-bar').style.width = Math.min(100, (sent / total) * 100).toFixed(1) + '%';
+        $('progress-text').textContent = `${fmt(sent)} / ${fmt(total)}`;
+        $('eta').textContent = speed > 0 ? 'ETA ' + eta((total - sent) / speed) : '—';
+      }
+      const d = document.getElementById('expiry');
+      const exp = await fetch('/api/expiry', { cache: 'no-store' }).then(r => r.json()).catch(() => null);
+      if (exp && exp.ttl !== null && d) d.textContent = exp.ttl > 0 ? 'expires in ' + eta(exp.ttl) : 'expired';
+    } catch (e) { /* offline or server gone: stay quiet */ }
+  }
+  const fmt = (n) => {
+    const u = ['B', 'KB', 'MB', 'GB', 'TB']; let i = 0;
+    while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
+    return (i === 0 ? n.toFixed(0) : n.toFixed(1)) + ' ' + u[i];
+  };
+  const eta = (s) => {
+    s = Math.max(0, Math.round(s));
+    if (s < 60) return s + 's';
+    const m = Math.floor(s / 60), r = s % 60;
+    if (m < 60) return m + 'm ' + String(r).padStart(2, '0') + 's';
+    const h = Math.floor(m / 60);
+    return h + 'h ' + String(m % 60).padStart(2, '0') + 'm';
+  };
+  setInterval(poll, 1200); poll();
+})();
+</script>
+</body>
+</html>
