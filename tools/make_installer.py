@@ -120,13 +120,66 @@ def check():
 
 
 def uninstall():
-    if have("pipx"):
-        run(["pipx", "uninstall", "local-file-sharer"])
+    """Remove every trace this file may have left.
+
+    The old version ran `pip uninstall` and printed "the `lfs` command is
+    gone", which was often untrue: this installer creates a directory beside
+    the user with a symlink on PATH, and pip never knows about either. Removing
+    pip's copy of a package it did not install is also a no-op, so the message
+    was optimistic at best.
+    """
+    removed_any = False
+
+    # 1. pipx, if it made one. `have` only says the tool exists, so ask it
+    #    whether this package is actually one of its venvs first -- otherwise
+    #    every uninstall prints "not installed" noise about someone else's
+    #    tooling.
+    if have("pipx") and run(["pipx", "list", "--short"]) is not None:
+        listing = subprocess.run(["pipx", "list", "--short"], capture_output=True, text=True)  # noqa: S603
+        if "local-file-sharer" in (listing.stdout or "") and run(["pipx", "uninstall", "local-file-sharer"]) == 0:
+            removed_any = True
+
+    # 2. pip, if it made one
     if have("pip"):
-        for flags in (["--user"], []):
-            if run([sys.executable, "-m", "pip", "uninstall", "-y", *flags, "local-file-sharer"]) == 0:
+        for flags in (["--user"], [], ["--break-system-packages"]):
+            probe = subprocess.run(  # noqa: S603
+                [sys.executable, "-m", "pip", "show", "local-file-sharer"],
+                capture_output=True,
+                text=True,
+            )
+            if probe.returncode == 0:
+                if run([sys.executable, "-m", "pip", "uninstall", "-y", *flags, "local-file-sharer"]) == 0:
+                    removed_any = True
                 break
-    say("  removed. the `lfs` command is gone.")
+
+    # 3. the checked-out tree this installer unpacks, and every symlink to it
+    home = os.path.expanduser("~")
+    target = os.path.join(home, "local-file-sharer")
+    binary = os.path.join(target, ".venv", "bin", "lfs")
+    for bindir in (os.path.join(os.environ.get("PREFIX", ""), "bin"), os.path.join(home, ".local", "bin"),
+                   os.path.join(home, "bin")):
+        if not bindir.strip(os.sep):
+            continue
+        link = os.path.join(bindir, "lfs")
+        if os.path.islink(link):
+            try:
+                if os.path.realpath(link) == os.path.realpath(binary) or target in os.path.realpath(link):
+                    os.unlink(link)
+                    say(f"  removed {{link}}")
+                    removed_any = True
+            except OSError as exc:
+                say(f"  could not remove {{link}}: {{exc}}")
+
+    # a shutdown helper, not a self-delete: the folder may be the one this
+    # process is running from, and that cannot be rmtree'd safely
+    if os.path.isdir(target) and run(["/bin/sh", "-c", f'sleep 1; rm -rf "{{target}}"']) == 0:
+        say(f"  removed {{target}}")
+        removed_any = True
+
+    if removed_any:
+        say("  removed. the `lfs` command is gone; your files were not touched.")
+        return 0
+    say("  nothing to remove — no lfs install was found here.")
     return 0
 
 
@@ -164,9 +217,23 @@ def install():
         if code != 0:
             say("\\n  ./setup failed — read its output above.\\n")
             return code
+    # Create the `lfs` command, not just a folder with a ./run in it. A
+    # newcomer who finishes installing and is told to `cd` into a directory and
+    # type `./run` every time has not installed a command -- they have unpacked
+    # a folder and been handed a chore. ./run install links it into a directory
+    # that is already on PATH, so the next shell finds it.
     say("")
-    say(f"  installed.  cd {{target}} && ./run")
-    say(f"  afterwards:  cd {{target}} && ./run upgrade")
+    runner = os.path.join(target, "run")
+    linked = os.access(runner, os.X_OK) and run([runner, "install"]) == 0
+    say("")
+    if linked:
+        say("  installed.  type `lfs` from anywhere")
+        say("  first time:  lfs configure     (Enter accepts every default)")
+        say("  update:      lfs upgrade")
+        say(f"  the folder is {{target}} -- `lfs` runs from there, so keep it")
+    else:
+        say(f"  installed.  cd {{target}} && ./run")
+        say(f"  afterwards:  cd {{target}} && ./run upgrade")
     say("")
     return 0
 

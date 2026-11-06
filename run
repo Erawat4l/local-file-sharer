@@ -482,16 +482,36 @@ case "${1:-}" in
         # install shadowing this one, which `./run` never uses -- it always
         # runs .venv/bin/lfs.
         setup
-        bin_dir="${PREFIX:-$HOME}/bin"
-        mkdir -p "$bin_dir"
-        ln -sf "$LFS" "$bin_dir/lfs"
-        ok "linked $bin_dir/lfs → $LFS"
-        case ":$PATH:" in
-            *":$bin_dir:"*) : ;;
-            *) warn "$bin_dir is not on PATH — add it: export PATH=\"$bin_dir:\$PATH\"" ;;
-        esac
-        say ""
-        say "  this copy:  $("$LFS" --version 2>/dev/null | head -1)"
+        # Link where the shell will actually look. `~/bin` is not on PATH for a
+        # stock fish, zsh or Ubuntu setup, so the old default produced a
+        # successful install followed by "lfs: command not found" -- the worst
+        # ending, because nothing looked broken. Prefer a directory that is
+        # already on PATH; only fall back to ~/bin (and then say how to add it).
+        bin_dir=""
+        for candidate in "${PREFIX:-$HOME}/bin" "$HOME/.local/bin"; do
+            case ":$PATH:" in
+                *":$candidate:"*) bin_dir="$candidate"; break ;;
+            esac
+        done
+        if [ -z "$bin_dir" ]; then
+            bin_dir="${PREFIX:-$HOME}/bin"
+            mkdir -p "$bin_dir"
+            ln -sf "$LFS" "$bin_dir/lfs"
+            ok "linked $bin_dir/lfs → $LFS"
+            warn "$bin_dir is not on PATH, so \`lfs\` will not be found yet"
+            say "  add it for good:"
+            say "    fish:  fish_add_path $bin_dir"
+            say "    bash:  echo 'export PATH=\"$bin_dir:\$PATH\"' >> ~/.bashrc"
+            say "  or just run ./run from this folder"
+            say ""
+            say "  this copy:  $("$LFS" --version 2>/dev/null | head -1)"
+        else
+            mkdir -p "$bin_dir"
+            ln -sf "$LFS" "$bin_dir/lfs"
+            ok "linked $bin_dir/lfs → $LFS"
+            say ""
+            say "  this copy:  $("$LFS" --version 2>/dev/null | head -1)"
+        fi
 
         # Linking into a directory that loses to an earlier copy changes
         # nothing a user can see: they run `lfs`, get the old one, and every

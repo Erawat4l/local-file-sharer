@@ -67,6 +67,7 @@ SUBCOMMAND_NAMES = (
     "banner",
     "upgrade",
     "update",
+    "uninstall",
     "version",
     "help",
 )
@@ -133,6 +134,8 @@ def build_parser() -> argparse.ArgumentParser:
             "  lfs config show         print the effective configuration\n"
             "  lfs theme mono          switch theme (dark / light / mono)\n"
             "  lfs completions fish    print a shell completion script\n"
+            "  lfs upgrade             update to the newest build\n"
+            "  lfs uninstall           remove lfs from this device (--dry-run first)\n"
             "  lfs --update            self-update from GitHub\n"
             f"\nmore: {REPO_URL}"
         ),
@@ -215,6 +218,33 @@ def build_command_parsers() -> dict[str, argparse.ArgumentParser]:
         help="show pip's own output instead of just the progress bar",
     )
     parsers["upgrade"] = upgrade
+
+    uninstall = argparse.ArgumentParser(
+        prog="lfs uninstall",
+        parents=[common],
+        description="remove lfs from this device: the command, the checkout, the config",
+        epilog=(
+            "Your shared files are never touched — only what lfs itself created. "
+            "`lfs uninstall --dry-run` lists it first."
+        ),
+    )
+    uninstall.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="list what would be removed, then stop",
+    )
+    uninstall.add_argument(
+        "--purge-data",
+        action="store_true",
+        help="also remove history, recents and the share counter",
+    )
+    uninstall.add_argument(
+        "--keep-checkout",
+        action="store_true",
+        help="remove the command but leave the folder (so a reinstall is instant)",
+    )
+    uninstall.add_argument("--yes", "-y", action="store_true", help="do not ask for confirmation")
+    parsers["uninstall"] = uninstall
     # `lfs update` is the word people reach for; it shares the same parser.
     parsers["update"] = upgrade
 
@@ -668,6 +698,37 @@ def cmd_doctor(cfg: Config, state: State, args: argparse.Namespace) -> int:
     return run_doctor(as_json=args.json, fast=args.fast)
 
 
+def cmd_uninstall(cfg: Config, state: State, args: argparse.Namespace) -> int:
+    """Remove lfs from the device. Prints the plan first, then asks."""
+    from .ui.console import console  # noqa: PLC0415
+    from .uninstall import make_plan, uninstall  # noqa: PLC0415
+
+    dry_run = bool(getattr(args, "dry_run", False))
+    purge = bool(getattr(args, "purge_data", False))
+    keep = bool(getattr(args, "keep_checkout", False))
+
+    if not getattr(args, "yes", False) and not dry_run:
+        plan = make_plan(purge_data=purge, keep_checkout=keep)
+        con = console()
+        con.print("[lfs.warning]this removes lfs from this device:[/]")
+        for step in plan.steps:
+            con.print(f"[lfs.faint]  {step.path}[/]  [lfs.faint]({step.what})[/]")
+        for command in plan.commands:
+            con.print(f"[lfs.muted]  you also need:[/] [lfs.primary]{command}[/]")
+        for note in plan.kept:
+            con.print(f"[lfs.faint]  kept: {note}[/]")
+        con.print("\n[lfs.muted]your shared files are not touched. Type 'yes' to go ahead:[/] ", end="")
+        try:
+            answer = input()
+        except (EOFError, KeyboardInterrupt):
+            con.print("\n[lfs.muted]cancelled — nothing was changed[/]")
+            return 1
+        if answer.strip().lower() not in ("y", "yes"):
+            con.print("[lfs.muted]cancelled — nothing was changed[/]")
+            return 1
+    return uninstall(dry_run=dry_run, purge_data=purge, keep_checkout=keep)
+
+
 def cmd_config(cfg: Config, state: State, args: argparse.Namespace) -> int:
     action = args.config_action or "show"
     if action == "show":
@@ -864,6 +925,7 @@ def main(argv: list[str] | None = None) -> int:
                 "banner": cmd_banner,
                 "upgrade": cmd_upgrade,
                 "update": cmd_upgrade,
+                "uninstall": cmd_uninstall,
             }[command]
             return handler(cfg, state, args)
         except KeyboardInterrupt:
