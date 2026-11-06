@@ -365,3 +365,31 @@ def test_a_stale_lfs_is_not_used_by_run(checkout):
     source = (checkout / "run").read_text(encoding="utf-8")
     assert 'exec "$LFS"' in source
     assert 'exec lfs' not in source
+
+
+def test_plain_run_creates_the_lfs_command(checkout):
+    """`./run` built everything and never created `lfs`.
+
+    A newcomer runs the first command in the README -- `./run` -- and gets a
+    menu that says "`lfs <path>` shares straight away". They type `lfs` and
+    fish answers "Unknown command: lfs". The linking lived only in the
+    `install` branch, so the advertised command had never been created.
+    """
+    source = (checkout / "run").read_text(encoding="utf-8")
+    assert "link_command() {" in source
+    dispatch = source[source.index("# ── 3. dispatch") :]
+    no_arg = dispatch[dispatch.index('""') :]
+    no_arg = no_arg[: no_arg.index("esac")]
+    assert "link_command" in no_arg, "`./run` on its own must link the command"
+    assert 'exec "$LFS"' in no_arg
+
+
+def test_plain_run_is_quiet_once_the_command_exists(checkout):
+    """It runs on every launch, so it must not narrate when nothing changed.
+
+    But the first run has to speak, or the install still looks like a folder
+    that happens to open a menu -- which is the bug above.
+    """
+    source = (checkout / "run").read_text(encoding="utf-8")
+    assert "link_command quiet" in source
+    assert 'command -v lfs 2>/dev/null' in source

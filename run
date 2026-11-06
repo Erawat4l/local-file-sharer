@@ -441,6 +441,83 @@ setup() {
     ok "installed $("$PY" -c 'import local_file_sharer as m; print(m.__version__)')"
 }
 
+# Put this checkout's `lfs` on PATH.
+#
+# Extracted from the `install` branch because `./run` on its own -- the
+# first command the README gives a newcomer -- built everything, opened a
+# menu that says "`lfs <path>` shares straight away", and never created
+# `lfs`. The next thing they typed was `lfs`, and fish answered
+# "Unknown command: lfs".
+link_command() {
+    # Called on every `./run`, so stay silent unless something changed;
+    # pass `quiet` to force silence. The first run must speak, because
+    # otherwise the install still looks like a folder that happens to
+    # open a menu rather than an installed command.
+    quiet=""
+    [ "${1:-}" = quiet ] && quiet=1
+    # Link where the shell will actually look. `~/bin` is not on PATH for a
+    # stock fish, zsh or Ubuntu setup, so the old default produced a
+    # successful install followed by "lfs: command not found" -- the worst
+    # ending, because nothing looked broken. Prefer a directory that is
+    # already on PATH; only fall back to ~/bin (and then say how to add it).
+    bin_dir=""
+    for candidate in "${PREFIX:-$HOME}/bin" "$HOME/.local/bin"; do
+        case ":$PATH:" in
+            *":$candidate:"*) bin_dir="$candidate"; break ;;
+        esac
+    done
+    if [ -z "$bin_dir" ]; then
+        bin_dir="${PREFIX:-$HOME}/bin"
+        mkdir -p "$bin_dir"
+        ln -sf "$LFS" "$bin_dir/lfs"
+        ok "linked $bin_dir/lfs → $LFS"
+        warn "$bin_dir is not on PATH, so \`lfs\` will not be found yet"
+        say "  add it for good:"
+        say "    fish:  fish_add_path $bin_dir"
+        say "    bash:  echo 'export PATH=\"$bin_dir:\$PATH\"' >> ~/.bashrc"
+        say "  or just run ./run from this folder"
+        say ""
+        say "  this copy:  $("$LFS" --version 2>/dev/null | head -1)"
+    else
+        mkdir -p "$bin_dir"
+        ln -sf "$LFS" "$bin_dir/lfs"
+        if [ -z "$quiet" ]; then
+            ok "linked $bin_dir/lfs → $LFS"
+            say ""
+            say "  this copy:  $("$LFS" --version 2>/dev/null | head -1)"
+        fi
+    fi
+
+    # Linking into a directory that loses to an earlier copy changes
+    # nothing a user can see: they run `lfs`, get the old one, and every
+    # fix since looks like it did not ship. So link into the directory
+    # their shell actually picks first, when that one is not already ours.
+    if other=$(command -v lfs 2>/dev/null) && [ -n "$other" ]; then
+        same=$(readlink -f "$other" 2>/dev/null || echo "$other")
+        mine=$(readlink -f "$LFS" 2>/dev/null || echo "$LFS")
+        if [ "$same" != "$mine" ]; then
+            first_dir=$(dirname "$other")
+            if [ -w "$first_dir" ]; then
+                ln -sf "$LFS" "$first_dir/lfs"
+                ok "pointed $first_dir/lfs at this copy (it was answering first)"
+                say "  the old file is replaced, not deleted — nothing is lost"
+            else
+                warn "another lfs answers your shell first: $other"
+                say "  remove it, then run ./run install again:"
+                say "    rm $other"
+            fi
+        fi
+    fi
+    if other=$(command -v lfs 2>/dev/null) && [ -n "$other" ]; then
+        if [ "$(readlink -f "$other" 2>/dev/null || echo "$other")" = \
+           "$(readlink -f "$LFS" 2>/dev/null || echo "$LFS")" ]; then
+            [ -n "$quiet" ] || ok "your shell now runs this copy: lfs"
+        else
+            warn "your shell still runs a different lfs: $other"
+        fi
+    fi
+}
+
 # ── 3. dispatch ─────────────────────────────────────────────────────────────
 case "${1:-}" in
     -h|--help|help) usage ;;
@@ -482,66 +559,19 @@ case "${1:-}" in
         # install shadowing this one, which `./run` never uses -- it always
         # runs .venv/bin/lfs.
         setup
-        # Link where the shell will actually look. `~/bin` is not on PATH for a
-        # stock fish, zsh or Ubuntu setup, so the old default produced a
-        # successful install followed by "lfs: command not found" -- the worst
-        # ending, because nothing looked broken. Prefer a directory that is
-        # already on PATH; only fall back to ~/bin (and then say how to add it).
-        bin_dir=""
-        for candidate in "${PREFIX:-$HOME}/bin" "$HOME/.local/bin"; do
-            case ":$PATH:" in
-                *":$candidate:"*) bin_dir="$candidate"; break ;;
-            esac
-        done
-        if [ -z "$bin_dir" ]; then
-            bin_dir="${PREFIX:-$HOME}/bin"
-            mkdir -p "$bin_dir"
-            ln -sf "$LFS" "$bin_dir/lfs"
-            ok "linked $bin_dir/lfs → $LFS"
-            warn "$bin_dir is not on PATH, so \`lfs\` will not be found yet"
-            say "  add it for good:"
-            say "    fish:  fish_add_path $bin_dir"
-            say "    bash:  echo 'export PATH=\"$bin_dir:\$PATH\"' >> ~/.bashrc"
-            say "  or just run ./run from this folder"
-            say ""
-            say "  this copy:  $("$LFS" --version 2>/dev/null | head -1)"
-        else
-            mkdir -p "$bin_dir"
-            ln -sf "$LFS" "$bin_dir/lfs"
-            ok "linked $bin_dir/lfs → $LFS"
-            say ""
-            say "  this copy:  $("$LFS" --version 2>/dev/null | head -1)"
-        fi
-
-        # Linking into a directory that loses to an earlier copy changes
-        # nothing a user can see: they run `lfs`, get the old one, and every
-        # fix since looks like it did not ship. So link into the directory
-        # their shell actually picks first, when that one is not already ours.
-        if other=$(command -v lfs 2>/dev/null) && [ -n "$other" ]; then
-            same=$(readlink -f "$other" 2>/dev/null || echo "$other")
-            mine=$(readlink -f "$LFS" 2>/dev/null || echo "$LFS")
-            if [ "$same" != "$mine" ]; then
-                first_dir=$(dirname "$other")
-                if [ -w "$first_dir" ]; then
-                    ln -sf "$LFS" "$first_dir/lfs"
-                    ok "pointed $first_dir/lfs at this copy (it was answering first)"
-                    say "  the old file is replaced, not deleted — nothing is lost"
-                else
-                    warn "another lfs answers your shell first: $other"
-                    say "  remove it, then run ./run install again:"
-                    say "    rm $other"
-                fi
-            fi
-        fi
-        if other=$(command -v lfs 2>/dev/null) && [ -n "$other" ]; then
-            if [ "$(readlink -f "$other" 2>/dev/null || echo "$other")" = \
-               "$(readlink -f "$LFS" 2>/dev/null || echo "$LFS")" ]; then
-                ok "your shell now runs this copy: lfs"
-            else
-                warn "your shell still runs a different lfs: $other"
-            fi
-        fi
+        setup
+        link_command
         exit 0 ;;
-    "")       setup; exec "$LFS" ;;
+    # No arguments: build if needed, make sure `lfs` exists, then open the menu.
+    # Linking used to live only in `install`, so `./run` produced a menu
+    # advertising a command it had never created. Quiet only once `lfs`
+    # resolves; the first run has to say the command now exists.
+    "")       setup
+              if [ -n "$(command -v lfs 2>/dev/null)" ]; then
+                  link_command quiet
+              else
+                  link_command
+              fi
+              exec "$LFS" ;;
     *)        setup; exec "$LFS" "$@" ;;
 esac
