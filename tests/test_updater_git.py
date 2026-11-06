@@ -16,15 +16,14 @@ def test_git_spec_names_the_repository_and_ref():
     assert spec.endswith("@arena/example")
 
 
-def test_git_spec_defaults_to_an_installable_branch():
-    """`main` is a stub README — installing from it fails inside pip.
+def test_git_spec_defaults_to_main():
+    """With no ref named, upgrade follows the repository default branch.
 
-    The default has to be a branch that actually carries pyproject.toml, or
-    every `lfs upgrade` on a fresh clone dies with "does not appear to be a
-    Python project".
+    `main` carries the package; a copy installed from a feature branch passes
+    that branch explicitly instead.
     """
     assert updater.git_spec().endswith("@" + updater.DEFAULT_BRANCH)
-    assert updater.DEFAULT_BRANCH != "main"
+    assert updater.DEFAULT_BRANCH == "main"
 
 
 def test_installed_ref_reads_direct_url(monkeypatch):
@@ -94,25 +93,25 @@ def test_every_spec_is_a_valid_requirement(ref):
 
 
 def test_ref_has_package_reports_a_missing_pyproject(monkeypatch):
-    """`main` has no pyproject.toml; the arena branch does."""
-    monkeypatch.setattr(updater, "ref_has_package", lambda ref, **kw: ref != "main")
-    assert updater.ref_has_package("main") is False
+    """A branch that never got pyproject.toml is reported as uninstallable."""
+    monkeypatch.setattr(updater, "ref_has_package", lambda ref, **kw: ref != "docs-only")
+    assert updater.ref_has_package("docs-only") is False
     assert updater.ref_has_package(updater.DEFAULT_BRANCH) is True
 
 
 def test_resolve_ref_redirects_away_from_a_branch_with_no_package(monkeypatch):
-    """The exact bug: a copy installed from `main` could never update.
+    """A copy installed from a branch that never had the package, eg. a
+    docs-only branch, must still be able to update.
 
-    It re-ran pip against `main` forever and failed with
-    "does not appear to be a Python project".
+    Without the redirect it re-ran pip against that branch forever and failed
+    with "does not appear to be a Python project".
     """
-    monkeypatch.setattr(updater, "installed_ref", lambda: "main")
-    monkeypatch.setattr(updater, "ref_has_package", lambda ref, **kw: ref != "main")
+    monkeypatch.setattr(updater, "installed_ref", lambda: "docs-only")
+    monkeypatch.setattr(updater, "ref_has_package", lambda ref, **kw: ref != "docs-only")
 
     ref, note = updater.resolve_ref(None)
     assert ref == updater.DEFAULT_BRANCH
-    assert ref != "main"
-    assert "main" in note and "pyproject" in note, "the redirect must be explained"
+    assert "docs-only" in note and "pyproject" in note, "the redirect must be explained"
 
 
 def test_resolve_ref_keeps_an_explicit_ref(monkeypatch):
@@ -139,7 +138,7 @@ def test_offline_does_not_block_the_install(monkeypatch):
 
 
 def test_upgrade_from_git_uses_the_resolved_ref(monkeypatch):
-    """`lfs upgrade` must install the branch resolve_ref picked, not `main`."""
+    """`lfs upgrade` must install the branch resolve_ref picked, not the broken one."""
     seen = {}
 
     def fake_run(cmd, **_kw):
@@ -148,12 +147,12 @@ def test_upgrade_from_git_uses_the_resolved_ref(monkeypatch):
 
     monkeypatch.setattr(updater, "run_with_progress", fake_run)
     monkeypatch.setattr(updater, "detect_installer", lambda: "pipx")
-    monkeypatch.setattr(updater, "installed_ref", lambda: "main")
-    monkeypatch.setattr(updater, "ref_has_package", lambda ref, **kw: ref != "main")
+    monkeypatch.setattr(updater, "installed_ref", lambda: "docs-only")
+    monkeypatch.setattr(updater, "ref_has_package", lambda ref, **kw: ref != "docs-only")
 
     assert updater.upgrade_from_git(None) == 0
     assert updater.DEFAULT_BRANCH in " ".join(seen["cmd"])
-    assert "@main" not in " ".join(seen["cmd"])
+    assert "@docs-only" not in " ".join(seen["cmd"])
 
 
 # ── quiet upgrades with a progress bar ───────────────────────────────────────

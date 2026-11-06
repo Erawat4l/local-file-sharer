@@ -16,7 +16,7 @@
       5. registers tab-completion for PowerShell
 
 .EXAMPLE
-    pipx install "local-file-sharer @ git+https://github.com/Erawat4l/local-file-sharer.git@arena/d7f4713b-local-file-sharer"
+    pipx install "local-file-sharer @ git+https://github.com/Erawat4l/local-file-sharer.git@main"
 
 .NOTES
     The raw file host returns 404 while this repository is private. `irm` on a
@@ -42,7 +42,7 @@ $RepoSlug  = 'Erawat4l/local-file-sharer'
 # The package lives on this branch, not on `main` — `main` holds only a stub
 # README, so installing from it fails with "neither 'setup.py' nor
 # 'pyproject.toml' found". Override with $Env:LFS_BRANCH when needed.
-$Branch    = if ($Env:LFS_BRANCH) { $Env:LFS_BRANCH } else { 'arena/d7f4713b-local-file-sharer' }
+$Branch    = if ($Env:LFS_BRANCH) { $Env:LFS_BRANCH } else { 'main' }
 $RawBase   = "https://raw.githubusercontent.com/$RepoSlug/$Branch"
 
 function Write-Step  { param($m) Write-Host "> $m" -ForegroundColor Cyan }

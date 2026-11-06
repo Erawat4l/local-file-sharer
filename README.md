@@ -154,7 +154,7 @@ terminal font makes `Erawat4l` hard to type — its last character is a lowercas
 ### Clone and run
 
 ```bash
-git clone -b arena/d7f4713b-local-file-sharer https://github.com/Erawat4l/local-file-sharer.git lfs
+git clone https://github.com/Erawat4l/local-file-sharer.git lfs
 cd lfs
 ./run
 ```
@@ -183,7 +183,7 @@ reinstalls the package in place instead of failing.
 
 ```bash
 pkg update && pkg install python git
-pipx install "local-file-sharer @ git+https://github.com/Erawat4l/local-file-sharer.git@arena/d7f4713b-local-file-sharer"
+pipx install "local-file-sharer @ git+https://github.com/Erawat4l/local-file-sharer.git"
 termux-setup-storage   # once, so the picker can read /sdcard
 lfs                    # ← the command is `lfs`, not `start`
 ```
@@ -202,15 +202,15 @@ function + completions when fish is present.
 ### Linux / macOS
 
 ```bash
-pipx install "local-file-sharer @ git+https://github.com/Erawat4l/local-file-sharer.git@arena/d7f4713b-local-file-sharer"
+pipx install "local-file-sharer @ git+https://github.com/Erawat4l/local-file-sharer.git"
 ```
 
 Prefer doing it by hand? It is **not on PyPI yet**, so point pip at the repo:
 
 ```bash
-pipx install "local-file-sharer @ git+https://github.com/Erawat4l/local-file-sharer.git@arena/d7f4713b-local-file-sharer"
+pipx install "local-file-sharer @ git+https://github.com/Erawat4l/local-file-sharer.git"
 # or
-python3 -m pip install --user "local-file-sharer @ git+https://github.com/Erawat4l/local-file-sharer.git@arena/d7f4713b-local-file-sharer"
+python3 -m pip install --user "local-file-sharer @ git+https://github.com/Erawat4l/local-file-sharer.git"
 ```
 
 On Debian/Ubuntu the system Python is "externally managed" (PEP 668); a
@@ -231,7 +231,7 @@ token", not "wrong path".
 To fetch it anyway, read it through the API with an authenticated `gh`:
 
 ```bash
-gh api "repos/Erawat4l/local-file-sharer/contents/install-lfs.py?ref=arena/d7f4713b-local-file-sharer" \
+gh api "repos/Erawat4l/local-file-sharer/contents/install-lfs.py" \
        -H "Accept: application/vnd.github.raw" > install-lfs.py
 python3 install-lfs.py
 ```
@@ -245,7 +245,7 @@ this file is all a new person needs.
 ### Windows
 
 ```powershell
-pipx install "local-file-sharer @ git+https://github.com/Erawat4l/local-file-sharer.git@arena/d7f4713b-local-file-sharer"
+pipx install "local-file-sharer @ git+https://github.com/Erawat4l/local-file-sharer.git"
 ```
 
 The PowerShell installer:
@@ -276,15 +276,13 @@ frozen build.
 ### From source
 
 ```bash
-git clone -b arena/d7f4713b-local-file-sharer https://github.com/Erawat4l/local-file-sharer.git
+git clone https://github.com/Erawat4l/local-file-sharer.git
 cd local-file-sharer
 python3 -m venv .venv && . .venv/bin/activate
 pip install -e ".[dev]"
 lfs --help
 ```
 
-The branch is not decoration: `main` still holds the initial commit only, so a
-plain clone gives you a README and nothing else.
 
 ---
 
@@ -294,7 +292,7 @@ Short version: **make the repository public, then the one file is enough.**
 
 ```bash
 # what a stranger does once the repo is public
-curl -LO https://github.com/Erawat4l/local-file-sharer/raw/arena/d7f4713b-local-file-sharer/install-lfs.py
+curl -LO https://github.com/Erawat4l/local-file-sharer/raw/main/install-lfs.py
 python3 install-lfs.py
 ```
 

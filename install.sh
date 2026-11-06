@@ -2,14 +2,15 @@
 # ─────────────────────────────────────────────────────────────────────────────
 #  local-file-sharer · one-line installer for Termux, Linux and macOS
 #
-#    pipx install "local-file-sharer @ git+https://github.com/Erawat4l/local-file-sharer.git@arena/d7f4713b-local-file-sharer"
+#    pipx install "local-file-sharer @ git+https://github.com/Erawat4l/local-file-sharer.git@main"
 #
-#    …or run this script directly. NOTE: the raw file host 404s while the
-#    repository is private, so `curl …/raw.githubusercontent.com/… | bash` fails
-#    with "curl: (22) … error: 404". Read it through the API instead
-#    (authenticated):
+#    …or run this script directly. While the repository is private the raw file
+#    host 404s, so `curl …/raw.githubusercontent.com/… | bash` fails with
+#    "curl: (22) … error: 404". Read it through the API instead (authenticated),
+#    into a file:
 #
-#    gh api "repos/Erawat4l/local-file-sharer/contents/install.sh?ref=arena/d7f4713b-local-file-sharer" -H "Accept: application/vnd.github.raw" | bash
+#    gh api "repos/Erawat4l/local-file-sharer/contents/install.sh" \
+#           -H "Accept: application/vnd.github.raw" > install.sh && bash install.sh
 #
 #  What it does
 #    1. detects Termux / Linux / macOS and the Python version
@@ -28,11 +29,9 @@
 set -euo pipefail
 
 REPO_SLUG="Erawat4l/local-file-sharer"
-# The package lives on this branch, not on `main` — `main` holds only a stub
-# README, so installing from it fails with "neither 'setup.py' nor
-# 'pyproject.toml' found". Override with LFS_BRANCH=… when a newer branch is
-# ahead.
-BRANCH="${LFS_BRANCH:-arena/d7f4713b-local-file-sharer}"
+# `main` is the release branch. Override with LFS_BRANCH=… to install from a
+# branch under development.
+BRANCH="${LFS_BRANCH:-main}"
 RAW_BASE="https://raw.githubusercontent.com/${REPO_SLUG}/${BRANCH}"
 APP="local-file-sharer"
 VERSION="1.0.0"
