@@ -123,7 +123,27 @@ scrollback, and a live dashboard with speed, ETA, progress, devices and total se
 > Requirements: **Python 3.9+**. Everything else is optional (`aria2c`,
 > `tailscale`, `cloudflared` unlock extra features).
 
-### Clone and run (simplest)
+### One file (no git, no URL to type)
+
+Download `install-lfs.py` and run it:
+
+```bash
+python3 install-lfs.py
+```
+
+It unpacks a complete checkout to `~/local-file-sharer`, builds its own
+virtualenv there and starts the app. Afterwards:
+
+```bash
+cd ~/local-file-sharer && ./run            # start
+cd ~/local-file-sharer && ./run upgrade    # update
+```
+
+Useful when the repository is private (cloning then needs a login) or when a
+terminal font makes `Erawat4l` hard to type — its last character is a lowercase
+**L**, not a digit.
+
+### Clone and run
 
 ```bash
 git clone -b arena/d7f4713b-local-file-sharer https://github.com/Erawat4l/local-file-sharer.git lfs
@@ -137,7 +157,7 @@ it is `rm -rf .venv`, and every run after the first goes straight to the app.
 
 ```bash
 ./run                 # set up if needed, then start lfs
-./run setup           # set up only
+./setup               # same as ./run setup
 ./run upgrade         # git pull, then re-install
 ./run doctor          # check dependencies and network
 ./run ~/Downloads     # any arguments go to lfs
