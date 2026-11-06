@@ -343,8 +343,21 @@ def test_install_links_this_checkout_and_warns_about_a_stale_one(checkout, tmp_p
     it must say when another lfs still shadows it.
     """
     source = (checkout / "run").read_text(encoding="utf-8")
-    assert "another lfs is earlier on PATH" in source
     assert "install|link" in source
+    assert "your shell still runs a different lfs" in source
+
+
+def test_install_points_the_winning_copy_at_this_checkout(checkout):
+    """Linking into $PREFIX/bin changed nothing on Termux.
+
+    `~/bin/lfs` came first on PATH, so every command still ran the old copy
+    and every fix since looked like it had not shipped. Linking alone is not
+    enough -- the directory the shell actually picks has to be pointed at this
+    checkout too, or the user has to be told to remove the winner.
+    """
+    source = (checkout / "run").read_text(encoding="utf-8")
+    assert "pointed $first_dir/lfs at this copy" in source
+    assert "your shell now runs this copy" in source
 
 
 def test_a_stale_lfs_is_not_used_by_run(checkout):
