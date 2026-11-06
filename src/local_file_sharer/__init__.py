@@ -10,6 +10,9 @@ from __future__ import annotations
 __version__ = "1.0.0"
 __author__ = "Erawat4l"
 APP_NAME = "LOCAL FILE SHARER"
+#: The name as the banner writes it: the gif says "local-file-sharer v1.0.0",
+#: while menus and reports use APP_NAME. Both are deliberate.
+APP_SLUG = "local-file-sharer"
 #: The command users type. Kept in one place because it appears in ~30 hints.
 APP_CMD = "lfs"
 APP_TAGLINE = "Share files between your devices at maximum speed"
@@ -24,6 +27,7 @@ REPO_URL = f"https://github.com/{REPO_SLUG}"
 __all__ = [
     "APP_CMD",
     "APP_NAME",
+    "APP_SLUG",
     "APP_TAGLINE",
     "REPO_SLUG",
     "REPO_URL",
