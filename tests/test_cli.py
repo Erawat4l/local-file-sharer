@@ -11,6 +11,7 @@ from local_file_sharer.cli import (
     build_command_parsers,
     build_parser,
     main,
+    normalise_options,
     resolve_subcommand,
     split_argv,
 )
@@ -393,3 +394,46 @@ def test_a_missing_dot_slash_path_keeps_the_share_error(capsys):
     out = capsys.readouterr().out
     assert code == 2
     assert "Nothing to share" in out
+
+
+# ── one dash where two are needed ───────────────────────────────────────────
+@pytest.mark.parametrize(
+    ("typed", "expected"),
+    [
+        (["upgrade", "-ref", "main"], ["upgrade", "--ref", "main"]),
+        (["doctor", "-fix-copies"], ["doctor", "--fix-copies"]),
+        (["upgrade", "-verbose"], ["upgrade", "--verbose"]),
+        (["-no-qr", "x"], ["--no-qr", "x"]),
+    ],
+)
+def test_a_single_dash_long_option_is_repaired(typed, expected):
+    """`lfs upgrade -ref main` failed with "unrecognized arguments" and dumped
+    the whole usage block, because -ref has one dash and argparse only allows
+    that for one-letter flags. It is the easiest typo in the world."""
+    assert normalise_options(typed) == expected
+
+
+@pytest.mark.parametrize(
+    "untouched",
+    [
+        ["-p", "9000"],      # a real short option
+        ["-V"],              # a real one-letter flag
+        ["--ref", "main"],   # already correct
+        ["-xyz"],            # no such option: leave it to fail loudly
+        ["-1"],              # not a letter
+        ["movie.mp4"],
+        [],                  # nothing to do
+    ],
+)
+def test_option_repair_does_not_touch_anything_else(untouched):
+    assert normalise_options(untouched) == untouched
+
+
+def test_the_repaired_option_actually_parses():
+    """End to end: the command from the bug report must reach the parser."""
+    args = build_command_parsers()["upgrade"].parse_args(normalise_options(["-ref", "main"]))
+    assert args.ref == "main"
+
+
+def test_everything_after_a_double_dash_is_left_alone():
+    assert normalise_options(["--", "-ref"]) == ["--", "-ref"]
