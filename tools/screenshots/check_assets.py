@@ -80,6 +80,17 @@ def uncovered_emoji() -> list[str]:
         print(f"! skipping the emoji check ({exc.name} is not installed)")
         return []
 
+    # The Twemoji tree is gitignored (4009 SVG files, MIT/CC-BY, fetched by
+    # hand). Without saying so, this check reported every glyph in the menu as
+    # tofu on a clean clone -- which is most of them -- and CI failed on a
+    # checkout that simply does not contain the inputs. Absent inputs are a
+    # skip, not a defect: the PNGs are committed and check_assets cannot
+    # regenerate them anyway.
+    if not termsvg.TWEMOJI.exists():
+        print(f"! skipping the emoji check ({termsvg.TWEMOJI} is not present —")
+        print("  it is gitignored; see tools/screenshots/README.md)")
+        return []
+
     from local_file_sharer.menu import ACTIONS  # noqa: PLC0415
 
     glyphs: set[str] = {"\U0001f4bb", "\U0001f4f1", "\U0001f680", "\u2705", "\u26a0"}

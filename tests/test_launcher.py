@@ -22,7 +22,20 @@ import pytest
 REPO = Path(__file__).resolve().parents[1]
 RUN = REPO / "run"
 
-pytestmark = pytest.mark.skipif(not RUN.exists(), reason="launcher lives at the repo root")
+#: `run` is a POSIX shell script, invoked here through /bin/sh (the tests drive
+#: it with `sh -c` semantics, PATH tricks and shell quoting). Windows has no
+#: /bin/sh, so every one of these errored there instead of skipping -- which is
+#: what turned the whole Windows matrix red. The launcher is not part of the
+#: Windows story anyway: install.ps1 is.
+POSIX_ONLY = pytest.mark.skipif(
+    os.name != "posix" or not Path("/bin/sh").exists(),
+    reason="the launcher is a POSIX shell script tested through /bin/sh",
+)
+
+pytestmark = [
+    pytest.mark.skipif(not RUN.exists(), reason="launcher lives at the repo root"),
+    POSIX_ONLY,
+]
 
 
 @pytest.fixture

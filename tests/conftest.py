@@ -45,6 +45,19 @@ def share_tree(tmp_path: Path) -> Path:
     return root
 
 
+def make_symlink(link: Path, target: Path) -> None:
+    """Create a symlink, or skip the test where the platform forbids it.
+
+    Windows needs Developer Mode or admin rights for symlinks, so these tests
+    raised ``OSError: [WinError 1314]`` in CI rather than skipping -- one of the
+    reasons the whole Windows matrix was red.
+    """
+    try:
+        link.symlink_to(target)
+    except (OSError, NotImplementedError) as exc:  # pragma: no cover - platform specific
+        pytest.skip(f"this platform cannot create symlinks: {exc}")
+
+
 @pytest.fixture
 def free_port() -> int:
     with socket.socket() as sock:
