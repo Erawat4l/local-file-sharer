@@ -78,6 +78,25 @@
   .playing .artwork .disc{animation-play-state:running}
   @keyframes spin{to{transform:rotate(360deg)}}
   .artwork h2{margin:0;font-size:17px}
+  /* A file this browser cannot decode: say so on the picture itself. The old
+     behaviour was a black rectangle with a Play button that did nothing and a
+     toast that vanished after 1.6s — indistinguishable from a broken app. */
+  .unsupported{position:absolute;inset:0;display:none;flex-direction:column;
+    align-items:center;justify-content:center;text-align:center;padding:26px;
+    gap:10px;background:#050505;overflow-y:auto}
+  .unsupported.show{display:flex}
+  .unsupported .glyph{width:56px;height:56px;margin:0 auto 4px;border-radius:16px;
+    display:grid;place-items:center;border:1px solid var(--line);background:#0d0d0d}
+  .unsupported h2{margin:0;font-size:16px;font-weight:600}
+  .unsupported p{margin:0;color:var(--dim);font-size:13px;line-height:1.55;max-width:34ch}
+  .unsupported .why{margin-top:2px;font-family:var(--mono);font-size:11px;color:var(--faint)}
+  .unsupported .acts{display:flex;gap:9px;justify-content:center;flex-wrap:wrap;margin-top:8px}
+  .unsupported a.act,.unsupported button.act{display:inline-flex;align-items:center;gap:7px;
+    padding:9px 15px;border-radius:10px;border:1px solid var(--line);background:#111;
+    color:var(--text);text-decoration:none;font-size:13px;font-weight:600;
+    font-family:inherit;cursor:pointer}
+  .unsupported a.act:hover,.unsupported button.act:hover{background:#1a1a1a}
+  .unsupported a.act.primary{background:#fff;color:#000;border-color:#fff}
   .artwork p{margin:6px 0 0;color:var(--faint);font-family:var(--mono);font-size:12px}
 
   /* custom controls */
@@ -163,6 +182,19 @@
         <div class="disc"><svg viewBox="0 0 24 24" width="54" height="54" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V6l10-2v12"/><circle cx="6" cy="18" r="3"/><circle cx="16" cy="16" r="3"/></svg></div>
         <h2>{{file_name}}</h2>
         <p>{{mime}} · {{size}}</p>
+      </div>
+      <div class="unsupported" id="unsupported">
+        <div class="glyph"><svg viewBox="0 0 24 24" width="26" height="26" fill="none"
+             stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true">
+          <path d="M12 9v4M12 16.5v.5"/><circle cx="12" cy="12" r="9"/></svg></div>
+        <h2 id="unsupported-title">This browser cannot decode this file</h2>
+        <p id="unsupported-body">The file itself is fine. Download it and play it
+           locally — the transfer is lossless either way.</p>
+        <p class="why" id="unsupported-why"></p>
+        <div class="acts">
+          <a class="act primary" id="unsupported-dl" href="{{download_url}}" download>Download</a>
+          <button class="act" id="unsupported-retry" type="button">Try anyway</button>
+        </div>
       </div>
     </div>
 
@@ -283,7 +315,79 @@
     const end = v.buffered.end(v.buffered.length - 1);
     document.getElementById('buffered').textContent = Math.round((end / v.duration) * 100) + '%';
   });
-  v.addEventListener('error', () => toast('This codec cannot be previewed — download it instead'));
+  // ── when this browser cannot decode the file ──────────────────────────────
+  // MKV/HEVC/DivX are ordinary formats that Chrome and Safari refuse. The old
+  // handler flashed a toast for 1.6s and left a black rectangle, which reads as
+  // "the app is broken". Show a panel that names the codec and offers a way out.
+  const CODEC_NAMES = {
+    hevc: 'HEVC / H.265', h265: 'HEVC / H.265', x265: 'HEVC / H.265',
+    h264: 'H.264 / AVC', avc1: 'H.264 / AVC', x264: 'H.264 / AVC',
+    av1: 'AV1', av01: 'AV1', vp9: 'VP9', vp8: 'VP8',
+    mpeg4: 'MPEG-4 Part 2 (DivX/XviD)', xvid: 'MPEG-4 Part 2 (DivX/XviD)',
+  };
+  const containerName = () => {
+    const ext = (mime.split('/')[1] || '').toLowerCase();
+    return { 'x-matroska': 'MKV', mp4: 'MP4', quicktime: 'MOV',
+             'x-msvideo': 'AVI', webm: 'WebM', ogg: 'OGG' }[ext] || ext.toUpperCase();
+  };
+  // Ask the element what it can decode rather than guessing from the extension:
+  // every phone records HEVC, and a MOV of H.264 plays fine.
+  const codecHint = () => {
+    const probes = [
+      ['hevc', 'video/mp4; codecs="hvc1.1.6.L93.B0"'],
+      ['hevc', 'video/mp4; codecs="hev1.1.6.L93.B0"'],
+      ['av1', 'video/mp4; codecs="av01.0.05M.08"'],
+      ['h264', 'video/mp4; codecs="avc1.42E01E"'],
+    ];
+    return probes
+      .filter(([, type]) => v.canPlayType(type))
+      .map(([name]) => CODEC_NAMES[name] || name)
+      .join(' / ');
+  };
+  // HEVC is the common one: phones record it and many browsers refuse it, so
+  // name the codec rather than mumbling "this format".
+  const OFFENDERS = { mp4: 'HEVC / H.265', 'x-matroska': 'HEVC or DivX',
+                      'x-msvideo': 'DivX / XviD', quicktime: 'HEVC / H.265' };
+  const showUnsupported = () => {
+    const why = document.getElementById('unsupported-why');
+    const native = codecHint();
+    const ext = (mime.split('/')[1] || '').toLowerCase();
+    if (native) {
+      why.textContent = `likely ${OFFENDERS[ext] || 'an unsupported codec'} — this browser plays ${native}`;
+    } else {
+      why.textContent = `${containerName()} · ${mime}`;
+    }
+    document.getElementById('unsupported').classList.add('show');
+    document.getElementById('unsupported-body').hidden = false;
+    stage.classList.remove('playing');
+    playBtn.querySelector('span').textContent = 'Play';
+    // the seek bar cannot move if there is nothing to seek
+    seek.disabled = true;
+  };
+  const hideUnsupported = () => {
+    document.getElementById('unsupported').classList.remove('show');
+    seek.disabled = false;
+  };
+  v.addEventListener('loadedmetadata', () => hideUnsupported());
+  v.addEventListener('error', () => {
+    // MEDIA_ERR_SRC_NOT_SUPPORTED (4) is the codec case; anything else is a
+    // network or decode problem and gets its own wording.
+    const code = v.error ? v.error.code : 0;
+    showUnsupported();
+    if (code !== 4) {
+      document.getElementById('unsupported-title').textContent = 'Playback failed';
+      document.getElementById('unsupported-body').textContent =
+        'The stream stopped or was interrupted. Reload to try again, or download the file.';
+      document.getElementById('unsupported-retry').hidden = true;
+    }
+    toast('This browser cannot play this format');
+  });
+  // "Try anyway": some browsers report a failure the file does not have.
+  document.getElementById('unsupported-retry').addEventListener('click', () => {
+    hideUnsupported();
+    v.load();
+    v.play().catch(() => showUnsupported());
+  });
 
   // ── seek preview: show the time under the cursor before committing ─────────
   const seekTip = document.getElementById('seek-tip');

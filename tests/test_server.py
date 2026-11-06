@@ -1111,3 +1111,117 @@ def test_the_player_also_scrolls_the_document():
     assert "body{min-height:100dvh;overflow-y:auto" not in player, "body must not scroll"
     assert "html{overflow-y:auto" in player
     assert "-webkit-overflow-scrolling:touch" in player
+
+
+# ── media rows must reach the player, not start a download ───────────────────
+@pytest.fixture
+def media_server(share_tree: Path, free_port: int):
+    """A shared folder holding a video, so /d/<id> actually lists rows."""
+    folder = share_tree / "history"
+    folder.mkdir()
+    (folder / "movie.mp4").write_bytes(b"\0" * 4096)
+    (folder / "song.mp3").write_bytes(b"\0" * 2048)
+    (folder / "notes.txt").write_text("plain\n", encoding="utf-8")
+    manifest = Manifest.build([folder], mode="serve")
+    srv = ShareServer(manifest, host="127.0.0.1", port=free_port)
+    srv.start()
+    assert srv.wait_until_ready(timeout=5)
+    yield srv, manifest.items[0].item_id
+    srv.stop()
+
+
+def _rows(body: str) -> list[tuple[str, str, str]]:
+    """``(href, kind, data-dl)`` for every row on a browser page."""
+    out = []
+    for tag in re.findall(r"<a class=\"row\"[^>]*>", body):
+        href = re.search(r'href="([^"]+)"', tag)
+        kind = re.search(r'data-kind="([^"]+)"', tag)
+        dl = re.search(r'data-dl="([^"]+)"', tag)
+        if href and kind:
+            out.append((href.group(1), kind.group(1), dl.group(1) if dl else ""))
+    return out
+
+
+def test_a_video_row_inside_a_folder_links_to_the_player(media_server):
+    """Folder browsing is where people actually pick a movie.
+
+    Every row used to point at /f/<id>, the raw bytes, so tapping a video in a
+    folder started a download and the player was unreachable from there.
+    """
+    server, item_id = media_server
+    rows = _rows(get(server, "/d/" + item_id).read().decode())
+    video = [row for row in rows if row[1] == "video"]
+    assert video, f"expected a video row, got {rows}"
+    for href, _kind, _dl in video:
+        assert href.startswith("/s/"), f"video row points at {href}, which downloads"
+
+
+def test_an_audio_row_inside_a_folder_links_to_the_player(media_server):
+    server, item_id = media_server
+    rows = _rows(get(server, "/d/" + item_id).read().decode())
+    audio = [row for row in rows if row[1] == "audio"]
+    assert audio
+    for href, _kind, _dl in audio:
+        assert href.startswith("/s/")
+
+
+def test_the_media_row_keeps_a_download_url(media_server):
+    """The ↓ cell is the escape hatch: getting the file copy stays one tap."""
+    server, item_id = media_server
+    rows = _rows(get(server, "/d/" + item_id).read().decode())
+    for _href, kind, dl in rows:
+        assert dl.startswith("/f/"), f"{kind} row lost its download URL"
+
+
+def test_a_text_row_still_downloads(media_server):
+    """Only media opens a player; everything else keeps the old behaviour."""
+    server, item_id = media_server
+    rows = _rows(get(server, "/d/" + item_id).read().decode())
+    text = [row for row in rows if row[1] in ("text", "file")]
+    assert text
+    for href, kind, _dl in text:
+        assert href.startswith("/f/"), f"{kind} row should download, not open a player"
+
+
+def test_the_player_explains_an_undecodable_file(media_server):
+    """A black rectangle reads as "the app is broken", so the player must talk.
+
+    HEVC is what every modern phone records and most browsers refuse; the old
+    page flashed a toast for 1.6 seconds and then looked dead.
+    """
+    server, item_id = media_server
+    rows = _rows(get(server, "/d/" + item_id).read().decode())
+    href = next(href for href, kind, _ in rows if kind == "video")
+    body = get(server, href).read().decode()
+    assert 'id="unsupported"' in body
+    assert "cannot decode" in body
+    # the panel needs a working way out
+    assert 'id="unsupported-dl"' in body
+    assert "Try anyway" in body
+    # and it must ask the browser which codecs it has, instead of guessing
+    assert "canPlayType" in body
+    assert "HEVC" in body
+
+
+def test_a_media_card_opens_the_player(share_tree, free_port):
+    """The card body was a dead <div>: only the small buttons did anything.
+
+    Cards (as opposed to rows) are what the landing page of a normal download
+    share shows, so this is the first thing most people tap.
+    """
+    folder = share_tree / "media"
+    folder.mkdir()
+    (folder / "movie.mp4").write_bytes(b"\0" * 4096)
+    (folder / "notes.txt").write_text("plain\n", encoding="utf-8")
+    manifest = Manifest.build([folder])  # download mode -> cards
+    server = ShareServer(manifest, host="127.0.0.1", port=free_port)
+    server.start()
+    try:
+        assert server.wait_until_ready(timeout=5)
+        body = get(server, "/").read().decode()
+        linked = re.findall(r'<a class="card-main" href="(/s/[^"]+)"', body)
+        assert linked, "no media card body links to the player"
+        # a text file has no player, so its body must not point at one
+        assert body.count('class="card-main"') > len(linked)
+    finally:
+        server.stop()

@@ -766,8 +766,13 @@ class ShareRequestHandler(BaseHTTPRequestHandler):
         kind = entry.kind
         size = entry.size_text
         icon = _icon_for(entry)
+        # A video or audio row opens the player, not the raw file. Linking to
+        # /f/ made every movie inside a folder start a download on tap — the
+        # browser has no reason to render raw bytes it was told to save. The
+        # explicit download control stays on the row for people who want the file.
+        target = f"/s/{entry.file_id}" if kind in ("video", "audio") else f"/f/{entry.file_id}"
         return (
-            f'<a class="row" href="/f/{entry.file_id}" data-kind="{kind}" '
+            f'<a class="row" href="{target}" data-kind="{kind}" '
             f'data-dl="/f/{entry.file_id}" data-name="{html.escape(entry.rel.split("/")[-1])}">'
             f'<span class="row-icon">{icon}</span>'
             f'<span class="row-name" title="{html.escape(entry.rel)}">{html.escape(entry.rel.split("/")[-1])}</span>'
@@ -1508,14 +1513,20 @@ def _entry_cards(manifest, *, level: str = "", page: int = 1) -> tuple[list[str]
         )
     for entry in window_loose:
         label = entry.rel.split("/")[-1]
+        # The card body is dead on a file: folder cards link somewhere, file
+        # cards had no anchor at all, so tapping the name did nothing. A video
+        # or audio name opens the player; anything else keeps the buttons.
+        playable = entry.kind in ("video", "audio")
+        main = f'<a class="card-main" href="/s/{entry.file_id}">' if playable else '<div class="card-main">'
+        close = "</a>" if playable else "</div>"
         cards.append(
             f'<article class="card file" data-kind="{_filter_kind(entry.path)}" data-id="{entry.file_id}" '
             f'data-name="{html.escape(label.lower())}" '
             f'data-dl="/f/{entry.file_id}" data-filename="{html.escape(label)}">'
             f'<div class="card-icon">{_icon_for(entry)}</div>'
-            f'<div class="card-main"><h3 title="{html.escape(label)}">'
+            f'{main}<h3 title="{html.escape(label)}">'
             f"{html.escape(label)}</h3>"
-            f"<p>{entry.size_text} · {html.escape(kind_of(entry.path))}</p></div>"
+            f"<p>{entry.size_text} · {html.escape(kind_of(entry.path))}</p>{close}"
             f'<div class="card-actions">'
             f'<a class="btn btn-ghost" href="/f/{entry.file_id}" download="{html.escape(label)}">Download</a>'
             f'<a class="btn btn-ghost" href="/s/{entry.file_id}">Stream</a>'

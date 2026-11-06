@@ -165,7 +165,13 @@
     row.prepend(cb);
     // A folder has two jobs: open it, and download it as a zip. The name opens
     // it (that is what a folder name means everywhere else); the ↓ cell on the
-    // right downloads it. A file row downloads wherever you click.
+    // right downloads it.
+    //
+    // A video or audio row opens the player instead of saving. Downloading on
+    // tap made every movie inside a folder unusable — there was no way to reach
+    // the player from a folder at all. The ↓ cell is still the download button,
+    // so getting the file copy is one tap away.
+    const plays = ['video', 'audio'].includes(row.dataset.kind);
     row.addEventListener('click', (e) => {
       if (e.target.closest('.pick') || e.target === cb) return;
       if (e.target.closest('.row-get')) {
@@ -176,6 +182,7 @@
         return;
       }
       if (row.classList.contains('folder')) return;   // the name opens the folder
+      if (plays) return;                              // follow the href to the player
       e.preventDefault();
       saveRow(row);
     });

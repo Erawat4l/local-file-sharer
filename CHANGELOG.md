@@ -8,6 +8,13 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 ## [Unreleased]
 
 ### Fixed
+- Videos and audio inside a folder now open the player instead of downloading.
+  Every row pointed at the raw bytes, so opening a movie from a folder saved it.
+- A file this browser cannot decode — HEVC, which is what most phones record,
+  and DivX — showed a black rectangle with a dead Play button and a toast that
+  vanished after 1.6s. The player now names the codec and offers Download.
+- The file card body on the landing page was a dead `<div>`; media cards open
+  the player when tapped.
 - `lfs upgrade` installed nothing, silently, on every run after the first. pip
   compared version numbers, every commit of this package reports the same one,
   so it called the requirement already satisfied and exited 0. The install is
