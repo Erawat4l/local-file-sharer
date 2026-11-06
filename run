@@ -104,28 +104,102 @@ need_python() {
 }
 
 # ── 2. set up the virtualenv ────────────────────────────────────────────────
+# Is there a working pip inside the venv? An interrupted or failed venv leaves
+# .venv/bin/python behind with no pip, and reusing that fails later with the
+# unhelpful "No module named pip".
+venv_has_pip() {
+    [ -x "$PY" ] && "$PY" -m pip --version >/dev/null 2>&1
+}
+
+# The venv module without ensurepip: Termux ships pip as a separate package and
+# has no ensurepip at all, so `python -m venv` makes a venv that cannot install
+# anything. --without-pip is what works there.
+venv_without_ensurepip() {
+    "$py" -c 'import sys, venv, ensurepip' >"$SCRATCH"/venv-probe 2>&1
+}
+
+# Last resort: pip runs, but only from outside the venv.
+bootstrap_pip() {
+    step "repairing pip inside .venv"
+    if "$PY" -m ensurepip --upgrade >"$SCRATCH"/bootstrap 2>&1; then
+        return 0
+    fi
+    if [ -f "$py_home/get-pip.py" ]; then
+        if "$PY" "$py_home/get-pip.py" --quiet >"$SCRATCH"/bootstrap 2>&1; then
+            return 0
+        fi
+    fi
+    return 1
+}
+
+make_venv() {
+    if venv_without_ensurepip; then
+        "$py" -m venv "$VENV" >"$SCRATCH"/venv-out 2>&1
+        return $?
+    fi
+    # No ensurepip. If this Python has pip, borrow it: --system-site-packages
+    # lets the venv import the system pip and install into the venv itself.
+    if "$py" -m pip --version >/dev/null 2>&1; then
+        warn "this Python has no ensurepip — borrowing its pip instead"
+        rm -rf "$VENV"
+        "$py" -m venv --without-pip --system-site-packages "$VENV" >"$SCRATCH"/venv-out 2>&1 \
+            && [ -x "$PY" ] && return 0
+    fi
+    "$py" -m venv --without-pip "$VENV" >"$SCRATCH"/venv-out 2>&1
+}
+
 setup() {
     need_python
+    py_home=$("$py" -c 'import sysconfig; print(sysconfig.get_path("stdlib"))' 2>/dev/null || echo "")
+
+    # A venv that cannot pip is not a venv. Remake it rather than failing in a
+    # later step with "No module named pip".
+    if [ -d "$VENV" ] && ! venv_has_pip; then
+        warn "found a broken .venv (no pip) — recreating it"
+        rm -rf "$VENV"
+    fi
 
     if [ ! -x "$PY" ]; then
         step "creating .venv with $("$py" --version 2>&1)"
-        if ! "$py" -m venv "$VENV" >"$SCRATCH"/venv-out 2>&1; then
+        if ! make_venv; then
             msg=$(cat "$SCRATCH"/venv-out 2>/dev/null || true)
-            rm -f "$SCRATCH"/venv-out
-            # Debian and Ubuntu ship venv as a separate package, and the error
-            # ("ensurepip is not available") does not name it.
+            rm -f "$SCRATCH"/venv-out "$SCRATCH"/venv-probe
             case "$msg" in
                 *ensurepip*|*python3-venv*|*"No module named venv"*)
-                    die "this Python is missing the venv module.
-  Debian/Ubuntu: sudo apt install python3-venv
-  Termux       : pkg install python   (it includes venv)
-  Fedora       : sudo dnf install python3" ;;
-                *) die "could not create .venv
+                    die "this Python cannot create a virtualenv.
+  Termux  : pkg install python          (includes venv and pip)
+  Debian  : sudo apt install python3-venv
+  Fedora  : sudo dnf install python3
+  macOS   : brew install python3" ;;
+                *"No module named pip"*)
+                    die "the virtualenv was created without pip.
+  Termux  : pkg install python          (provides pip)
+  Debian  : sudo apt install python3-venv python3-pip" ;;
+                *)
+                    die "could not create .venv
 $msg" ;;
             esac
         fi
-        rm -f "$SCRATCH"/venv-out
+        rm -f "$SCRATCH"/venv-out "$SCRATCH"/venv-probe
         ok "created .venv"
+    fi
+
+    # Still no pip after all that (a venv made earlier by another tool, or a
+    # broken one we could not see). Fix it here, where the message is honest.
+    if ! venv_has_pip; then
+        if ! bootstrap_pip; then
+            msg=$(cat "$SCRATCH"/bootstrap 2>/dev/null || true)
+            rm -f "$SCRATCH"/bootstrap
+            {
+                printf '%s\n' "the virtualenv has no pip and it could not be repaired."
+                printf '%s\n' "$msg"
+                printf '%s\n' "  Termux  : pkg install python"
+                printf '%s\n' "  then    : rm -rf .venv && ./run"
+            } >&2
+            exit 1
+        fi
+        rm -f "$SCRATCH"/bootstrap
+        ok "pip repaired"
     fi
 
     # Editable install, so `git pull` is the whole upgrade path. Re-run only
