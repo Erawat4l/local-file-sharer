@@ -177,6 +177,22 @@ Termux also has no `/tmp` — `run` keeps its error output in `.lfs-tmp` inside
 the checkout — and if pip is missing anyway, `run` offers to install
 `python-pip` for you (skip that with `LFS_NO_AUTOINSTALL=1`).
 
+One more Termux trap, because it is common and looks nothing like its cause: if
+the interpreter's own C extensions are mismatched, every install fails from deep
+inside pip with `dlopen failed: cannot locate symbol "XML_GetCurrentLineNumber64"`.
+That is `libexpat` being older than the `python` package that links against it,
+and `run` now says so instead of letting pip print 64 lines about build
+dependencies. The fix is always:
+
+```bash
+pkg update && pkg upgrade
+pkg install --reinstall libexpat python
+```
+
+Third-party repositories (anything in `pkg` output that is not
+`packages-cf.termux.dev`) can cause exactly this by shadowing the official
+`libexpat`; `pkg list-installed | grep expat` shows which build is in use.
+
 The first `./run` creates a `.venv` inside the checkout, installs rich and
 qrcode into it, and starts `lfs`. Nothing is installed system-wide, so removing
 it is `rm -rf .venv`, and every run after the first goes straight to the app.
