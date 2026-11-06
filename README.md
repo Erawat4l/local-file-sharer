@@ -29,6 +29,7 @@ saturates your Wi-Fi. Works on **Termux/Android**, **Linux**, **macOS** and **Wi
 - [Demo](#demo)
 - [Features](#features)
 - [Install](#install)
+  - [If you just want it running](#if-you-just-want-it-running)
   - [The three commands](#the-three-commands)
   - [One file (no git, no URL to type)](#one-file-no-git-no-url-to-type)
   - [Termux (Android)](#termux-android)
@@ -126,22 +127,47 @@ scrollback, and a live dashboard with speed, ETA, progress, devices and total se
 > Requirements: **Python 3.9+**. Everything else is optional (`aria2c`,
 > `tailscale`, `cloudflared` unlock extra features).
 
-> **Two ways in, and they are not the same.** With a login (a `git` clone, or
-> the one file, which you can only download while logged in) everything works.
-> Without one — a friend, a borrowed laptop, a phone with no token — this
-> repository is **private**, so there is nothing to download and nothing to
-> clone. That is a repository setting, not an app limitation: making it public
-> is the switch that opens it to everyone, and `install-lfs.py` then works for
-> any visitor. See [What a new person needs](#what-a-new-person-needs).
+### If you just want it running
+
+One command, no git, nothing to type from memory:
+
+```bash
+python3 -c "import urllib.request;urllib.request.urlretrieve('https://github.com/Erawat4l/local-file-sharer/raw/main/install-lfs.py','install-lfs.py')" && python3 install-lfs.py
+```
+
+It unpacks a complete copy to `~/local-file-sharer`, builds it, and leaves you
+with the `lfs` command. Then, once:
+
+```bash
+lfs configure     # port, PIN, theme, starting folder (Enter accepts each default)
+lfs               # the menu
+```
 
 ### The three commands
 
-This is the install. Clone it, go in, install it.
+Prefer a checkout you can `git pull`? Clone it, go in, install it.
 
 ```bash
 git clone https://github.com/Erawat4l/local-file-sharer.git
 cd local-file-sharer
 ./run install
+```
+
+Both routes end the same way: one command, `lfs`, that works from any
+directory. `./run install` links it into a directory that is **already on your
+PATH** (`~/.local/bin` or `~/bin`, whichever your shell searches), so there is
+no PATH editing afterwards.
+
+If neither directory is on your PATH, the installer says so and prints the
+line for your shell — it does not leave you with a successful install and a
+`command not found`:
+
+```text
+! ~/bin is not on PATH, so `lfs` will not be found yet
+  add it for good:
+    fish:  fish_add_path ~/bin
+    bash:  echo 'export PATH="$HOME/bin:$PATH"' >> ~/.bashrc
+  or just run ./run from this folder
 ```
 
 `./run install` builds a private `.venv` in the checkout, downloads `rich` and
@@ -277,9 +303,8 @@ cd ~/local-file-sharer && ./run            # build, then start
 cd ~/local-file-sharer && ./run upgrade    # update
 ```
 
-Useful when the repository is private (cloning then needs a login) or when a
-terminal font makes `Erawat4l` hard to type — its last character is a lowercase
-**L**, not a digit.
+Useful when a terminal font makes `Erawat4l` hard to type — its last character
+is a lowercase **L**, not a digit — or when you would rather not clone.
 
 ### Termux (Android)
 
@@ -292,9 +317,7 @@ lfs                    # ← the command is `lfs`, not `start`
 
 `python-pip` is not optional here: Termux's `python` package provides the
 `venv` module but neither pip nor `ensurepip`, so `pipx` has nothing to work
-with. `pipx` itself comes from `pkg install pipx` if it is missing. `install.sh` also
-works, but while the repository is private it has to be read through the API
-rather than the raw file host (see [Installing from source](#installing-from-source)).
+with. `pipx` itself comes from `pkg install pipx` if it is missing.
 
 If `lfs` is not found immediately, open a new session (the installer adds
 `~/.local/bin` to PATH). `start` is **not** installed — it collides with other
@@ -326,13 +349,9 @@ Flags: `--dev` (editable install from a checkout), `--no-extras`, `--no-fish`,
 
 ### Installing from source
 
-`git+https://…` installs work unauthenticated. The one-line `curl … | bash`
-installer does **not**, because this repository is private: the file host
-(`raw.githubusercontent.com`) answers 404 to any unauthenticated request,
-including one for a file that exists. That 404 means "not readable without a
-token", not "wrong path".
-
-To fetch it anyway, read it through the API with an authenticated `gh`:
+`git+https://…` installs work without a GitHub account. If a network blocks
+`raw.githubusercontent.com`, read the installer through the API instead — it
+serves the same bytes:
 
 ```bash
 gh api "repos/Erawat4l/local-file-sharer/contents/install-lfs.py" \
@@ -392,30 +411,36 @@ lfs --help
 
 ## What a new person needs
 
-Short version: **make the repository public, then the one file is enough.**
+One command, no git, no GitHub account, no token:
 
 ```bash
-# what a stranger does once the repo is public
-curl -LO https://github.com/Erawat4l/local-file-sharer/raw/main/install-lfs.py
-python3 install-lfs.py
+python3 -c "import urllib.request;urllib.request.urlretrieve('https://github.com/Erawat4l/local-file-sharer/raw/main/install-lfs.py','install-lfs.py')" && python3 install-lfs.py
 ```
 
-That is it. No git, no Python packaging knowledge, no token. It unpacks to
-`~/local-file-sharer`, creates a virtualenv there, and starts the app.
+That is the whole install. It unpacks to `~/local-file-sharer`, builds a
+virtualenv, links `lfs` onto a directory already on your PATH, and tells you
+where it went. Afterwards:
 
-While the repository is private, none of that works for anyone but you,
-because GitHub refuses every download and every clone without a credential —
-and answers "Repository not found", which reads as if the project does not
-exist. The three ways to give someone access are:
+```bash
+lfs configure     # once
+lfs               # any time
+```
 
-| Approach | What the other person does | Catch |
-|---|---|---|
-| **Make the repo public** (recommended) | the two commands above | none — this is one setting |
-| Add them as a collaborator | log in to GitHub first | you must add each person by name |
-| Hand them `install-lfs.py` directly | `python3 install-lfs.py` | the file must reach them (USB, chat, a local share) |
+**Requirements:** Python 3.9+ and a network connection for the first run (it
+downloads `rich` and `qrcode` from PyPI). Nothing else. `aria2c`, `tailscale`
+and `cloudflared` are optional and unlock extra features.
 
-The last row is real: the file carries the entire source, so it needs no
-network access to GitHub at all — only PyPI, for `rich` and `qrcode`.
+Verified end to end as an anonymous user — no credentials, clean `HOME`, no
+`PATH` help — because that is the only test that proves an install works for
+someone who is not you.
+
+`install-lfs.py` is also self-contained: it carries the entire source, so if
+`raw.githubusercontent.com` is blocked or you would rather hand someone a file,
+copy it over (USB, chat, a local share) and run `python3 install-lfs.py`. It
+then needs no GitHub access at all — only PyPI.
+
+Prefer a real checkout, so `git pull` and `lfs upgrade` work natively? Use the
+[three commands](#the-three-commands) instead.
 
 ## Updating
 
