@@ -29,6 +29,8 @@ saturates your Wi-Fi. Works on **Termux/Android**, **Linux**, **macOS** and **Wi
 - [Demo](#demo)
 - [Features](#features)
 - [Install](#install)
+  - [The three commands](#the-three-commands)
+  - [One file (no git, no URL to type)](#one-file-no-git-no-url-to-type)
   - [Termux (Android)](#termux-android)
   - [Linux / macOS](#linux--macos)
   - [Windows](#windows)
@@ -131,63 +133,51 @@ scrollback, and a live dashboard with speed, ETA, progress, devices and total se
 > is the switch that opens it to everyone, and `install-lfs.py` then works for
 > any visitor. See [What a new person needs](#what-a-new-person-needs).
 
-### One file (no git, no URL to type)
+### The three commands
 
-Download `install-lfs.py` and run it:
+This is the install. Clone it, go in, install it.
 
 ```bash
-python3 install-lfs.py
+git clone https://github.com/Erawat4l/local-file-sharer.git
+cd local-file-sharer
+./run install
 ```
 
-It unpacks a complete checkout to `~/local-file-sharer`, builds its own
-virtualenv there and starts the app. Afterwards:
+`./run install` builds a private `.venv` in the checkout, downloads `rich` and
+`qrcode`, and links `lfs` onto your PATH — a progress bar runs while it
+downloads, so it never looks frozen. When it finishes, `lfs` works from any
+directory:
 
 ```bash
-cd ~/local-file-sharer && ./run            # start
-cd ~/local-file-sharer && ./run upgrade    # update
+lfs            # the menu
 ```
 
-Useful when the repository is private (cloning then needs a login) or when a
-terminal font makes `Erawat4l` hard to type — its last character is a lowercase
-**L**, not a digit.
+After that, `cd` anywhere you like and type `lfs`. To start the menu without
+touching PATH at all, `./run` from the checkout does the same thing.
 
-### Clone and run
-
-Named `lfs`, because that is what you will type afterwards:
+**Updating is one command.** `run` re-runs its setup whenever the checkout has
+moved to a new commit, so:
 
 ```bash
-git clone https://github.com/Erawat4l/local-file-sharer.git lfs
-cd lfs
-pip install -r requirements.txt   # dependencies (one step, no venv needed)
-lfs configure                     # optional: port, PIN, theme, download folder
-./run                             # or just: lfs
+cd local-file-sharer
+git pull
+./run upgrade
 ```
 
-`./run` builds a private `.venv`, installs the package into it in editable
-mode, and starts the app — so the command above works even if the
-`pip install -r` and `lfs configure` lines are skipped.
+`./run upgrade` pulls and reinstalls, again behind a progress bar, and prints
+what changed. `lfs update` from inside the menu does the same thing in the app.
 
-If `lfs` behaves differently from `./run` — an older menu, or a command it says
-it does not have — an **older copy is earlier on your PATH**. `./run` always
-runs this checkout's `.venv/bin/lfs`, so they can disagree. Fix it with:
-
-```bash
-./run install     # links this checkout's lfs onto PATH, and names the stale one
-``` They exist for people
-who want the dependencies somewhere specific, or who want to set the port and
-PIN before the first launch.
-
-On **Termux** install Python and pip first — `run` finds them, but cannot
-install them:
+**First run on Termux** needs Python and pip before any of this (once only):
 
 ```bash
 pkg install python python-pip
 ```
 
-Termux keeps pip in its own package: `python` has the `venv` module but no pip
-and no `ensurepip`, so a virtualenv made by it cannot install anything. With
-`python-pip` present, `run` builds the venv with `--system-site-packages` so it
-can borrow that pip and install into itself.
+`run` finds Python but will not install it for you. Termux keeps pip in its own
+package — `python` has the `venv` module but no pip and no `ensurepip`, so a
+virtualenv made without `python-pip` cannot install anything. With it present,
+`run` builds the venv with `--system-site-packages` so it can borrow that pip
+and install into itself.
 
 Termux also has no `/tmp` — `run` keeps its error output in `.lfs-tmp` inside
 the checkout — and if pip is missing anyway, `run` offers to install
@@ -198,36 +188,37 @@ the interpreter's own C extensions are mismatched, every install fails from deep
 inside pip with `dlopen failed: cannot locate symbol "XML_GetCurrentLineNumber64"`.
 That is `libexpat` being older than the `python` package that links against it,
 and `run` now says so instead of letting pip print 64 lines about build
-dependencies. The fix is always:
+toolchains. The fix is:
 
 ```bash
 pkg update && pkg upgrade
 pkg install --reinstall libexpat python
 ```
 
-Third-party repositories (anything in `pkg` output that is not
-`packages-cf.termux.dev`) can cause exactly this by shadowing the official
-`libexpat`; `pkg list-installed | grep expat` shows which build is in use.
+**If `lfs` shows an older menu** than this README, a stale copy is earlier on
+your PATH — usually from an older install. `./run` always runs *this* checkout,
+so they can disagree. `./run install` links this checkout over the top and names
+the copy that was shadowing it.
 
-The first `./run` creates a `.venv` inside the checkout, installs rich and
-qrcode into it, and starts `lfs`. Nothing is installed system-wide, so removing
-it is `rm -rf .venv`, and every run after the first goes straight to the app.
+### One file (no git, no URL to type)
+
+Prefer not to clone? Download `install-lfs.py` and run it:
 
 ```bash
-./run                 # set up if needed, then start lfs
-./setup               # same as ./run setup
-./run upgrade         # git pull, then re-install
-./run doctor          # check dependencies and network
-./run ~/Downloads     # any arguments go to lfs
+python3 install-lfs.py
 ```
 
-Because the install is editable, a plain `git pull` is enough to update: the
-next `./run` sees the new commit and reinstalls itself. You can also symlink it
-onto your PATH (`ln -s ~/lfs/run ~/bin/lfs`) and use `lfs` from anywhere.
+It unpacks a complete checkout to `~/local-file-sharer` and prints the two
+commands that matter. The virtualenv is built on first launch, so:
 
-`./run upgrade` handles both kinds of checkout: a git clone gets `git pull`,
-and a copy unpacked from `install-lfs.py` — which has no history to pull —
-reinstalls the package in place instead of failing.
+```bash
+cd ~/local-file-sharer && ./run            # build, then start
+cd ~/local-file-sharer && ./run upgrade    # update
+```
+
+Useful when the repository is private (cloning then needs a login) or when a
+terminal font makes `Erawat4l` hard to type — its last character is a lowercase
+**L**, not a digit.
 
 ### Termux (Android)
 

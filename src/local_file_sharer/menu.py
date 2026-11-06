@@ -21,7 +21,7 @@ from rich.text import Text
 from . import APP_NAME, __version__, links, platforms
 from .config import Config
 from .errors import SharerError
-from .fmt import human_size
+from .fmt import cell_len, fit, human_size
 from .network import local_endpoints, tailscale_status
 from .picker import FILE_ICON, FOLDER_ICON, analyze
 from .share import MODE_TAGLINES, MODES, ShareRequest, ShareRunner, ask_expiry, ask_pin, make_pin
@@ -171,20 +171,31 @@ def render_menu(ctx: MenuContext) -> Group:
     for heading, keys in SECTIONS:
         if show_sections:
             blocks.append(Text(f" {heading}", style=f"bold {theme.accent}"))
-        table = Table.grid(padding=(0, 1))
-        table.add_column(width=2, no_wrap=True, justify="right")
-        table.add_column(width=2, no_wrap=True)
-        table.add_column(width=name_width + 1, no_wrap=True)
-        table.add_column(overflow="ellipsis", no_wrap=True)
+        # Rows are laid out by hand rather than with Table.grid. A Table with
+        # fixed column widths drops the columns that do not fit, and on a
+        # 60-column phone it dropped the KEY AND THE ICON -- every row read
+        # " Download  forced download ...", with nothing to press. Building the
+        # line explicitly means the two columns that matter are always there
+        # and only the description, which is optional, is trimmed.
         for key in keys:
             _key, label, _action, icon, plain, desc = _BY_KEY[key]
-            table.add_row(
-                Text(key, style=theme.key),
-                Text(icon_for(icon, plain), style=theme.secondary),
-                Text(label, style=theme.secondary),
-                Text(desc if show_desc else "", style=theme.faint),
-            )
-        blocks.append(table)
+            row = Text()
+            row.append(f"{key:>2}", style=theme.key)
+            row.append(" ")
+            icon_text = icon_for(icon, plain)
+            row.append(icon_text, style=theme.secondary)
+            # a double-width emoji occupies two cells; pad so names line up
+            row.append(" " * max(1, 3 - cell_len(icon_text)))
+            row.append(label, style=theme.secondary)
+            row.append(" " * max(1, name_width - cell_len(label) + 1))
+            if show_desc and desc:
+                # -1 for the terminal's own last column, which some emulators
+                # use to avoid wrapping.
+                used = cell_len(row.plain)
+                room = width - used - 1
+                if room > 8:
+                    row.append(fit(desc, room), style=theme.faint)
+            blocks.append(row)
     blocks.append(Text(""))
     for line in wrap_command(
         "`lfs <path>` shares straight away · `?` for more commands",
@@ -379,7 +390,7 @@ def render_extra_commands() -> Group:
     table.add_column(width=3, no_wrap=True)
     table.add_column(no_wrap=True)
     table.add_column(overflow="fold")
-    for key, label, _action, _icon, desc in EXTRA_ACTIONS:
+    for key, label, _action, _icon, _plain, desc in EXTRA_ACTIONS:
         table.add_row(
             Text(key, style=theme.key),
             Text(label, style=theme.secondary),
@@ -482,13 +493,19 @@ def _reload_config(config: Config) -> Config:
 def _resolve_action(answer: str) -> str | None:
     # the menu prints five rows, but the other keys keep working: the screen is
     # short, the vocabulary is not
-    lookup = {key: action for key, _l, action, _i, _d in ALL_ACTIONS}
+    lookup = {entry[0]: entry[2] for entry in ALL_ACTIONS}
+    # By name as well as by key: typing "quit" or "doctor" should work, and it
+    # did not -- only the single-letter keys and MODES were accepted, so
+    # "quit" fell through to "unknown choice" while "q" worked.
+    names = {entry[2]: entry[2] for entry in ALL_ACTIONS}
+    answer = answer.lower()
     if answer in lookup:
         return lookup[answer]
-    lowered = answer.lower()
-    if lowered in MODES:
-        return lowered
-    if lowered in ("exit", "e"):
+    if answer in names:
+        return names[answer]
+    if answer in MODES:
+        return answer
+    if answer in ("exit", "e", "bye", "stop"):
         return "quit"
     return None
 

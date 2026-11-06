@@ -4,7 +4,7 @@
 #
 #    git clone https://github.com/Erawat4l/local-file-sharer.git
 #    cd local-file-sharer
-#    ./run
+#    ./run install      then `lfs` from anywhere
 #
 #  First run creates .venv, installs the package into it in editable mode, then
 #  starts lfs. Every run after that goes straight to lfs — no install step, no
@@ -19,7 +19,7 @@
 #    ./run setup        set up only (useful in a script)
 #    ./run upgrade      git pull, then re-run setup
 #    ./run doctor       set up, then run `lfs doctor`
-#    ./run install      put THIS checkout's lfs on PATH (fixes a stale one)
+#    ./run install      set up and put lfs on PATH (the install command)
 #    ./run --help       this text
 #    ./run <anything>   passed straight to lfs, e.g. ./run ~/Downloads --mode serve
 #
@@ -67,6 +67,32 @@ step() { printf '%s→%s %s\n' "$D" "$N" "$*"; }
 ok()   { printf '%s✓%s %s\n' "$G" "$N" "$*"; }
 warn() { printf '%s!%s %s\n' "$Y" "$N" "$*"; }
 die()  { printf '%s✗%s %s\n' "$R" "$N" "$*" >&2; exit 1; }
+
+# pip downloads for a minute and, because it is run quietly so its chatter does
+# not bury the three lines that matter, the terminal sat frozen on one step.
+# This draws a bar in its place while the command runs and erases it after, so
+# the scrollback stays clean.
+TTY=0
+if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then TTY=1; fi
+spin() {
+    # spin <pid> <ready-file> <label>
+    #   The job writes its exit code to <ready-file> as its very last act, so
+    #   the bar stops exactly when the work does. Polling `kill -0` instead
+    #   would spin forever: a finished but unreaped child still has a pid.
+    _pid=$1; _ready=$2; _label=${3:-working}; _i=0
+    if [ "$TTY" != 1 ]; then wait "$_pid" 2>/dev/null || true; return 0; fi
+    while [ ! -f "$_ready" ]; do
+        _f=$(( _i % 11 )); _e=$(( 10 - _f ))
+        _on=$(printf '%*s' "$_f" '' | tr ' ' '#')
+        _off=$(printf '%*s' "$_e" '' | tr ' ' '-')
+        printf '\r%s[%s%s]%s %s' "$D" "$_on" "$_off" "$N" "$_label"
+        _i=$(( _i + 1 ))
+        sleep 0.2 2>/dev/null || sleep 1
+        kill -0 "$_pid" 2>/dev/null || break
+    done
+    wait "$_pid" 2>/dev/null || true
+    printf '\r\033[K'
+}
 
 usage() {
     # the header comment is the help text: keep one copy of the truth
@@ -392,7 +418,12 @@ setup() {
 
     step "installing dependencies (rich, qrcode)"
     "$PY" -m pip install --quiet --upgrade pip >/dev/null 2>&1 || true
-    if ! "$PY" -m pip install --quiet --editable "$HERE" 2>"$SCRATCH"/pip-error; then
+    rm -f "$SCRATCH"/pip-rc
+    ( "$PY" -m pip install --quiet --editable "$HERE" 2>"$SCRATCH"/pip-error
+      printf '%s' "$?" > "$SCRATCH"/pip-rc ) &
+    _pip=$!
+    spin "$_pip" "$SCRATCH"/pip-rc "downloading rich + qrcode"
+    if [ "$(cat "$SCRATCH"/pip-rc 2>/dev/null || echo 1)" != 0 ]; then
         msg=$(cat "$SCRATCH"/pip-error 2>/dev/null || true)
         rm -f "$SCRATCH"/pip-error
         case "$msg" in
