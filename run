@@ -150,6 +150,26 @@ venv_has_pip() {
     [ -x "$PY" ] && "$PY" -m pip --version >/dev/null 2>&1
 }
 
+# A Python whose own C extensions cannot load is a broken install: pyexpat is
+# linked against libexpat, and if that library is older than the interpreter
+# expects, importing it fails with
+#   ImportError: dlopen failed: cannot locate symbol "XML_GetCurrentLineNumber64"
+# Every later step then fails too, from deep inside pip, which is unreadable.
+broken_stdlib() {
+    if "$py" - <<'PYEOF' >"$SCRATCH"/stdlib 2>&1
+import importlib
+for name in ("pyexpat", "zlib", "sqlite3", "ssl", "_ctypes", "ctypes"):
+    try:
+        importlib.import_module(name)
+    except Exception as exc:  # noqa: BLE001 - any failure here is fatal to pip
+        raise SystemExit(f"{name}: {type(exc).__name__}: {exc}")
+PYEOF
+    then
+        return 1   # imports fine
+    fi
+    return 0       # broken
+}
+
 # pip, but only reachable from outside the venv (system site-packages).
 system_has_pip() {
     "$py" -m pip --version >/dev/null 2>&1
@@ -250,6 +270,39 @@ make_venv() {
 
 setup() {
     need_python
+
+    # Fail here, with a sentence a person can act on, rather than 64 lines into
+    # a pip traceback about a library none of this code names.
+    if broken_stdlib; then
+        detail=$(cat "$SCRATCH"/stdlib 2>/dev/null || true)
+        rm -f "$SCRATCH"/stdlib
+        case "$detail" in
+            *pyexpat*|*XML_*)
+                printf '%s\n' "✗ this Python's XML extension cannot load — its libexpat does not match." >&2
+                printf '%s\n' "    $detail" >&2
+                printf '%s\n' "" >&2
+                printf '%s\n' "  Termux: the libexpat and python packages are out of step." >&2
+                printf '%s\n' "      pkg update && pkg upgrade" >&2
+                printf '%s\n' "      pkg install --reinstall libexpat python" >&2
+                printf '%s\n' "  If that does not fix it, a foreign repository may be shadowing" >&2
+                printf '%s\n' "  the official one:  pkg list-installed | grep expat" >&2
+                exit 1 ;;
+            *dlopen*|*"cannot locate symbol"*|*"undefined symbol"*)
+                printf '%s\n' "✗ this Python's own libraries are broken, so pip cannot run." >&2
+                printf '%s\n' "    $detail" >&2
+                printf '%s\n' "" >&2
+                printf '%s\n' "  Termux: pkg update && pkg upgrade" >&2
+                printf '%s\n' "          pkg install --reinstall python" >&2
+                exit 1 ;;
+            *)
+                printf '%s\n' "✗ this Python is missing a standard module, so pip cannot run." >&2
+                printf '%s\n' "    $detail" >&2
+                printf '%s\n' "" >&2
+                printf '%s\n' "  Termux: pkg install --reinstall python" >&2
+                exit 1 ;;
+        esac
+    fi
+    rm -f "$SCRATCH"/stdlib
 
     # A venv that cannot pip is not a venv. Remake it rather than failing in a
     # later step with "No module named pip".

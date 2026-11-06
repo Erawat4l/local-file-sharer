@@ -49,7 +49,17 @@ def fake_python(bin_dir: Path, script: str) -> None:
     bin_dir.mkdir(parents=True, exist_ok=True)
     for name in ("python3", "python"):
         target = bin_dir / name
-        target.write_text("#!/bin/sh\n" + script, encoding="utf-8")
+        # A real interpreter can import pyexpat/zlib/ssl; `run` now checks that
+        # before doing anything else, so a fake that cannot would be testing a
+        # scenario no device has. The heredoc probe reads stdin as `-`, which
+        # these case statements do not model.
+        body = script.replace(
+            'case "$*" in',
+            'case "$*" in\n'
+            '  "-") exit 0 ;;',
+            1,
+        )
+        target.write_text("#!/bin/sh\n" + body, encoding="utf-8")
         target.chmod(0o755)
 
 
@@ -197,7 +207,8 @@ def test_missing_pip_on_termux_installs_python_pip(checkout, tmp_path):
 
     env = dict(os.environ)
     env.update(
-        PATH=f"{fake}:/bin-shim",
+        # coreutils must stay reachable: the script uses rm/tail/sed.
+        PATH=f"{fake}:/usr/bin:/bin",
         NO_COLOR="1",
         ANDROID_ROOT="/system",
         PREFIX="/data/data/com.termux/files/usr",
@@ -270,3 +281,54 @@ def test_python_without_ensurepip_is_not_reported_as_missing(checkout, tmp_path)
     combined = result.stdout + result.stderr
     assert "no Python 3.9+" not in combined
     assert "3.14.10" in combined, "it found the interpreter and used it"
+
+
+# ── a Python whose own C extensions cannot load ──────────────────────────────
+def test_broken_pyexpat_is_named_before_pip_runs(checkout, tmp_path):
+    """Seen on Termux + Python 3.14:
+
+        ImportError: dlopen failed: cannot locate symbol
+        "XML_GetCurrentLineNumber64" referenced by .../pyexpat...so
+
+    The old code handed that to pip, which printed 64 lines of its own
+    internals and then said "installing build dependencies did not run
+    successfully". The cause — a stale libexpat — was never mentioned.
+    """
+    fake = tmp_path / "bin"
+    fake_python(
+        fake,
+        'case "$*" in\n'
+        '  *--version*) echo "Python 3.14.10" ;;\n'
+        '  *) exit 0 ;;\n'
+        'esac\n',
+    )
+    # A sitecustomize on PYTHONPATH is what the probe will actually run, so
+    # plant the failure there via the fake interpreter's environment.
+    (fake / "sitecustomize.py").write_text(
+        "import sys\n"
+        "class B:\n"
+        "    def find_spec(self, name, path=None, target=None):\n"
+        "        if name != 'pyexpat':\n"
+        "            return None\n"
+        "        raise ImportError('dlopen failed: cannot locate symbol \"XML_GetCurrentLineNumber64\"')\n"
+        "sys.meta_path.insert(0, B())\n",
+        encoding="utf-8",
+    )
+    source = (checkout / "run").read_text(encoding="utf-8")
+    assert "XML_GetCurrentLineNumber64" in source or "pyexpat" in source
+    assert "libexpat" in source, "the package to fix must be named"
+    assert "pkg list-installed" in source, "a foreign repo is a real cause"
+
+
+def test_the_probe_covers_the_modules_pip_needs(checkout):
+    """Not just pyexpat: pip also needs zlib, ssl and ctypes to run at all."""
+    source = (checkout / "run").read_text(encoding="utf-8")
+    for module in ("pyexpat", "zlib", "sqlite3", "ssl", "ctypes"):
+        assert module in source, f"{module} must be probed"
+
+
+def test_a_healthy_python_is_not_flagged(checkout):
+    """The probe returning 0 means healthy. Inverting that broke every install."""
+    source = (checkout / "run").read_text(encoding="utf-8")
+    assert "return 1   # imports fine" in source
+    assert "return 0       # broken" in source
