@@ -167,8 +167,10 @@ On **Termux** install Python first — `run` finds it, but cannot install it:
 pkg install python
 ```
 
-Then the same three lines. `run` keeps its error output inside the checkout
-(`.lfs-tmp`), so it works on a device that has no `/tmp`.
+Then the same three lines. Two Termux quirks are handled for you: it has no
+`/tmp` (`run` keeps its error output in `.lfs-tmp` inside the checkout), and its
+Python ships pip without `ensurepip`, so `run` borrows the system pip to build
+the virtualenv instead of failing with `No module named pip`.
 
 The first `./run` creates a `.venv` inside the checkout, installs rich and
 qrcode into it, and starts `lfs`. Nothing is installed system-wide, so removing
