@@ -330,3 +330,34 @@ def theme_preview(theme: Theme) -> Panel:
 
 
 _ = console  # re-exported for convenience
+
+
+# ── prompts ─────────────────────────────────────────────────────────────────
+def ask_yes_no(
+    question: RenderableType,
+    *,
+    default: bool = False,
+    console_: object | None = None,
+) -> bool:
+    """A yes/no question that Ctrl-C and end-of-file answer "no" to.
+
+    ``rich.prompt.Confirm.ask`` raises ``EOFError`` on ^C and on a closed
+    stdin. Both used to escape the question and end the process: interrupting
+    "generate a temporary Cloudflare link?" -- an optional extra, asked after
+    the share is already serving -- dumped a traceback and killed the session,
+    even though the answer only decides whether to add a tunnel.
+
+    An optional question should never be able to do that, so an interrupt is
+    read as "no" and the caller carries on. Callers that must NOT continue on
+    an interrupt (the picker, an explicit confirm) keep their own handling.
+    """
+    import contextlib  # noqa: PLC0415
+
+    from rich.prompt import Confirm  # noqa: PLC0415
+
+    con = console_ or console()
+    with contextlib.suppress(EOFError, KeyboardInterrupt):
+        return bool(Confirm.ask(question, default=default, console=con))
+    # The prompt was abandoned mid-line; start the next output on a fresh line.
+    con.print()
+    return False

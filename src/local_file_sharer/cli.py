@@ -512,6 +512,12 @@ def _handle_error(exc: BaseException, *, debug: bool) -> int:
     from .ui.console import console
 
     con = console()
+    # Interrupting a prompt raises EOFError, and it is not an error: the person
+    # pressed ^C. Reporting it as an unexpected failure is both wrong and
+    # frightening on a phone, where every prompt is a place to fat-finger it.
+    if isinstance(exc, EOFError):
+        con.print("[lfs.muted]cancelled[/]")
+        return 130
     if isinstance(exc, SharerError):
         con.print(error_panel(exc.message, hints=exc.all_hints(), detail=exc.detail or "", title=exc.title))
         return 2
@@ -1006,8 +1012,23 @@ def main(argv: list[str] | None = None) -> int:
         return _handle_error(exc, debug=debug)
 
 
+def _guard_interrupt(fn) -> int:  # noqa: ANN001, ANN201 - small wrapper
+    """Run *fn*, and treat an interrupt anywhere in it as "stopped".
+
+    ``main`` already maps KeyboardInterrupt to exit 130, but the reporting
+    path -- a panel, a traceback under ``--debug`` -- can itself be interrupted
+    by a second ^C, and that escapes to the interpreter and prints a raw
+    traceback. On a phone, a double tap on the interrupt key is easy, and the
+    result looked like a crash in a program that had done nothing wrong.
+    """
+    try:
+        return fn()
+    except KeyboardInterrupt:
+        return 130
+
+
 def run() -> None:  # pragma: no cover - console_scripts shim
-    sys.exit(main())
+    sys.exit(_guard_interrupt(main))
 
 
 if __name__ == "__main__":  # pragma: no cover

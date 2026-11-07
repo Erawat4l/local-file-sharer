@@ -754,6 +754,17 @@ class ShareRequestHandler(BaseHTTPRequestHandler):
         if not wanted:
             self.redirect("/")
             return
+        # A folder that was picked in its own right is a row of its own on the
+        # front page, addressed as /browse/<its name>. Stripping the name the
+        # way a single-folder share needs left ``sub`` empty and then demanded
+        # files under "<name>/</", which never matched, so the link the page
+        # had just drawn answered 404. Match the folder itself first.
+        for item in self.ctx.manifest.items:
+            if not item.is_dir:
+                continue
+            if item.name == wanted and any(f.rel.startswith(f"{item.name}/") for f in item.files):
+                self._render_browser(item, "", query)
+                return
         for item in self.ctx.manifest.items:
             if not item.is_dir:
                 continue
@@ -1315,9 +1326,16 @@ class ShareRequestHandler(BaseHTTPRequestHandler):
             self.send_error_page(HTTPStatus.NOT_FOUND, "No folder named")
             return
         prefix = f"{wanted}/"
+        # A single-folder share wraps every path in the folder's own name, so
+        # the first segment has to go before the wanted folder is matched. With
+        # two or more roots there is no such wrapper: the first segment IS the
+        # picked folder, and stripping it made /folder/ADM match nothing and
+        # answer 404 for the button the page had just drawn.
+        items_list = self.ctx.manifest.items
+        strip_root = len(items_list) == 1 and items_list[0].is_dir
         members = []
         for f in self.ctx.manifest.iter_files():
-            inner = f.rel.split("/", 1)[-1] if "/" in f.rel else f.rel
+            inner = f.rel.split("/", 1)[1] if strip_root and "/" in f.rel else f.rel
             if inner.startswith(prefix):
                 members.append((f, inner))
         if not members:
@@ -1545,8 +1563,20 @@ def _inside_item(rel: str, items) -> str | None:  # noqa: ANN001
     caller treats as "not mine" rather than as an error.
     """
     head, _, tail = rel.partition("/")
+    # A folder item's own name is stripped only when that folder IS the share
+    # (one directory root). With two or more picks the root is the folder the
+    # picker started in, so "ADM/a.txt" means "the ADM folder, one level down":
+    # stripping "ADM" made a.txt a loose top-level file, and the folder card
+    # that should have held it was never drawn at all. Picking two folders and
+    # a file put the file on the page and both folders' contents loose beside
+    # it -- folders shattered into their files, the one thing the share page
+    # must never do.
+    strip_folder = len(items) == 1 and items[0].is_dir
     for item in items:
         if item.name == head:
+            if item.is_dir and not strip_folder:
+                # keep the name: the caller groups on the head above it
+                return rel
             return tail if tail else item.name
         if not item.is_dir and item.name == rel:
             return rel

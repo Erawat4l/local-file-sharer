@@ -682,6 +682,12 @@ def test_serve_mode_front_page_lists_folders_not_deep_files(tmp_path, free_port)
     alpha/beta/deep.bin appeared as a bare "deep.bin" row beside the loose
     file at the top. The folder was invisible and the page was unusable. One
     level per page: folders here, their files inside.
+
+    The folder here is picked alongside a loose file, so the folder itself is
+    one row; its contents (including the sub-folder "alpha") are inside it.
+    Before the grouping fix the folder's name was stripped from every path
+    beneath it, which both hid the folder and spilled "alpha/" onto the top of
+    the page as if it had been picked separately.
     """
     root, loose = _nested_share(tmp_path)
     server = ShareServer(Manifest.build([root, loose], mode="serve"), host="127.0.0.1", port=free_port)
@@ -689,9 +695,11 @@ def test_serve_mode_front_page_lists_folders_not_deep_files(tmp_path, free_port)
     assert server.wait_until_ready(timeout=5)
     try:
         rows = _rows(server.port, "/")
+        inside = _rows(server.port, "/browse/share")
     finally:
         server.stop()
-    assert rows == ["alpha/", "loose.apk"], rows
+    assert rows == ["share/", "loose.apk"], rows
+    assert inside == ["alpha/"], inside
 
 
 def test_each_folder_drills_down_to_its_own_contents(tmp_path, free_port):
@@ -805,6 +813,65 @@ def test_a_folder_picked_whole_lists_its_contents_not_itself(tmp_path, free_port
     finally:
         server.stop()
     assert rows == ["2024/", "b.jpg"], rows
+
+
+def test_two_folders_and_a_file_keep_both_folders(tmp_path, free_port):
+    """Picking folders alongside a file must not shatter the folders.
+
+    The picker can return any mix, and the common one is "these two folders,
+    and that file". ``_inside_item`` stripped *any* item's name off the front
+    of a path, so ``ADM/a.txt`` became the loose file ``a.txt`` at the top of
+    the page: both folder cards vanished and their contents spilled out flat
+    beside the loose file. Nothing that shows folders may ever do that.
+
+    This shape was untested -- the suites covered a list of files and a single
+    folder, never the mix -- which is exactly the shape a person picks.
+    """
+    root = tmp_path / "Download"
+    (root / "ADM").mkdir(parents=True)
+    (root / "Quick Share").mkdir(parents=True)
+    (root / "ADM" / "a.txt").write_bytes(b"a" * 10)
+    (root / "ADM" / "b.txt").write_bytes(b"b" * 10)
+    (root / "Quick Share" / "c.txt").write_bytes(b"c" * 10)
+    (root / "app-debug.apk").write_bytes(b"p" * 10)
+    roots = [root / "ADM", root / "Quick Share", root / "app-debug.apk"]
+    server = ShareServer(Manifest.build(roots, mode="serve"), host="127.0.0.1", port=free_port)
+    server.start()
+    assert server.wait_until_ready(timeout=5)
+    try:
+        rows = _rows(server.port, "/")
+        inside = _rows(server.port, "/browse/ADM")
+    finally:
+        server.stop()
+    # both folders, as folders -- and the loose file beside them
+    assert rows == ["ADM/", "Quick Share/", "app-debug.apk"], rows
+    # and each one still drills down to its own contents
+    assert inside == ["a.txt", "b.txt"], inside
+
+
+def test_a_folder_and_a_file_still_group_deep_contents(tmp_path, free_port):
+    """A picked folder's *sub*-folders stay grouped, not flattened.
+
+    Second half of the same bug: with the folder name stripped, ``ADM/season/1``
+    had no ``ADM`` to group it under either, so a nested share came out as bare
+    files with none of their folders.
+    """
+    root = tmp_path / "Download"
+    (root / "ADM" / "season").mkdir(parents=True)
+    (root / "ADM" / "season" / "one.mkv").write_bytes(b"v" * 10)
+    (root / "ADM" / "top.txt").write_bytes(b"t" * 10)
+    (root / "notes.txt").write_bytes(b"n" * 10)
+    roots = [root / "ADM", root / "notes.txt"]
+    server = ShareServer(Manifest.build(roots, mode="serve"), host="127.0.0.1", port=free_port)
+    server.start()
+    assert server.wait_until_ready(timeout=5)
+    try:
+        rows = _rows(server.port, "/")
+        inside = _rows(server.port, "/browse/ADM")
+    finally:
+        server.stop()
+    assert rows == ["ADM/", "notes.txt"], rows
+    assert inside == ["season/", "top.txt"], inside
 
 
 def test_opening_a_folder_in_download_mode_keeps_the_download_page(tmp_path, free_port):

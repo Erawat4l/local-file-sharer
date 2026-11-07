@@ -437,3 +437,55 @@ def test_the_repaired_option_actually_parses():
 
 def test_everything_after_a_double_dash_is_left_alone():
     assert normalise_options(["--", "-ref"]) == ["--", "-ref"]
+
+
+# ── interruption is not an error ───────────────────────────────────────────
+def test_eof_at_a_prompt_is_a_cancellation_not_a_crash():
+    """Ctrl-C at a Rich prompt raises EOFError, and that is a "cancel".
+
+    ``Confirm.ask`` turns ^C into ``EOFError``, so the guard for
+    ``KeyboardInterrupt`` never saw it: interrupting "generate a temporary
+    public Cloudflare link?" printed an "Unexpected error" panel and exited 1.
+    That question is asked *after* the share is already serving, so on a phone
+    the result was a traceback on top of a working server.
+    """
+    from local_file_sharer.cli import _handle_error
+
+    assert _handle_error(EOFError(), debug=False) == 130
+
+
+def test_an_optional_question_survives_ctrl_c():
+    """The tunnel questions answer "no" instead of ending the session."""
+    import rich.prompt
+
+    from local_file_sharer.ui.components import ask_yes_no
+
+    real = rich.prompt.Confirm.ask
+    for raised in (EOFError, KeyboardInterrupt):
+
+        def boom(*_a, _exc=raised, **_k):
+            # bound as a default: a closure over the loop variable would raise
+            # the last value on every iteration and prove nothing
+            raise _exc
+
+        rich.prompt.Confirm.ask = boom
+        try:
+            assert ask_yes_no("publish on your tailnet?", default=False) is False
+        finally:
+            rich.prompt.Confirm.ask = real
+
+
+def test_a_second_interrupt_while_reporting_still_exits_quietly():
+    """A ^C during error reporting must not escape as a traceback.
+
+    ``main`` maps the first interrupt to 130. If the user taps the interrupt
+    key again while the panel is being written, that one raises outside every
+    handler and the interpreter prints a raw traceback -- which is exactly the
+    wall of text a phone user saw at the Cloudflare prompt.
+    """
+    from local_file_sharer.cli import _guard_interrupt
+
+    def interrupted() -> int:
+        raise KeyboardInterrupt
+
+    assert _guard_interrupt(interrupted) == 130

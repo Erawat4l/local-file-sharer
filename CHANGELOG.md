@@ -7,6 +7,21 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Fixed
+- Picking two folders and a file showed the file and neither folder: every
+  path was stripped of its first segment, so `ADM/a.txt` became a loose
+  `a.txt` at the top of the page and the folder card was never drawn. Folders
+  are folders again, and each one drills down to its own contents. The count
+  and size on each card cover everything inside it.
+- `/browse/<folder>` and `/folder/<folder>` answered 404 for a folder that was
+  picked in its own right, so the link the page had just drawn could not be
+  opened or downloaded.
+- Ctrl-C at a prompt is a cancellation, not a crash. Interrupting "generate a
+  temporary public Cloudflare link?" -- asked after the share is already
+  serving -- printed an "Unexpected error" panel and exited 1; it now reads as
+  "no" and the share keeps running. A second ^C while reporting exits quietly
+  instead of dumping a traceback.
+
 ### Added
 - `./run` — clone the repository, `cd` into it, run one command. The first run
   builds a private `.venv`, installs the package in editable mode and starts
