@@ -143,7 +143,14 @@ def test_the_web_gif_is_built_from_the_same_page_builders():
     """
     gif = ASSETS / "web-demo.gif"
     assert gif.exists(), "docs/assets/web-demo.gif is missing — run tools/screenshots/web_gif.py"
-    from PIL import Image  # noqa: PLC0415 - only needed here
+    # Pillow renders the screenshots; it is not a test dependency and CI
+    # installs only .[dev], so this check skips there. The rest of the module
+    # deliberately does not need Pillow: the copy guards are the ones that must
+    # run everywhere.
+    try:
+        from PIL import Image  # noqa: PLC0415 - only needed here
+    except ModuleNotFoundError:  # pragma: no cover - depends on the environment
+        pytest.skip("Pillow is not installed")
 
     with Image.open(gif) as image:
         assert getattr(image, "n_frames", 1) > 3, "the web gif is not animated"
