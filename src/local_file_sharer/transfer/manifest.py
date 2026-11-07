@@ -344,6 +344,14 @@ def walk_folder(folder: Path, *, root_name: str = "", max_files: int = 200_000) 
                 rel = full.relative_to(folder).as_posix()
             except ValueError:
                 rel = filename
+            # A dangling symlink is listed by os.walk but cannot be served, so
+            # skip it outright. This used to rely only on _stays_inside(), which
+            # escapes the folder via resolve() -- but resolve() reports a broken
+            # link differently across platforms and Python versions, and on
+            # some of them the link resolved *inside* the folder and was
+            # published as a file that 404s on download.
+            if not full.exists():
+                continue
             # A symlink pointing outside the shared folder would quietly publish
             # whatever it targets (~/.ssh/id_rsa for a shared ~/Documents). Only
             # files that really live under the share are listed.

@@ -91,7 +91,7 @@ def test_a_symlink_on_path_is_not_mistaken_for_the_running_copy(tmp_path, monkey
     """
     fake_home = tmp_path / "home"
     checkout = _fake_checkout(fake_home / "local-file-sharer")
-    binary = checkout / ".venv" / "bin" / "lfs"
+    binary = checkout / ".venv" / "bin" / lfs_exe_name()
     bindir = fake_home / ".local" / "bin"
     bindir.mkdir(parents=True)
     link = bindir / lfs_exe_name()
@@ -140,7 +140,7 @@ def test_history_is_kept_unless_asked(tmp_path, monkeypatch):
 def test_keep_checkout_removes_the_command_but_leaves_the_folder(tmp_path, monkeypatch):
     checkout = _fake_checkout(tmp_path / "co")
     monkeypatch.setattr(un, "_own_tree", lambda: checkout)
-    monkeypatch.setattr(un.sys, "argv", [str(checkout / ".venv" / "bin" / "lfs")])
+    monkeypatch.setattr(un.sys, "argv", [str(checkout / ".venv" / "bin" / lfs_exe_name())])
     monkeypatch.setattr(un, "find_duplicates", list)
     monkeypatch.setattr(un.platforms, "config_dir", lambda: tmp_path / "cfg")
     monkeypatch.setattr(un.platforms, "cache_dir", lambda: tmp_path / "cache")
@@ -166,3 +166,28 @@ def test_uninstall_has_the_flags_it_documents():
     parser = build_command_parsers()["uninstall"]
     args = parser.parse_args(["--dry-run", "--purge-data", "--keep-checkout", "--yes"])
     assert args.dry_run and args.purge_data and args.keep_checkout and args.yes
+
+
+def test_a_launcher_link_whose_target_is_gone_is_still_removed(tmp_path, monkeypatch):
+    """The state an interrupted upgrade leaves: a link into a deleted venv.
+
+    Path.resolve() on a dangling link reports the missing target, and on some
+    Python versions raises instead; either way the link is a file on PATH that
+    has to go, or every `lfs` answers "no such file or directory".
+    """
+    fake_home = tmp_path / "home"
+    checkout = _fake_checkout(fake_home / "local-file-sharer")
+    bindir = fake_home / ".local" / "bin"
+    bindir.mkdir(parents=True)
+    link = bindir / lfs_exe_name()
+    make_symlink(link, checkout / ".venv" / "bin" / "already-deleted")
+
+    monkeypatch.setenv("HOME", str(fake_home))
+    monkeypatch.setenv("PATH", on_path(bindir))
+    monkeypatch.setattr(un, "find_duplicates", list)
+    monkeypatch.setattr(un, "is_pipx_install", lambda _p: False)
+    monkeypatch.setattr(un, "_own_tree", lambda: checkout)
+    monkeypatch.setattr(un.sys, "argv", [str(checkout / ".venv" / "bin" / lfs_exe_name())])
+
+    paths = {step.path for step in make_plan().steps}
+    assert str(link) in paths, "a dangling launcher leaves the shell pointing at nothing"

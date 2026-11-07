@@ -1080,9 +1080,13 @@ def find_on_path(name: str) -> list[str]:
         if not directory:
             continue
         for candidate in path_candidates(name, directory):
-            if not (candidate.is_file() or candidate.is_symlink()):
+            is_link = candidate.is_symlink()
+            if not (candidate.is_file() or is_link):
                 continue
-            if not WINDOWS and not os.access(candidate, os.X_OK):
+            # A symlink's executable bit belongs to its target, and a dangling
+            # one has no target to ask -- but it is still a file on PATH that
+            # shadows the real command, so report it.
+            if not WINDOWS and not is_link and not os.access(candidate, os.X_OK):
                 continue
             text = str(candidate)
             if text not in seen:

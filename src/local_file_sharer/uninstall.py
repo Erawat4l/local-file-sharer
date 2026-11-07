@@ -22,6 +22,7 @@ install, and nothing recursive runs until the path has been checked to be one.
 
 from __future__ import annotations
 
+import os
 import shutil
 import sys
 from dataclasses import dataclass, field
@@ -150,8 +151,12 @@ def make_plan(*, purge_data: bool = False, keep_checkout: bool = False) -> Plan:
             if str(path) in seen or not path.is_symlink():
                 continue
             try:
-                target = path.resolve()
+                # A link whose target is gone still has to be removed -- that
+                # is exactly the mess an interrupted upgrade leaves behind --
+                # so resolve it without following the final, missing step.
+                target = Path(os.path.realpath(path))
             except OSError:
+                # Unresolvable: it cannot be proven to be ours, so leave it.
                 continue
             if target == own or target.is_relative_to(tree):
                 seen.add(str(path))
