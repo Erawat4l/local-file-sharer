@@ -189,6 +189,8 @@ class Canvas:
         if opacity < 1:
             attrs.append(f'opacity="{opacity:.2f}"')
         self.parts.append(f'<text {" ".join(attrs)} xml:space="preserve">{esc(value)}</text>')
+        if value.strip():
+            self.labels.append(value)
         return width
 
     def rich(
@@ -307,6 +309,9 @@ class Shot(Canvas):
             self.parts.append(
                 f'<ellipse cx="{cx:.0f}" cy="{cy:.0f}" rx="{r:.0f}" ry="{r * 0.62:.0f}" fill="{g}" opacity="{op}"/>'
             )
+        #: every visible string drawn on this shot, in draw order — recorded to
+        #: web-text.txt so a test can compare the copy with the shipped HTML.
+        self.labels: list[str] = []
         self.chrome_h = 64
         # browser chrome bar
         self.rect(0, 0, width, self.chrome_h, fill="rgba(10,17,32,0.92)")

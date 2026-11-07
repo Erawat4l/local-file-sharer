@@ -416,13 +416,13 @@ def test_a_single_dash_long_option_is_repaired(typed, expected):
 @pytest.mark.parametrize(
     "untouched",
     [
-        ["-p", "9000"],      # a real short option
-        ["-V"],              # a real one-letter flag
-        ["--ref", "main"],   # already correct
-        ["-xyz"],            # no such option: leave it to fail loudly
-        ["-1"],              # not a letter
+        ["-p", "9000"],  # a real short option
+        ["-V"],  # a real one-letter flag
+        ["--ref", "main"],  # already correct
+        ["-xyz"],  # no such option: leave it to fail loudly
+        ["-1"],  # not a letter
         ["movie.mp4"],
-        [],                  # nothing to do
+        [],  # nothing to do
     ],
 )
 def test_option_repair_does_not_touch_anything_else(untouched):

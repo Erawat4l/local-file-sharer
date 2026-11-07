@@ -22,7 +22,20 @@ import pytest
 REPO = Path(__file__).resolve().parents[1]
 RUN = REPO / "run"
 
-pytestmark = pytest.mark.skipif(not RUN.exists(), reason="launcher lives at the repo root")
+#: `run` is a POSIX shell script, invoked here through /bin/sh (the tests drive
+#: it with `sh -c` semantics, PATH tricks and shell quoting). Windows has no
+#: /bin/sh, so every one of these errored there instead of skipping -- which is
+#: what turned the whole Windows matrix red. The launcher is not part of the
+#: Windows story anyway: install.ps1 is.
+POSIX_ONLY = pytest.mark.skipif(
+    os.name != "posix" or not Path("/bin/sh").exists(),
+    reason="the launcher is a POSIX shell script tested through /bin/sh",
+)
+
+pytestmark = [
+    pytest.mark.skipif(not RUN.exists(), reason="launcher lives at the repo root"),
+    POSIX_ONLY,
+]
 
 
 @pytest.fixture
@@ -55,17 +68,14 @@ def fake_python(bin_dir: Path, script: str) -> None:
         # these case statements do not model.
         body = script.replace(
             'case "$*" in',
-            'case "$*" in\n'
-            '  "-") exit 0 ;;',
+            'case "$*" in\n  "-") exit 0 ;;',
             1,
         )
         target.write_text("#!/bin/sh\n" + body, encoding="utf-8")
         target.chmod(0o755)
 
 
-def run_launcher(
-    checkout: Path, *args: str, path_prefix: Path | None = None
-) -> subprocess.CompletedProcess:
+def run_launcher(checkout: Path, *args: str, path_prefix: Path | None = None) -> subprocess.CompletedProcess:
     env = dict(os.environ)
     env.pop("LFS_BRANCH", None)
     env["NO_COLOR"] = "1"
@@ -77,7 +87,8 @@ def run_launcher(
         ["/bin/sh", str(checkout / "run"), *args],
         cwd=checkout,
         capture_output=True,
-        text=True,
+        encoding="utf-8",
+        errors="replace",
         timeout=120,
         env=env,
         check=False,
@@ -121,9 +132,9 @@ def test_a_python_without_ensurepip_is_detected(checkout, tmp_path):
         fake,
         'case "$*" in\n'
         '  *"import sys, venv, ensurepip"*) echo "ImportError: ensurepip is not available" >&2; exit 1 ;;\n'
-        '  *pip*) exit 1 ;;\n'
-        '  *) exit 1 ;;\n'
-        'esac\n',
+        "  *pip*) exit 1 ;;\n"
+        "  *) exit 1 ;;\n"
+        "esac\n",
     )
     result = run_launcher(checkout, "setup", path_prefix=fake)
     combined = result.stdout + result.stderr
@@ -195,8 +206,8 @@ def test_missing_pip_on_termux_installs_python_pip(checkout, tmp_path):
         '  *"-m pip"*) exit 1 ;;\n'
         '  *"-m venv"*) echo "Error: could not create venv" >&2; exit 1 ;;\n'
         '  *--version*) echo "Python 3.14.10" ;;\n'
-        '  *) exit 1 ;;\n'
-        'esac\n',
+        "  *) exit 1 ;;\n"
+        "esac\n",
     )
     pkg = fake / "pkg"
     pkg.write_text(
@@ -217,7 +228,8 @@ def test_missing_pip_on_termux_installs_python_pip(checkout, tmp_path):
         ["/bin/sh", str(checkout / "run"), "setup"],
         cwd=checkout,
         capture_output=True,
-        text=True,
+        encoding="utf-8",
+        errors="replace",
         timeout=120,
         env=env,
         check=False,
@@ -243,8 +255,8 @@ def test_a_failed_venv_shows_what_went_wrong(checkout, tmp_path):
         '  *"-m pip"*) exit 1 ;;\n'
         '  *"-m venv"*) echo "Permission denied: /system/lib64" >&2; exit 1 ;;\n'
         '  *--version*) echo "Python 3.14.10" ;;\n'
-        '  *) exit 1 ;;\n'
-        'esac\n',
+        "  *) exit 1 ;;\n"
+        "esac\n",
     )
     result = run_launcher(checkout, "setup", path_prefix=fake)
     combined = result.stdout + result.stderr
@@ -274,8 +286,8 @@ def test_python_without_ensurepip_is_not_reported_as_missing(checkout, tmp_path)
         '  *"-m pip"*) exit 1 ;;\n'
         '  *"-m venv"*) exit 1 ;;\n'
         '  *--version*) echo "Python 3.14.10" ;;\n'
-        '  *) exit 1 ;;\n'
-        'esac\n',
+        "  *) exit 1 ;;\n"
+        "esac\n",
     )
     result = run_launcher(checkout, "setup", path_prefix=fake)
     combined = result.stdout + result.stderr
@@ -297,10 +309,7 @@ def test_broken_pyexpat_is_named_before_pip_runs(checkout, tmp_path):
     fake = tmp_path / "bin"
     fake_python(
         fake,
-        'case "$*" in\n'
-        '  *--version*) echo "Python 3.14.10" ;;\n'
-        '  *) exit 0 ;;\n'
-        'esac\n',
+        'case "$*" in\n  *--version*) echo "Python 3.14.10" ;;\n  *) exit 0 ;;\nesac\n',
     )
     # A sitecustomize on PYTHONPATH is what the probe will actually run, so
     # plant the failure there via the fake interpreter's environment.
@@ -364,7 +373,7 @@ def test_a_stale_lfs_is_not_used_by_run(checkout):
     """`run` must exec its own venv, never whatever `lfs` resolves to."""
     source = (checkout / "run").read_text(encoding="utf-8")
     assert 'exec "$LFS"' in source
-    assert 'exec lfs' not in source
+    assert "exec lfs" not in source
 
 
 def test_plain_run_creates_the_lfs_command(checkout):
@@ -392,4 +401,4 @@ def test_plain_run_is_quiet_once_the_command_exists(checkout):
     """
     source = (checkout / "run").read_text(encoding="utf-8")
     assert "link_command quiet" in source
-    assert 'command -v lfs 2>/dev/null' in source
+    assert "command -v lfs 2>/dev/null" in source

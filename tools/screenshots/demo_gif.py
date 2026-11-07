@@ -100,8 +100,15 @@ def main() -> None:
     # with these same console settings and compares, so the animation cannot
     # drift again. (Rich swaps emoji for text when not a terminal, which would
     # otherwise make the recording depend on how it was captured.)
-    plain = Console(file=io.StringIO(), width=WIDTH, force_terminal=False,
-                    emoji=True, highlight=False, soft_wrap=False, color_system=None)
+    plain = Console(
+        file=io.StringIO(),
+        width=WIDTH,
+        force_terminal=False,
+        emoji=True,
+        highlight=False,
+        soft_wrap=False,
+        color_system=None,
+    )
     plain.print(menu.render_menu(ctx))
     (ASSETS / "demo-menu.txt").write_text(plain.file.getvalue(), encoding="utf-8")
 

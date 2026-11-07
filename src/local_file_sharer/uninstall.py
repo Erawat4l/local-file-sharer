@@ -22,6 +22,7 @@ install, and nothing recursive runs until the path has been checked to be one.
 
 from __future__ import annotations
 
+import os
 import shutil
 import sys
 from dataclasses import dataclass, field
@@ -95,17 +96,15 @@ def running_from(path: Path) -> bool:
 
 
 def _path_entries(name: str) -> list[str]:
-    """Every *name* on PATH, whether or not it is the one that would run."""
-    import os  # noqa: PLC0415
+    """Every *name* on PATH, whether or not it is the one that would run.
 
-    found: list[str] = []
-    for directory in os.environ.get("PATH", "").split(os.pathsep):
-        if not directory:
-            continue
-        candidate = Path(directory) / name
-        if candidate.is_symlink() or candidate.exists():
-            found.append(str(candidate))
-    return found
+    Goes through platforms.find_on_path so Windows finds ``lfs.exe``: a walk
+    that looks only for a file called ``lfs`` finds nothing there, and
+    uninstall would leave the shell pointing at a deleted venv.
+    """
+    from .platforms import find_on_path  # noqa: PLC0415
+
+    return find_on_path(name)
 
 
 def _own_tree() -> Path | None:
@@ -152,8 +151,12 @@ def make_plan(*, purge_data: bool = False, keep_checkout: bool = False) -> Plan:
             if str(path) in seen or not path.is_symlink():
                 continue
             try:
-                target = path.resolve()
+                # A link whose target is gone still has to be removed -- that
+                # is exactly the mess an interrupted upgrade leaves behind --
+                # so resolve it without following the final, missing step.
+                target = Path(os.path.realpath(path))
             except OSError:
+                # Unresolvable: it cannot be proven to be ours, so leave it.
                 continue
             if target == own or target.is_relative_to(tree):
                 seen.add(str(path))
@@ -290,7 +293,9 @@ def uninstall(*, dry_run: bool = False, purge_data: bool = False, keep_checkout:
     if remaining:
         con.print("\n[lfs.warning]these still answer `lfs`:[/]")
         for item in remaining:
-            how = "pipx uninstall local-file-sharer" if is_pipx_install(item["path"]) else f"rm {item['path']}"
+            how = (
+                "pipx uninstall local-file-sharer" if is_pipx_install(item["path"]) else f"rm {item['path']}"
+            )
             con.print(f"[lfs.faint]  {item['path']}[/]  [lfs.primary]{how}[/]")
 
     if commands:

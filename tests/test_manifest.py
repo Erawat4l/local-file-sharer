@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from conftest import make_symlink
 from local_file_sharer.transfer.manifest import Manifest
 
 
@@ -34,7 +35,7 @@ def test_a_symlink_pointing_outside_the_share_is_not_listed(tmp_path):
 
     secret = tmp_path / "id_rsa"
     secret.write_text("PRIVATE KEY", encoding="utf-8")
-    (shared / "innocent.txt").symlink_to(secret)
+    make_symlink(shared / "innocent.txt", secret)
 
     from local_file_sharer.transfer.manifest import Manifest
 
@@ -48,7 +49,7 @@ def test_a_symlink_inside_the_share_is_still_listed(tmp_path):
     shared = tmp_path / "shared"
     shared.mkdir()
     (shared / "real.txt").write_text("data", encoding="utf-8")
-    (shared / "alias.txt").symlink_to(shared / "real.txt")
+    make_symlink(shared / "alias.txt", shared / "real.txt")
 
     from local_file_sharer.transfer.manifest import Manifest
 
@@ -62,7 +63,7 @@ def test_a_dangling_symlink_does_not_break_the_manifest(tmp_path):
     shared = tmp_path / "shared"
     shared.mkdir()
     (shared / "ok.txt").write_text("fine", encoding="utf-8")
-    (shared / "gone.txt").symlink_to(tmp_path / "does-not-exist")
+    make_symlink(shared / "gone.txt", tmp_path / "does-not-exist")
 
     names = {entry.name for entry in Manifest.build([shared]).iter_files()}
     assert "ok.txt" in names

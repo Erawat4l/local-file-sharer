@@ -10,10 +10,12 @@ from __future__ import annotations
 
 import os
 import subprocess
+import types
 from pathlib import Path
 
 import pytest
 
+from conftest import make_symlink, unreadable_dir
 from local_file_sharer import network, platforms
 
 
@@ -25,10 +27,13 @@ def test_list_drives_windows_uses_letter_mask(monkeypatch):
     mask = 0b100101  # A:, C:, F:
     monkeypatch.setattr(platforms, "WINDOWS", True)
     monkeypatch.setattr(ctypes, "windll", _FakeWindll(mask), raising=False)
+    # Must return something with .free/.total: on Python 3.12+ list_drives
+    # calls shutil.disk_usage and reads usage.free, and a CompletedProcess has
+    # neither -- so this mocked the wrong shape and only failed on 3.12/3.13.
     monkeypatch.setattr(
         platforms.shutil,
         "disk_usage",
-        lambda root: subprocess.CompletedProcess([], 0, "", ""),
+        lambda root: types.SimpleNamespace(total=500_000_000_000, free=250_000_000_000),
     )
 
     drives = platforms.list_drives()
@@ -88,7 +93,7 @@ def test_list_drives_posix_deduplicates_symlinked_roots(monkeypatch, tmp_path):
     real.mkdir()
     (real / "disk").mkdir()
     link = tmp_path / "link"
-    link.symlink_to(real)
+    make_symlink(link, real)
     monkeypatch.setattr(platforms, "WINDOWS", False)
     monkeypatch.setattr(platforms, "POSIX_MOUNT_ROOTS", (str(real), str(link)))
 
@@ -411,7 +416,7 @@ def test_start_dir_skips_a_remembered_folder_it_cannot_read(tmp_path, monkeypatc
 
     locked = tmp_path / "locked"
     locked.mkdir()
-    locked.chmod(0o000)
+    unreadable_dir(locked)
     readable = tmp_path / "readable"
     readable.mkdir()
 
@@ -436,7 +441,7 @@ def test_start_dir_falls_back_to_home_when_nothing_is_readable(tmp_path, monkeyp
     home.mkdir()
     monkeypatch.setattr(platforms, "home_dir", lambda: home)
     monkeypatch.setattr(platforms, "storage_root", lambda: locked)
-    locked.chmod(0o000)
+    unreadable_dir(locked)
 
     try:
         assert platforms.start_dir(locked) == home
@@ -460,7 +465,7 @@ def test_sdcard_is_found_through_either_route(tmp_path, monkeypatch):
     assert platforms.sdcard_dir() == shared
 
     # some builds hide /sdcard but the ~/storage symlink is there
-    (home / "storage").symlink_to(shared)
+    make_symlink(home / "storage", shared)
     monkeypatch.setattr(platforms, "SDCARD_ALIASES", (tmp_path / "nope",))
     assert platforms.sdcard_dir() == home / "storage"
 

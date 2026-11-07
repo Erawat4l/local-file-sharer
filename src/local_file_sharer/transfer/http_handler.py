@@ -50,6 +50,11 @@ from .torrent import TRACKER_INTERVAL, bencode
 from .zipstream import ZipItem, ZipStream
 
 CHUNK = 256 * 1024
+#: A refusal must drain what the client is still sending before it answers, or
+#: the client sees a reset instead of the status. Cap both, so a huge or stalled
+#: upload cannot hold the connection open just to be told no.
+MAX_DRAIN = 8 * 1024 * 1024
+DRAIN_TIMEOUT = 2.0
 #: Paths that keep answering after the share expires (liveness + branding).
 EXPIRY_EXEMPT = ("/healthz", "/favicon.ico", "/robots.txt", "/static/", "/api/expired")
 MULTI_RANGE_LIMIT = 32
@@ -230,6 +235,34 @@ class ShareRequestHandler(BaseHTTPRequestHandler):
     @property
     def ctx(self) -> ShareContext:
         return self.context
+
+    def _refuse_with_body(self, payload: dict[str, object], status: int) -> None:
+        """Send an error response to a request whose body has not been read.
+
+        HTTP/1.1 keeps the connection open, so an unread body is parsed as the
+        start of the next request and the client sees a reset instead of the
+        status -- ``WinError 10053`` rather than a 403. Drain first, but never
+        read more than the client said it would send, and never block forever
+        on a client that is still uploading.
+        """
+        try:
+            length = int(self.headers.get("Content-Length") or 0)
+        except ValueError:
+            length = 0
+        remaining = min(length, MAX_DRAIN)
+        self.connection.settimeout(DRAIN_TIMEOUT)
+        try:
+            while remaining > 0:
+                chunk = self.rfile.read(min(CHUNK, remaining))
+                if not chunk:
+                    break
+                remaining -= len(chunk)
+        except (OSError, ValueError):
+            pass
+        finally:
+            with contextlib.suppress(OSError, ValueError):
+                self.connection.settimeout(None)
+        self.send_json(payload, status=status)
 
     def client_ip(self) -> str:
         """The address used for the PIN lockout, so it must not be client-chosen.
@@ -1275,7 +1308,7 @@ class ShareRequestHandler(BaseHTTPRequestHandler):
     # ── uploads ────────────────────────────────────────────────────────────
     def handle_upload(self, query: dict[str, list[str]]) -> None:
         if not self.ctx.allow_upload:
-            self.send_json({"error": "uploads are disabled for this share"}, status=403)
+            self._refuse_with_body({"error": "uploads are disabled for this share"}, 403)
             return
         name = (query.get("name") or [""])[0]
         if not name:
@@ -1418,10 +1451,7 @@ def _other_files_block(files) -> str:  # noqa: ANN001
         f"<span>{html.escape(f.size_text)}</span></li>"
         for f in files
     )
-    return (
-        '<h3 class="also">Also in this share</h3>\n'
-        f'<ul class="playlist also-files">\n{rows}\n</ul>'
-    )
+    return f'<h3 class="also">Also in this share</h3>\n<ul class="playlist also-files">\n{rows}\n</ul>'
 
 
 def _page_number(query: dict[str, list[str]]) -> int:

@@ -26,6 +26,13 @@ from local_file_sharer.updater import (
     upgrade_command,
 )
 
+#: The sendfile tests exercise the os.sendfile fast path. HAS_SENDFILE is
+#: deliberately false on Windows (platforms.py), so there is nothing to test
+#: there -- and socket.socketpair + socket.sendfile take different paths anyway.
+posix_sendfile = pytest.mark.skipif(
+    not platforms.HAS_SENDFILE, reason="os.sendfile is POSIX-only; Windows uses socket.sendfile"
+)
+
 
 def test_parse_version():
     assert parse_version("v1.2.3") == (1, 2, 3)
@@ -139,6 +146,7 @@ def test_safe_filename():
     assert platforms.safe_filename("CON") in ("CON", "_CON")
 
 
+@posix_sendfile
 def test_sendfile_copy_tracks_bytes(tmp_path):
     src = tmp_path / "src.bin"
     src.write_bytes(b"z" * 100_000)
@@ -163,6 +171,7 @@ def test_sendfile_copy_tracks_bytes(tmp_path):
         right.close()
 
 
+@posix_sendfile
 def test_sendfile_with_offset(tmp_path):
     src = tmp_path / "src.bin"
     src.write_bytes(bytes(range(256)) * 100)
@@ -374,7 +383,7 @@ def test_a_slow_but_progressing_process_is_not_killed():
     from local_file_sharer.updater import run_with_progress
 
     code, _lines = run_with_progress(
-        ["sh", "-c", "for i in 1 2 3 4; do echo \"step $i\"; sleep 0.6; done"],
+        ["sh", "-c", 'for i in 1 2 3 4; do echo "step $i"; sleep 0.6; done'],
         stall_timeout=2.0,
     )
     assert code == 0
@@ -405,7 +414,7 @@ def test_a_shim_that_names_its_pipx_venv_is_recognised(tmp_path):
     shim = tmp_path / "bin/local-file-sharer"
     shim.parent.mkdir(parents=True)
     shim.write_text(
-        "#!/bin/sh\nexec /home/u/.local/share/pipx/venvs/local-file-sharer/bin/lfs \"$@\"\n",
+        '#!/bin/sh\nexec /home/u/.local/share/pipx/venvs/local-file-sharer/bin/lfs "$@"\n',
         encoding="utf-8",
     )
     from local_file_sharer.updater import is_pipx_install

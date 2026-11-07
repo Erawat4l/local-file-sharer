@@ -408,9 +408,7 @@ def run_with_progress(
             if stalled:
                 process.kill()
                 process.wait()
-                collected.append(
-                    f"no output for {int(stall_timeout)}s — the download stopped answering"
-                )
+                collected.append(f"no output for {int(stall_timeout)}s — the download stopped answering")
             code = process.poll()
             if code is None:
                 code = process.wait()
@@ -519,12 +517,14 @@ def find_duplicates() -> list[dict[str, str]]:
     can update a copy that is never run — the "I upgraded and nothing changed"
     report again, from a different direction. The running copy is skipped.
     """
-    import shutil as _shutil  # noqa: PLC0415
+    from .platforms import find_on_path  # noqa: PLC0415
 
     found: list[dict[str, str]] = []
     running = Path(sys.argv[0]).resolve() if sys.argv and sys.argv[0] else None
     for name in ("lfs", "local-file-sharer"):
-        for entry in _shutil.which_all(name) if hasattr(_shutil, "which_all") else _which_all(name):
+        # find_on_path, not shutil.which: on Windows the command is lfs.exe and
+        # which() only finds it through PATHEXT one name at a time.
+        for entry in find_on_path(name):
             path = Path(entry)
             try:
                 real = path.resolve()
@@ -618,17 +618,10 @@ def _first_on_path() -> str:
 
 
 def _which_all(name: str) -> list[str]:
-    """shutil.which_all landed in 3.12; this covers 3.9+."""
-    seen: list[str] = []
-    for directory in os.environ.get("PATH", "").split(os.pathsep):
-        if not directory:
-            continue
-        candidate = Path(directory) / name
-        if candidate.is_file() and os.access(candidate, os.X_OK):
-            text = str(candidate)
-            if text not in seen:
-                seen.append(text)
-    return seen
+    """Kept for callers that predate platforms.find_on_path."""
+    from .platforms import find_on_path  # noqa: PLC0415
+
+    return find_on_path(name)
 
 
 def explain_failure(lines: list[str]) -> tuple[str, str]:
@@ -781,15 +774,8 @@ def upgrade_from_git(ref: str | None = None, *, verbose: bool = False) -> int:
         # or a bare symlink in ~/bin, leaves them exactly where they started.
         winner = next((item for item in clashes if item["path"] == first), None)
         if winner is not None:
-            how = (
-                "pipx uninstall local-file-sharer"
-                if winner["kind"] == "pipx"
-                else f"rm {winner['path']}"
-            )
-            con.print(
-                f"[lfs.muted]the one that wins your PATH is[/] "
-                f"[lfs.primary]{winner['path']}[/]"
-            )
+            how = "pipx uninstall local-file-sharer" if winner["kind"] == "pipx" else f"rm {winner['path']}"
+            con.print(f"[lfs.muted]the one that wins your PATH is[/] [lfs.primary]{winner['path']}[/]")
             con.print(f"[lfs.muted]remove it with[/]  [lfs.primary]{how}[/]")
             con.print(
                 f"[lfs.muted]then[/]  [lfs.primary]{platforms.rehash_hint()}[/]  "
@@ -825,7 +811,9 @@ def upgrade_from_git(ref: str | None = None, *, verbose: bool = False) -> int:
         con.print("[lfs.danger]the download stopped answering[/]")
         con.print(f"[lfs.muted]no output for {int(STALL_TIMEOUT)}s, so it was abandoned.[/]")
         con.print("[lfs.muted]nothing was changed. a weak connection is the usual cause —[/]")
-        con.print("[lfs.muted]try again, or on a slow link use the single file:[/] [lfs.primary]install-lfs.py[/]")
+        con.print(
+            "[lfs.muted]try again, or on a slow link use the single file:[/] [lfs.primary]install-lfs.py[/]"
+        )
         return 1
     if code != 0 and kind != "pipx":
         # Debian/Ubuntu block --user installs without this (PEP 668)

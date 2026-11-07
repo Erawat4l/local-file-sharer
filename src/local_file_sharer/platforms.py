@@ -1042,3 +1042,54 @@ def ensure_dir(path: Path) -> Path:
 def is_frozen() -> bool:
     """True when running from a PyInstaller standalone build."""
     return bool(getattr(sys, "frozen", False))
+
+
+def path_candidates(name: str, directory: str) -> list[Path]:
+    """Every file *name* could mean in *directory*, in PATHEXT order.
+
+    On Windows ``lfs`` is installed as ``lfs.exe``, and the shell finds it by
+    trying each extension in ``PATHEXT``. Anything that walks PATH itself has
+    to do the same, or it concludes the command is not installed when it
+    plainly is -- which is what `lfs doctor` and `lfs uninstall` did.
+    """
+    base = Path(directory)
+    if not WINDOWS:
+        return [base / name]
+    found = [base / name]
+    if Path(name).suffix:
+        return found  # already carries an extension; PATHEXT does not apply
+    # PATHEXT is ';'-separated on every platform; only PATH follows os.pathsep.
+    extensions = os.environ.get("PATHEXT", ".COM;.EXE;.BAT;.CMD")
+    for extension in extensions.split(";"):
+        extension = extension.strip()
+        if extension:
+            found.append(base / (name + extension.lower()))
+            found.append(base / (name + extension.upper()))
+    return found
+
+
+def find_on_path(name: str) -> list[str]:
+    """Every *name* on PATH that exists, resolved the way the shell would.
+
+    Unlike ``shutil.which`` this returns *all* of them: a duplicate copy is
+    exactly what makes an upgrade silently do nothing, and that is the case
+    `lfs doctor` exists to report.
+    """
+    seen: list[str] = []
+    for directory in os.environ.get("PATH", "").split(os.pathsep):
+        if not directory:
+            continue
+        for candidate in path_candidates(name, directory):
+            is_link = candidate.is_symlink()
+            if not (candidate.is_file() or is_link):
+                continue
+            # A symlink's executable bit belongs to its target, and a dangling
+            # one has no target to ask -- but it is still a file on PATH that
+            # shadows the real command, so report it.
+            if not WINDOWS and not is_link and not os.access(candidate, os.X_OK):
+                continue
+            text = str(candidate)
+            if text not in seen:
+                seen.append(text)
+                break  # the first match in a directory is the one that runs
+    return seen

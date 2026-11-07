@@ -49,7 +49,43 @@ jobs:
       - run: python -m pip install --upgrade pip
       - run: pip install ".[dev]"
       - name: pytest
-        run: pytest -q --cov=local_file_sharer --cov-report=xml --cov-report=term-missing
+        shell: bash
+        # tee keeps the output for the summary; PIPESTATUS keeps pytest's status,
+        # which a plain pipe would replace with tee's (always 0).
+        run: |
+          set -o pipefail
+          pytest -q --tb=line -rf --cov=local_file_sharer --cov-report=xml --cov-report=term-missing | tee pytest-output.txt
+      # When this fails, the failing test names go into the job summary and an
+      # annotation. Without it the only copy is in the log blob, which is not
+      # always reachable -- and a red matrix you cannot read is a red matrix
+      # nobody fixes. Runs even when pytest fails, and never masks its status.
+      # Annotations are the only part of a run that can be read back from here:
+      # the log blob and the artifacts both live on a host this sandbox cannot
+      # reach, and .output.summary is not exposed. So the reason for every
+      # failure goes into its own annotation, one line each -- pytest -q
+      # --tb=line -rf puts exactly that on the FAILED line, and a multi-line
+      # message would be truncated at the first newline anyway.
+      - name: failure summary
+        if: failure()
+        shell: bash
+        run: |
+          if [ ! -f pytest-output.txt ]; then
+            echo "::error::pytest did not produce any output (install or collection error)"
+            exit 0
+          fi
+          echo "### failing tests" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          grep '^FAILED ' pytest-output.txt >> "$GITHUB_STEP_SUMMARY" || true
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          python tools/report_failures.py pytest-output.txt || true
+      - name: upload failure output
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pytest-failures-${{ matrix.os }}-py${{ matrix.python }}
+          path: pytest-output.txt
+          if-no-files-found: ignore
+
       - name: upload coverage
         if: matrix.os == 'ubuntu-latest' && matrix.python == '3.12'
         uses: actions/upload-artifact@v4
@@ -73,9 +109,11 @@ jobs:
         run: |
           python -m venv /tmp/check
           /tmp/check/bin/pip install --quiet dist/*.whl
-          /tmp/check/bin/start version
-          /tmp/check/bin/start --help > /dev/null
-          /tmp/check/bin/start completions fish > /dev/null
+          # the console script is `lfs` (and `local-file-sharer`); `start` was
+          # the old name and no longer exists as an entry point
+          /tmp/check/bin/lfs version
+          /tmp/check/bin/lfs --help > /dev/null
+          /tmp/check/bin/lfs completions fish > /dev/null
       - uses: actions/upload-artifact@v4
         with:
           name: dist
@@ -100,13 +138,13 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq fish
-          fish --no-execute shell/fish/start.fish
-          fish --no-execute shell/windows/start.fish
+          fish --no-execute shell/fish/lfs.fish
+          fish --no-execute shell/windows/lfs.fish
           for shell in fish bash powershell zsh; do
             PYTHONPATH=src python -m local_file_sharer completions "$shell" > /dev/null
           done
-          PYTHONPATH=src python -m local_file_sharer completions fish > /tmp/start.fish
-          fish --no-execute /tmp/start.fish
+          PYTHONPATH=src python -m local_file_sharer completions fish > /tmp/lfs.fish
+          fish --no-execute /tmp/lfs.fish
       - name: powershell parse
         shell: pwsh
         run: |

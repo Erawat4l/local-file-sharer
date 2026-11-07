@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import http.cookiejar
 import json
+import socket
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -580,7 +581,8 @@ def test_the_downloader_page_actually_runs_and_saves_every_file(server):
     result = subprocess.run(
         [node, str(harness), f"http://127.0.0.1:{server.port}/", str(html)],
         capture_output=True,
-        text=True,
+        encoding="utf-8",
+        errors="replace",
         timeout=120,
     )
     assert result.returncode == 0, f"{result.stdout}\n{result.stderr}"
@@ -601,7 +603,13 @@ def test_files_with_unicode_spaces_and_percent_literals_are_served(tmp_path, fre
         "quote'and\"dquote.txt": b"quotes",
     }
     for name, payload in expected.items():
-        (root / name).write_bytes(payload)
+        try:
+            (root / name).write_bytes(payload)
+        except OSError as exc:  # pragma: no cover - Windows forbids '"' in a name
+            # Windows rejects '"' outright and its filesystem encoding cannot
+            # store some of these names, so there is nothing to serve and the
+            # test cannot set up. POSIX creates all six.
+            pytest.skip(f"this filesystem cannot store {name!r}: {exc}")
 
     server = ShareServer(Manifest.build([root]), host="127.0.0.1", port=free_port)
     server.start()
@@ -616,3 +624,27 @@ def test_files_with_unicode_spaces_and_percent_literals_are_served(tmp_path, fre
                 assert response.read() == payload, f"{name!r} came back corrupted"
     finally:
         server.stop()
+
+
+def test_a_refused_upload_answers_before_the_body_finishes(server):
+    """The status must arrive even though the client is still uploading.
+
+    The upload endpoint answered 403 and closed the socket without reading the
+    body. On a loopback connection the body often arrives in one piece, so it
+    looked fine; on Windows the client was still writing when the server
+    closed, and urllib raised ``ConnectionAbortedError: [WinError 10053]``
+    instead of the 403. Drain the body (up to a cap) before answering.
+    """
+    body = b"x" * 200_000
+    request = (
+        b"POST /api/upload?name=nope.txt HTTP/1.1\r\n"
+        b"Host: 127.0.0.1\r\n"
+        b"Content-Type: application/octet-stream\r\n"
+        b"Content-Length: " + str(len(body)).encode() + b"\r\n\r\n"
+    )
+    with socket.create_connection(("127.0.0.1", server.port), timeout=5) as sock:
+        sock.sendall(request)
+        sock.send(body[:5000])  # deliberately unfinished
+        sock.settimeout(5)
+        head = sock.recv(4096)
+    assert head.startswith(b"HTTP/1.1 403"), head[:80]
