@@ -67,6 +67,8 @@ WEB FILE SERVER
 All Files
 Serving
 1,708 files · 4 GB
+Download Folder
+Download Station
 1.0.0
 Web File Server
 Browse 

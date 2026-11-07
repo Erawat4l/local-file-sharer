@@ -31,7 +31,7 @@ def topbar(
     *,
     title: str,
     subtitle: str,
-    chips: list[tuple[str, bool]],
+    chips: list[tuple[str, bool, str | None]],
     y: float = 96,
     back_link: bool = False,
 ) -> float:
@@ -43,8 +43,8 @@ def topbar(
     shot.text(M + 70, y + 36, "LOCAL FILE SHARER", weight=700, size=14, fill=TEXT, spacing=0.2)
     shot.text(M + 70, y + 54, subtitle.upper(), weight=500, size=10, fill=FAINT, spacing=0.9)
     x = M + 350
-    for label, accent in chips:
-        x += shot.chip(x, y + 25, label, accent=accent) + 10
+    for label, accent, icon in chips:
+        x += shot.chip(x, y + 25, label, accent=accent, icon=icon) + 10
     if back_link:
         # player.html:320 — a chevron back link to "/?list=1", then the build
         # badge. Right-align the badge first, then place the chevron to its left
@@ -76,7 +76,7 @@ def downloader() -> Shot:
         shot,
         title="Download Station",
         subtitle="Download Station",
-        chips=[("Live", True), ("Mode download", False), ("3 Devices", False)],
+        chips=[("Live", True, None), ("Mode download", False, None), ("3 Devices", False, None)],
     )
 
     hero_y = y + 26
@@ -205,7 +205,17 @@ def server() -> Shot:
         shot,
         title="Web File Server",
         subtitle="Web File Server",
-        chips=[("All Files", False), ("Serving", True), ("1,708 files · 4 GB", False)],
+        # server.html's header, left to right: breadcrumb chip, then the spacer,
+        # then Serving / counts / Download Folder / Download Station. The shot
+        # drew three chips and dropped the two download links, so the busiest
+        # part of the page was missing from the picture.
+        chips=[
+            ("All Files", False, None),
+            ("Serving", True, None),
+            ("1,708 files · 4 GB", False, None),
+            ("Download Folder", False, "archive"),
+            ("Download Station", False, "download"),
+        ],
     )
     head_y = y + 24
     shot.card(M, head_y, W - M * 2, 84, r=18)
@@ -281,8 +291,13 @@ def server() -> Shot:
     #   .row-size 12.5px --text-dim right-aligned, .row-get --accent
     # The shot drew 17px icons in a DIM grey, a 13px name, a 11.5px size and a
     # 13px gap, so every row was visibly lighter and tighter than the page.
+    # server.html's script prepends an <input type=checkbox class=pick> to every
+    # row at runtime (accent-color:#f5f5f5, 16x16). The shot drew no checkbox at
+    # all, so the picture was missing the leftmost column of every single row --
+    # which is the first thing a phone screenshot shows.
     row_pad_x, gap = 18, 10
     pick_w, icon_w = 16, 20
+    pick_x = M + row_pad_x
     icon_x = M + row_pad_x + pick_w + gap
     name_x = icon_x + icon_w + gap
     # .row padding is 11px top and bottom and .row-name is 14px, so a row is
@@ -298,6 +313,8 @@ def server() -> Shot:
             shot.rect(M + 1, ry, W - M * 2 - 2, row_h, fill="rgba(255,255,255,0.045)")
         # every row is separated by #1a1a1a, including the first
         shot.line(M, ry, W - M, ry, stroke="#1a1a1a", sw=1)
+        # the pick checkbox: a 16px box on #0a0a0a with a --line-strong border
+        shot.rect(pick_x, ry + 15, pick_w, pick_w, fill="#0a0a0a", stroke="rgba(255,255,255,0.22)", r=3)
         # .row-icon is --text, not --text-dim: the old shots drew the glyphs in
         # the dim colour and the listing came out grey-on-black in the picture.
         shot.icon(icon_x, ry + 13, kind, icon_w, color=TEXT)
@@ -500,7 +517,12 @@ def _player_chrome(shot: Shot, *, stage_y: int, stage_h: int, vw: int) -> None:
     shot.line(vx, cy, vx + 66, cy, stroke="#ffffff", sw=6)
     shot.circle(vx + 66, cy, 7, fill="#ffffff")
 
-    # right group: rate, pip, download, fit, fullscreen
+    # right group: rate, pip, download, fit, fullscreen. "download" is an
+    # <a download> on the page, not a <button>, and player.html had no base
+    # anchor rule: on a real phone it rendered in the browser's default link
+    # blue. The page now sets a{color:var(--text)}, so the shot draws it in the
+    # same colour as the rest of the transport -- a screenshot must not carry a
+    # colour the page does not.
     rx = vw - pad - ROUND - 4 * (ROUND * 2 + 10)
     for kind in ("rate", "pip", "download", "fit", "full"):
         # #full is a 46px circle? no: every .round but play is 40px

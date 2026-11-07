@@ -288,6 +288,13 @@
   @media (max-width:560px){
     .understage span:last-child{display:none} /* keyboard hints are noise on a phone */
   }
+  /* Every control in the transport is a <button> except the download one, which
+     has to be an <a download> for the browser to save the file. With no base
+     anchor rule it rendered in the browser's default link blue -- the only
+     coloured pixel in the whole app -- and it was underlined, inside a circle.
+     app.css sets `a{color:var(--text);text-decoration:none}`, so the player
+     gets the same rule. (Reported from a real phone screenshot.) */
+  a{color:var(--text);text-decoration:none}
   .understage a{color:var(--accent);text-decoration:none}
   kbd{font-family:var(--mono);font-size:11px;padding:2px 6px;border-radius:6px;
     border:1px solid var(--line);background:#1a1a1a;color:var(--dim)}
