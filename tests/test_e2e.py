@@ -602,7 +602,13 @@ def test_files_with_unicode_spaces_and_percent_literals_are_served(tmp_path, fre
         "quote'and\"dquote.txt": b"quotes",
     }
     for name, payload in expected.items():
-        (root / name).write_bytes(payload)
+        try:
+            (root / name).write_bytes(payload)
+        except OSError as exc:  # pragma: no cover - Windows forbids '"' in a name
+            # Windows rejects '"' outright and its filesystem encoding cannot
+            # store some of these names, so there is nothing to serve and the
+            # test cannot set up. POSIX creates all six.
+            pytest.skip(f"this filesystem cannot store {name!r}: {exc}")
 
     server = ShareServer(Manifest.build([root]), host="127.0.0.1", port=free_port)
     server.start()

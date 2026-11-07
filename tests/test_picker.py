@@ -7,6 +7,8 @@ from pathlib import Path
 
 import pytest
 
+from conftest import unreadable_dir
+
 from local_file_sharer.errors import PickerError
 from local_file_sharer.picker import (
     analyze,
@@ -173,7 +175,7 @@ def test_going_up_into_a_locked_folder_keeps_the_picker_open(tmp_path):
     state.reload()
     assert [e.name for e in state.visible()] == ["note.txt"]
 
-    locked.chmod(0o000)
+    unreadable_dir(locked)
     try:
         moved = enter_dir(state, locked)
         assert moved is False, "a locked folder must not be entered"
@@ -227,7 +229,7 @@ def test_unreadable_folder_is_still_flagged(tmp_path):
     locked = root / "locked"
     locked.mkdir(parents=True)
     (root / "open").mkdir()
-    locked.chmod(0o000)
+    unreadable_dir(locked)
     try:
         if os.access(locked, os.R_OK):  # running as root: the mode is ignored
             pytest.skip("permissions are not enforced for this user")

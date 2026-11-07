@@ -27,6 +27,13 @@ from local_file_sharer.updater import (
 )
 
 
+#: The sendfile tests exercise the os.sendfile fast path. HAS_SENDFILE is
+#: deliberately false on Windows (platforms.py), so there is nothing to test
+#: there -- and socket.socketpair + socket.sendfile take different paths anyway.
+posix_sendfile = pytest.mark.skipif(
+    not platforms.HAS_SENDFILE, reason="os.sendfile is POSIX-only; Windows uses socket.sendfile"
+)
+
 def test_parse_version():
     assert parse_version("v1.2.3") == (1, 2, 3)
     assert parse_version("1.2") == (1, 2, 0)
@@ -139,6 +146,7 @@ def test_safe_filename():
     assert platforms.safe_filename("CON") in ("CON", "_CON")
 
 
+@posix_sendfile
 def test_sendfile_copy_tracks_bytes(tmp_path):
     src = tmp_path / "src.bin"
     src.write_bytes(b"z" * 100_000)
@@ -163,6 +171,7 @@ def test_sendfile_copy_tracks_bytes(tmp_path):
         right.close()
 
 
+@posix_sendfile
 def test_sendfile_with_offset(tmp_path):
     src = tmp_path / "src.bin"
     src.write_bytes(bytes(range(256)) * 100)

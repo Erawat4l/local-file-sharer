@@ -15,6 +15,8 @@ from pathlib import Path
 
 import pytest
 
+from conftest import unreadable_dir
+
 from local_file_sharer import network, platforms
 
 
@@ -415,7 +417,7 @@ def test_start_dir_skips_a_remembered_folder_it_cannot_read(tmp_path, monkeypatc
 
     locked = tmp_path / "locked"
     locked.mkdir()
-    locked.chmod(0o000)
+    unreadable_dir(locked)
     readable = tmp_path / "readable"
     readable.mkdir()
 
@@ -440,7 +442,7 @@ def test_start_dir_falls_back_to_home_when_nothing_is_readable(tmp_path, monkeyp
     home.mkdir()
     monkeypatch.setattr(platforms, "home_dir", lambda: home)
     monkeypatch.setattr(platforms, "storage_root", lambda: locked)
-    locked.chmod(0o000)
+    unreadable_dir(locked)
 
     try:
         assert platforms.start_dir(locked) == home

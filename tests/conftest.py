@@ -45,6 +45,22 @@ def share_tree(tmp_path: Path) -> Path:
     return root
 
 
+def unreadable_dir(path: Path) -> None:
+    """chmod a directory so it cannot be listed, or skip where that does nothing.
+
+    Windows has no equivalent: ``chmod(0o000)`` leaves the folder perfectly
+    readable, so tests that assert "this folder is not accessible" pass their
+    setup and fail their assertion there. Skip instead of pretending.
+    """
+    path.chmod(0o000)
+    try:
+        next(iter(path.iterdir()), None)
+    except (PermissionError, OSError):
+        return
+    path.chmod(0o755)
+    pytest.skip("this platform ignores directory permissions (needs a POSIX mode)")
+
+
 def make_symlink(link: Path, target: Path) -> None:
     """Create a symlink, or skip the test where the platform forbids it.
 
