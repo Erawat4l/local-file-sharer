@@ -189,13 +189,13 @@ def build_command_parsers() -> dict[str, argparse.ArgumentParser]:
     configure = argparse.ArgumentParser(
         prog="lfs configure",
         parents=[common],
-        description="set port, PIN, theme and download folder, then write the config",
+        description="Set Port, PIN, Theme and Download Folder, then write the config",
     )
     configure.add_argument("--yes", action="store_true", help="accept every default, ask nothing")
     parsers["configure"] = configure
 
     theme = argparse.ArgumentParser(
-        prog="lfs theme", parents=[common], description="switch or preview the colour theme"
+        prog="lfs theme", parents=[common], description="Switch or preview the colour theme"
     )
     theme.add_argument("name", nargs="?", choices=("dark", "light", "mono", "list", "next"), default=None)
     theme.add_argument("--preview", action="store_true", help="show a colour preview")

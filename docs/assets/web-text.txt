@@ -1,32 +1,29 @@
 http://192.168.1.42:8080/
 no-store
 LFS
-local-file-sharer
+LOCAL FILE SHARER
 DOWNLOAD STATION
-live
-mode download
-expires in 29m
-8 devices
+Live
+Mode download
+3 Devices
 1.0.0
 Download Station
 Download 
 Everything
-, fast.
-8 files · 4.0 GB shared from aurora-laptop. Grab one file, several at once with
-16 parallel connections, or pull the whole share as a single resumable .zip.
-files
+, Fast.
+8 files · 4.0 GB shared from aurora-laptop.
+Files
 8
-total size
+Total Size
 4.0 GB
-connections
+Connections
 16
 parallel
 Speed
 72 MB/s
-Download all
-16×
-Everything as .zip
-Copy curl one-liner
+Download All
+Everything As .zip
+Copy curl One-liner
 aria2c -x16
 2.5 GB / 4.0 GB · 3 files
 ETA 21s · 72 MB/s
@@ -42,115 +39,96 @@ Images
 Audio
 Documents
 Archives
+roms
+1,701 files · 4.0 GB
+Download zip
 Aurora-Film-Festival-Keynote-4K.mkv
 3.6 GB · video
-Download  →
+Stream
 Termux-notes.txt
 4.1 KB · text
-Download  →
+Get
 live-set-2026.flac
 402 MB · audio
-Download  →
+Stream
 moodboard-final.png
 17.6 MB · image
-Download  →
+Get
 report.pdf
 2.8 MB · pdf
-Download  →
-holiday-photos.zip
-612 MB · archive
-Download  →
-local-file-sharer 1.0.0
-·
-resumable · range requests · zero-copy sendfile
-powered by pure Python + rich
+Get
+LOCAL FILE SHARER 1.0.0
+Resume · Range
 http://192.168.1.42:8080/d/3e4524dd/
 no-store
 LFS
-local-file-sharer
-web file server
-demo
-8 files · 4.0 GB
-Download Station
+LOCAL FILE SHARER
+WEB FILE SERVER
+All Files
+Serving
+1,708 files · 4 GB
 1.0.0
-web file server
+Web File Server
 Browse 
 Folder
-Every file is served with HTTP Range support — resume, seek and parallelise freely.
-Download Selected
+Download Selected (0)
 Select All
 Filter in this folder…
 Filter
-Folder
-demo
-Size
-4.0 GB
+Files
+1,708
+Folder Size
+4 GB
 Share Total
-4.0 GB
+4 GB
 Transferred
-2.5 GB
+28.5 MB
 Speed
-72 MB/s
+—
 NAME
 SIZE
-Aurora-Film-Festival-Keynote-4K.mkv
-3.6 GB
-↓
-Termux-notes.txt
-4.1 KB
-↓
-live-set-2026.flac
-402 MB
-↓
-moodboard-final.png
-17.6 MB
-↓
-report.pdf
-2.8 MB
-↓
-IMG_20261101_143210.jpg
-4.9 MB
-↓
-2026-10-31-wedding-012.jpg
-4.9 MB
-↓
-holiday-photos.zip
-612 MB
-↓
-local-file-sharer 1.0.0
-·
-GET /api/manifest
-tip: aria2c -x16 -s16 for maximum speed
+FREE FIRE MAX/
+1701 files · 4 GB
+index_287.m3u8
+229 KB
+Agon-1.4.58.apk
+2.4 MB
+Agon-1.4.60.apk
+2.4 MB
+KRATOS_vs_ISHAN.mp4
+19 MB
+KRATOS_vs_ISHAN_stacked.mp4
+14 MB
+VID-20261105-WA0002.mp4
+3.2 MB
+VID-20261105-WA0006.mp4
+3.7 MB
+LOCAL FILE SHARER 1.0.0
+Streaming · Resume · Range
 http://192.168.1.42:8080/s/b45d56a6
 no-store
 LFS
-local-file-sharer
-player
-3.6 GB
-0 B/s
-1.0.0 · all files
 Aurora-Film-Festival-Keynote-4K.mkv
-video/x-matroska · 3.6 GB
-0:00
+3.6 GB
+72 MB/s
+1.0.0
 0:41:12
 1:48:20
 10
-▶
 10
-1×
-buffered 38%
-Playlist · 1
+PLAYLIST · 1
 Aurora-Film…mkv
-3.6 GB · playing
-Transferred
+3.6 GB
+3.6 GB
+buffered
+38%
+transferred
 2.5 GB
-Devices
+devices
 3
-Format
-matroska
-Speed
-72 MB/s
-space play · ← → ±10s · f fullscreen · m mute
-If the preview stays black, the codec is not supported by this browser (common for MKV/HEVC).
-Download the file and play it locally — the transfer is lossless either way.
-Streaming with HTTP Range — seek anywhere instantly.
+format
+video/x-matroska
+shape
+16:9
+Streaming with HTTP Range
+seek anywhere instantly

@@ -262,7 +262,7 @@ HELP_PICKER = """[bold]File picker keys[/]
   [bold]Enter[/]          open a folder (or add the highlighted file)
   [bold]Space[/]          toggle the highlighted row
   [bold]6,7,8 / 6-8[/]    select by number, then Enter
-  [bold]a[/]  /  [bold]c[/]      select all / clear
+  [bold]a[/]  /  [bold]c[/]      Select All / Clear
   [bold]s[/]              start sharing the selection
   [bold]/[/]              fuzzy search this folder
   [bold]f[/]              favourite / unfavourite this folder

@@ -92,9 +92,11 @@ path is active on your machine.
 
 <div align="center">
 
-| Download station | Web file server | Media player |
+| Download Station | Web File Server | Media Player |
 |---|---|---|
 | <img src="docs/assets/web-download.png" width="260" alt="Download Station"> | <img src="docs/assets/web-server.png" width="260" alt="Web File Server"> | <img src="docs/assets/web-player.png" width="260" alt="Media Player"> |
+
+<img src="docs/assets/web-demo.gif" width="100%" alt="The three web pages in turn, then the player's controls fading away as it plays">
 
 </div>
 
@@ -599,7 +601,7 @@ lfs upgrade                  # install the newest code from GitHub
 | `Enter` | open folder / add file |
 | `b` / `Backspace` | up one folder |
 | `6,7,8` or `6-8` | select by number, then `Enter` |
-| `a` / `c` | select all / clear |
+| `a` / `c` | Select All / Clear |
 | `s` | share the selection |
 | `/` | fuzzy search this folder |
 | `f` | favourite / unfavourite folder |
