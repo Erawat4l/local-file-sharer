@@ -11,15 +11,24 @@ from __future__ import annotations
 
 import io
 import os
-import pty
-import select
 import sys
 import time
 from pathlib import Path
 
 import pytest
 
-pytestmark = pytest.mark.skipif(not hasattr(os, "fork"), reason="needs POSIX pty")
+# `import pty` and `import select` fail on Windows, and an import at module level
+# runs before any skip marker -- so this whole file reported a collection error
+# on every Windows job instead of skipping, which is why the matrix was red on
+# all five Python versions there. Guard the import, not just the tests.
+if os.name == "posix" and hasattr(os, "fork"):
+    import pty
+    import select
+
+pytestmark = pytest.mark.skipif(
+    not (os.name == "posix" and hasattr(os, "fork")),
+    reason="needs a POSIX pty (terminals deliver key sequences differently on Windows)",
+)
 
 ROOT = Path(__file__).resolve().parent
 
