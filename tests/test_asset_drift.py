@@ -431,3 +431,41 @@ def test_the_web_shots_do_not_glow():
     assert '"#ffffff" if variant == "primary" else "#d4d4d4"' in block, (
         "primary/alt fills must be the app.css values #fff / #d4d4d4"
     )
+
+
+def test_the_server_shot_draws_the_page_s_row_metrics():
+    """The listing's icon size, colours and row height come from app.css.
+
+    The shot drew 17px icons in --text-dim, a 13px name and 54px rows, against
+    a page that has 20px icons in --text, a 14px name and 46px rows. Every icon
+    in the gif was therefore smaller, greyer and further apart than the one a
+    person actually sees, which is what "the icons look different" meant.
+    """
+    repo = Path(__file__).resolve().parents[1]
+    css = (repo / "src" / "local_file_sharer" / "web" / "assets" / "static" / "app.css").read_text(
+        encoding="utf-8"
+    )
+    # the rules the shot hardcodes, so a change to either side is caught
+    for rule in (
+        "grid-template-columns: 16px 20px minmax(0, 1fr) auto 20px",
+        "gap: 10px",
+        "padding: 11px 18px",
+        "border-bottom: 1px solid #1a1a1a",
+        ".row-name { display: flex",
+        "font-size: 14px",
+        ".row-get { text-align: right; color: var(--accent)",
+    ):
+        assert rule in css, f"app.css no longer says {rule!r}; the shot needs updating"
+
+    source = (repo / "tools" / "screenshots" / "webgen.py").read_text(encoding="utf-8")
+    block = source[source.index("row_pad_x, gap = 18, 10") :]
+    block = block[: block.index("return shot")]
+
+    assert "row_pad_x, gap = 18, 10" in block, "the .row padding/gap pairing changed"
+    assert "show_pick" not in block
+    assert "shot.icon(icon_x, ry + 13, kind, icon_w, color=TEXT)" in block, (
+        ".row-icon must be 20px in --text: the markup sets width=20 height=20 and "
+        "the icon inherits .row's colour, which is --text, not a dim grey"
+    )
+    assert "row_h = 46" in block, ".row is 11px padding around a 14px line: 46px"
+    assert "size=14" in block, ".row-name is 14px"
