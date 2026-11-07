@@ -248,10 +248,17 @@ def server() -> Shot:
     # from a flat listing; the page groups by folder now, which is the whole
     # point of the fix, so the picture has to show a folder row.
     t = strip_y + 84
-    shot.rect(M, t, W - M * 2, 600, fill="rgba(13,13,13,0.9)", stroke=LINE, r=18)
-    shot.text(M + 20, t + 22, "NAME", size=10, fill=FAINT, spacing=1.4)
-    shot.text(W - M - 74, t + 22, "SIZE", size=10, fill=FAINT, spacing=1.4, anchor="end")
-    shot.line(M, t + 34, W - M, t + 34, stroke=LINE)
+    shot.rect(M, t, W - M * 2, 40 + 8 * 46 + 8, fill="rgba(13,13,13,0.9)", stroke=LINE, r=18)
+    # .list-head: padding 11px, font-size 11.5px, letter-spacing .09em, uppercase,
+    # --text-faint, on #0a0a0a, with a --line rule underneath. The shot drew it
+    # at 10px without the background, so the header floated on the panel.
+    # .list has overflow:hidden and a radius, so the head's #0a0a0a is clipped to
+    # the panel's rounded top corners; a plain rect pokes out over them.
+    shot.rect(M, t, W - M * 2, 40, fill="#0a0a0a", r=18)
+    shot.rect(M, t + 20, W - M * 2, 20, fill="#0a0a0a")
+    shot.text(M + 18, t + 24, "NAME", size=11.5, fill=FAINT, spacing=1.04)
+    shot.text(W - M - 18 - 44 - 12, t + 24, "SIZE", size=11.5, fill=FAINT, spacing=1.04, anchor="end")
+    shot.line(M, t + 40, W - M, t + 40, stroke=LINE)
 
     # Example names only. These shots are published on GitHub, and the previous
     # set were real files from a real phone -- a game, a build number, a date,
@@ -267,27 +274,53 @@ def server() -> Shot:
         ("audio", "track-01.mp3", "8.1 MB"),
         ("pdf", "receipt.pdf", "229 KB"),
     ]
-    row_h = 54
+    # app.css .row, read off the stylesheet rather than eyeballed:
+    #   grid-template-columns: 16px 20px minmax(0,1fr) auto 20px
+    #   gap: 10px; padding: 11px 18px; border-bottom: 1px solid #1a1a1a
+    #   .ico 20x20 (the markup sets width/height), .row-name 14px,
+    #   .row-size 12.5px --text-dim right-aligned, .row-get --accent
+    # The shot drew 17px icons in a DIM grey, a 13px name, a 11.5px size and a
+    # 13px gap, so every row was visibly lighter and tighter than the page.
+    row_pad_x, gap = 18, 10
+    pick_w, icon_w = 16, 20
+    icon_x = M + row_pad_x + pick_w + gap
+    name_x = icon_x + icon_w + gap
+    # .row padding is 11px top and bottom and .row-name is 14px, so a row is
+    # ~46px; the shot drew 54px and the list came out taller and airier than
+    # the page, which is half of what "the icons look different" is about --
+    # spacing changes how big a glyph reads.
+    row_h = 46
     for index, (kind, name, size) in enumerate(rows):
-        ry = t + 34 + index * row_h
+        ry = t + 40 + index * row_h
         # .row:hover and .row.folder both tint; the folder row is the one row on
         # the page that is a container rather than a file
         if kind == "folder":
             shot.rect(M + 1, ry, W - M * 2 - 2, row_h, fill="rgba(255,255,255,0.045)")
-        else:
-            shot.line(M + 18, ry, W - M - 18, ry, stroke="rgba(255,255,255,0.07)")
-        shot.icon(M + 24, ry + 18, kind, 17, color=DIM)
-        shot.text(M + 54, ry + 32, name, weight=600 if kind == "folder" else 500, size=13, fill=TEXT)
+        # every row is separated by #1a1a1a, including the first
+        shot.line(M, ry, W - M, ry, stroke="#1a1a1a", sw=1)
+        # .row-icon is --text, not --text-dim: the old shots drew the glyphs in
+        # the dim colour and the listing came out grey-on-black in the picture.
+        shot.icon(icon_x, ry + 13, kind, icon_w, color=TEXT)
         shot.text(
-            W - M - 74,
-            ry + 32,
+            name_x,
+            ry + 29,
+            name,
+            weight=600 if kind == "folder" else 400,
+            size=14,
+            fill=TEXT,
+        )
+        shot.text(
+            W - M - row_pad_x - icon_w - gap,
+            ry + 29,
             size,
             family="mono",
-            size=11.5,
-            fill=FAINT if kind == "folder" else DIM,
+            size=12.5,
+            fill=DIM,
             anchor="end",
         )
-        shot.icon(W - M - 42, ry + 18, "download", 17, color=ACCENT)
+        # .row-get{color:var(--accent)} -- accent is #f5f5f5, i.e. the same
+        # white as the text, not the pale grey it was drawn in
+        shot.icon(W - M - row_pad_x - icon_w, ry + 13, "download", icon_w, color=TEXT)
 
     fy = H - 22
     shot.line(M, fy - 16, W - M, fy - 16, stroke=LINE)
