@@ -80,6 +80,14 @@ jobs:
           else
             echo "::error::pytest failed before running any test (collection or install error)"
           fi
+      - name: upload failure output
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pytest-failures-${{ matrix.os }}-py${{ matrix.python }}
+          path: pytest-output.txt
+          if-no-files-found: ignore
+
       - name: upload coverage
         if: matrix.os == 'ubuntu-latest' && matrix.python == '3.12'
         uses: actions/upload-artifact@v4
