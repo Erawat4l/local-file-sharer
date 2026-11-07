@@ -50,17 +50,29 @@ def test_health_and_disabled_caching(server):
 
 
 def test_index_page_shows_subfolders_as_folders(server):
-    """A shared folder's sub-folders are cards; their contents are not listed."""
+    """A picked folder is ONE card; its contents are never listed beside it.
+
+    This fixture shares a folder ("photos") next to two loose files, which is
+    the shape the picker produces and the shape that was broken: the folder's
+    name was stripped from every path inside it, so "photos/one.jpg" became the
+    loose file "one.jpg" at the top of the page and the folder itself was never
+    drawn. A folder must stay a folder.
+
+    A share whose ONLY root is a folder is different, and correct: there the
+    folder *is* the share, so the page opens on its contents (covered by
+    test_a_folder_picked_whole_lists_its_contents_not_itself).
+    """
     body = get(server, "/").read().decode()
-    # photos/2024/ is the only sub-folder of the share
+    # one card for the picked folder, beside the two loose files
     assert body.count('class="card folder"') == 1
-    assert 'href="/folder/2024"' in body
-    assert "1 file" in body
-    # files one level down are listed; files inside a sub-folder never are
-    assert "one.jpg" in body
-    assert "three.txt" not in body
-    # the shared folder's own name is not repeated on each card
-    assert "photos/one.jpg" not in body
+    assert 'href="/folder/photos"' in body
+    assert "</span> photos" in body or ">photos<" in body
+    # nothing inside it is shattered onto the front page
+    for hidden in ("one.jpg", "two.png", "2024"):
+        assert hidden not in body, f"{hidden!r} leaked out of its folder"
+    # the loose files are still there
+    assert "hello.txt" in body
+    assert "clip.mp4" in body
 
 
 def test_a_share_of_many_folders_lists_each_one(share_tree, free_port):
@@ -83,19 +95,22 @@ def test_a_share_of_many_folders_lists_each_one(share_tree, free_port):
 
 def test_folder_zip_downloads_only_that_folder(server):
     """Clicking a folder downloads that folder, not the whole share."""
-    response = get(server, "/folder/2024")
+    response = get(server, "/folder/photos")
     assert response.headers["Content-Type"] == "application/zip"
     archive = zipfile.ZipFile(io.BytesIO(response.read()))
     assert archive.testzip() is None
     # rooted inside the folder, so it opens straight onto its contents
-    assert archive.namelist() == ["three.txt"]
+    assert sorted(archive.namelist()) == ["2024/three.txt", "one.jpg", "two.png"]
 
 
 def test_a_folder_card_opens_that_folder(server):
-    """/browse/<sub-folder> lists that folder, and nested paths work too."""
-    body = get(server, "/browse/2024").read().decode()
-    assert "three.txt" in body
-    assert "one.jpg" not in body
+    """/browse/<picked folder> lists that folder, and nested paths work too."""
+    body = get(server, "/browse/photos").read().decode()
+    assert "one.jpg" in body
+    assert "2024" in body  # its sub-folder is a row, not flattened
+    assert "three.txt" not in body  # one level only
+    nested = get(server, "/browse/photos/2024").read().decode()
+    assert "three.txt" in nested
     # /d/<id> still serves the whole folder item, not just the sub-folder
     manifest = json.load(get(server, "/api/manifest"))
     folder = next(item for item in manifest["items"] if item["kind"] == "folder")

@@ -50,7 +50,7 @@ from .transfer.torrent import (
     torrent_hint,
 )
 from .ui import banner
-from .ui.components import error_panel, info_panel, mode_badge
+from .ui.components import ask_yes_no, error_panel, info_panel, mode_badge
 from .ui.console import console, current_theme, panel, screen_width, wrap_command
 from .ui.dashboard import Dashboard, DashboardOptions, render_summary
 
@@ -373,10 +373,13 @@ class ShareRunner:
         )
         ask = request.use_tailscale
         if ask is None:
-            ask = Confirm.ask(
+            # Asked after the share is already serving, like the Cloudflare
+            # question below: an interrupt here answers "no", it must not end
+            # the session and lose the server that is already running.
+            ask = ask_yes_no(
                 Text("publish this share on your tailnet with `tailscale serve`?", style=theme.accent),
                 default=False,
-                console=con,
+                console_=con,
             )
         if not ask:
             con.print(Text(" skipped Tailscale", style=theme.faint))
@@ -424,10 +427,10 @@ class ShareRunner:
                     border=theme.warning,
                 )
             )
-            ask = Confirm.ask(
+            ask = ask_yes_no(
                 Text("generate a temporary public Cloudflare link?", style=theme.accent),
                 default=False,
-                console=con,
+                console_=con,
             )
         if not ask:
             return ""
