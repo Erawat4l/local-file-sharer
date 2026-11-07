@@ -1,8 +1,8 @@
- LFS  LOCAL FILE SHARER  v1.0.0                                             03:48 · e2b.local
+ LFS  LOCAL FILE SHARER  v1.0.0                                             05:09 · my-laptop
 ───────────────────────────────────────────────────────────────────────────────────────────────
 ╭─ this device ─────────────────────────╮
-│      device  e2b.local                │
-│     network  169.254.0.21 (other)     │
+│      device  my-laptop                │
+│     network  192.168.1.42 (wifi)      │
 │      public  looked up when you share │
 │   tailscale  not installed            │
 │       theme  dark                     │

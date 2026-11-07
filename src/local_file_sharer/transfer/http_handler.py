@@ -411,7 +411,13 @@ class ShareRequestHandler(BaseHTTPRequestHandler):
             elif path.startswith("/zip/"):
                 self.serve_zip(item_id=path[len("/zip/") :].strip("/"))
             elif path.startswith("/browse/"):
-                self.page_share_folder(path[len("/browse/") :].strip("/"), query)
+                target = path[len("/browse/") :].strip("/")
+                # Download mode owns a different page, so a folder click stays
+                # on it instead of landing on the serve-mode table.
+                if self.ctx.manifest.mode == "download":
+                    self.page_index(folder=urllib.parse.unquote(target))
+                else:
+                    self.page_share_folder(target, query)
             elif path.startswith("/folder/"):
                 self.serve_folder_zip(path[len("/folder/") :].strip("/"))
             elif path.startswith("/raw/"):
@@ -576,11 +582,26 @@ class ShareRequestHandler(BaseHTTPRequestHandler):
     def _query(self) -> dict[str, list[str]]:
         return urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
 
-    def page_index(self) -> None:
-        """Route the landing page according to the share mode."""
+    def page_index(self, folder: str | None = None) -> None:
+        """Route the landing page according to the share mode.
+
+        ``page_index("/browse/<folder>")`` re-enters here for download mode: a
+        folder card belongs to the same page, so clicking one keeps the
+        download station -- hero, stats, QR card and all -- and only changes
+        which level it lists.
+        """
         mode = self.ctx.manifest.mode
         if mode == "serve":
             self.page_server_index()
+            return
+        if folder is not None and mode == "download":
+            # A folder inside a download share is still the download page -- but
+            # only if the folder exists in the share. Rendering any string that
+            # arrives in the URL would answer 200 for /browse/not-a-real-folder.
+            if _level_has_files(self.ctx.manifest, folder):
+                self._page_download(folder=folder)
+            else:
+                self.send_error_page(HTTPStatus.NOT_FOUND, "No such folder in this share")
             return
         if mode == "stream":
             media = [f for f in self.ctx.manifest.iter_files() if f.kind in ("video", "audio")]
@@ -598,6 +619,11 @@ class ShareRequestHandler(BaseHTTPRequestHandler):
             if media and len(media) == len(everything) and not wanted_list:
                 self.redirect(f"/s/{media[0].file_id}")
                 return
+        self._page_download()
+
+    def _page_download(self, *, folder: str | None = None) -> None:
+        """The download station, for the share or for one folder inside it."""
+
         tracker = self.ctx.tracker
         tracker.register_request(self.client_ip(), self.user_agent(), path="/")
         template = (self.ctx.assets or {}).get("downloader.html") or (self.ctx.assets or {}).get("index.html")
@@ -608,9 +634,13 @@ class ShareRequestHandler(BaseHTTPRequestHandler):
         # Cards are grouped by the top-level name under the shared root, so each
         # folder gets one entry with its own download button (a folder zip).
         page = _page_number(self._query())
-        cards, total_items, pages = _entry_cards(
-            self.ctx.manifest, level=_shared_level(self.ctx.manifest), page=page
-        )
+        # ``folder`` is the level this page lists. The front page shows the
+        # share itself; a folder card links to /browse/<path>, which must stay
+        # THIS page -- hero, stats, QR card -- and not switch to the serve-mode
+        # table, which is what made a download station turn into a different
+        # app halfway through a click.
+        level = _shared_level(self.ctx.manifest) if folder is None else folder
+        cards, total_items, pages = _entry_cards(self.ctx.manifest, level=level, page=page)
         torrent = self.ctx.torrent
         torrent_links = ""
         if torrent is not None:
@@ -621,7 +651,11 @@ class ShareRequestHandler(BaseHTTPRequestHandler):
         body = (
             template.replace("{{title}}", html.escape(self.ctx.manifest.title))
             .replace("{{files}}", "\n".join(cards))
-            .replace("{{pager}}", _pager_html(page, pages, total_items, base="?"))
+            # Which folder this page is showing, and how to get back up. The
+            # page never needed it before, because it only ever showed one level.
+            .replace("{{breadcrumbs}}", _download_crumbs(self.ctx, folder))
+            .replace("{{pager}}", _pager_html(page, pages, total_items, base=_pager_base(folder)))
+            .replace("{{zip_url}}", _folder_zip_url(folder))
             .replace("{{torrent_links}}", torrent_links)
             .replace("{{file_count}}", str(self.ctx.manifest.file_count))
             .replace("{{total_size}}", human_size(self.ctx.manifest.total_bytes))
@@ -656,9 +690,9 @@ class ShareRequestHandler(BaseHTTPRequestHandler):
         search = (query.get("q") or [""])[0]
         # One level only, folder first. This page used to list every file at
         # every depth, labelled with nothing but its basename: a share with
-        # roms/optional/ab_book_001.x showed a bare "ab_book_001.x" row beside
-        # the loose files at the top, so the folder it lived in was invisible
-        # and the page said "1,708 files" while showing no folders at all.
+        # alpha/beta/deep.bin showed a bare "deep.bin" row beside the loose
+        # files at the top, so the folder it lived in was invisible and the
+        # page said "1,708 files" while showing no folders at all.
         # Files deeper down belong to the folder that holds them, and that
         # folder is a row you can open.
         here, subfolders = _top_level(self.ctx.manifest)
@@ -728,11 +762,34 @@ class ShareRequestHandler(BaseHTTPRequestHandler):
                 continue
             self._render_browser(item, sub, query)
             return
+        # Files picked one at a time are each their own item and carry a path
+        # relative to the folder the picker started from (`obb/main.obb`), so
+        # the folder a row links to is not `item.name + sub` for any single
+        # item. Match it against the shared prefix of the picked files instead.
+        picked = _picked_files(self.ctx.manifest)
+        if picked is not None and any(f.rel == wanted or f.rel.startswith(f"{wanted}/") for f in picked):
+            self._render_picked_folder(wanted, picked, query)
+            return
         self.send_error_page(HTTPStatus.NOT_FOUND, "That folder is not part of this share")
 
-    def _render_browser(self, item, sub: str, query: dict[str, list[str]]) -> None:  # noqa: ANN001
-        descends = f"{item.name}/{sub}" if sub else item.name
-        if sub and not any(f.rel.startswith(f"{descends}/") for f in item.files):
+    def _render_browser(
+        self,
+        item,  # noqa: ANN001
+        sub: str,
+        query: dict[str, list[str]],
+        *,
+        files=None,  # noqa: ANN001
+        prefix: str | None = None,
+    ) -> None:
+        """The file listing for one folder.
+
+        ``files``/``prefix`` override the shared item: a set of files picked one
+        at a time is not one folder, but each folder inside it still has to be
+        openable, and it uses exactly this page.
+        """
+        pool = item.files if files is None else files
+        descends = prefix if prefix is not None else (f"{item.name}/{sub}" if sub else item.name)
+        if sub and not any(f.rel.startswith(f"{descends}/") for f in pool):
             self.send_error_page(HTTPStatus.NOT_FOUND, "That folder is not part of this share")
             return
         template = (self.ctx.assets or {}).get("server.html") or (self.ctx.assets or {}).get("index.html")
@@ -741,9 +798,9 @@ class ShareRequestHandler(BaseHTTPRequestHandler):
             return
         patterns = query.get("q") or []
         search = patterns[0] if patterns else ""
-        prefix = f"{item.name}/{sub}/" if sub else f"{item.name}/"
+        prefix = f"{descends}/"
         rest: list[tuple[str, FileEntry]] = []
-        for f in item.files:
+        for f in pool:
             if not f.rel.startswith(prefix):
                 continue
             tail = f.rel[len(prefix) :]
@@ -766,8 +823,9 @@ class ShareRequestHandler(BaseHTTPRequestHandler):
         for kind, key in window:
             if kind == "folder":
                 trail = f"{sub}/{key}" if sub else key
-                depth = sum(1 for f in item.files if f.rel.startswith(f"{item.name}/{trail}/"))
-                size = sum(f.size for f in item.files if f.rel.startswith(f"{item.name}/{trail}/"))
+                inside = f"{descends}/{trail}/"
+                depth = sum(1 for f in pool if f.rel.startswith(inside))
+                size = sum(f.size for f in pool if f.rel.startswith(inside))
                 parts.append(
                     # data-dl is what "Download selected" must fetch. The href
                     # is the browse page (an HTML document); handing that to a
@@ -789,8 +847,8 @@ class ShareRequestHandler(BaseHTTPRequestHandler):
             template.replace("{{title}}", html.escape(item.name))
             .replace("{{breadcrumbs}}", breadcrumbs)
             .replace("{{rows}}", rows)
-            .replace("{{file_count}}", str(len(item.files)))
-            .replace("{{folder_size}}", item.size_text)
+            .replace("{{file_count}}", str(len(pool)))
+            .replace("{{folder_size}}", human_size(sum(f.size for f in pool)))
             .replace("{{zip_url}}", f"/zip/{item.item_id}")
             .replace("{{total_size}}", human_size(self.ctx.manifest.total_bytes))
             .replace("{{manifest_url}}", "/api/manifest")
@@ -806,6 +864,21 @@ class ShareRequestHandler(BaseHTTPRequestHandler):
             .replace("{{upload_section}}", self._upload_section())
         )
         self.send_html(body)
+
+    def _render_picked_folder(self, wanted: str, files, query) -> None:  # noqa: ANN001
+        """A folder that only exists because of the files picked out of it.
+
+        Picking individual files gives the manifest one item per file, each
+        addressed by a path below the folder the picker started from. The page
+        still groups them into folders -- but then a folder row's href has no
+        item to land on, because "obb" is not a shared item, "obb/main.obb" is.
+        Render it with the same browser, against the picked set.
+        """
+        # Breadcrumbs and folder rows within this page are all "/browse/<path>"
+        # URLs, so a lightweight stand-in item keeps the shared renderer's
+        # links pointing at the picked-file routes instead of /d/<id>.
+        holder = _PickedHolder(name=wanted.split("/")[0] or wanted, files=files)
+        self._render_browser(holder, wanted, query, files=files, prefix=wanted)
 
     def _breadcrumbs(self, item, sub: str) -> str:  # noqa: ANN001
         parts = [item.name, *[p for p in sub.split("/") if p]]
@@ -1460,15 +1533,25 @@ def _top_level(manifest) -> tuple[list[FileEntry], list[tuple[str, list[FileEntr
 def _inside_item(rel: str, items) -> str | None:  # noqa: ANN001
     """Strip a path's leading shared-item name (``Photos/a.jpg`` → ``a.jpg``).
 
-    A folder share wraps every file in ``<item name>/``; a file shared on its
-    own has no wrapper and is simply its own name. Returns ``None`` when the
-    path belongs to no item, which should not happen.
+    A folder share wraps every file in ``<item name>/``, so the first segment
+    is the item and the rest is the path inside it. A picked file is different:
+    it is addressed relative to the folder the picker started from, so
+    ``Game/obb/main.obb`` has no item name to strip -- it is already "inside"
+    the share, and the ``Game`` in front of it is a folder the page has to
+    show. Treating that segment as an item name matched nothing and dropped the
+    file, which is how a page could come out empty.
+
+    Returns ``None`` only when the path belongs to no item at all, which the
+    caller treats as "not mine" rather than as an error.
     """
     head, _, tail = rel.partition("/")
     for item in items:
         if item.name == head:
             return tail if tail else item.name
         if not item.is_dir and item.name == rel:
+            return rel
+        # a picked file addressed by its relative path
+        if not item.is_dir and item.files and item.files[0].rel == rel:
             return rel
     return None
 
@@ -1488,6 +1571,71 @@ def _other_files_block(files) -> str:  # noqa: ANN001
         for f in files
     )
     return f'<h3 class="also">Also in this share</h3>\n<ul class="playlist also-files">\n{rows}\n</ul>'
+
+
+def _level_has_files(manifest, folder: str) -> bool:  # noqa: ANN001
+    """Whether ``folder`` is a real level of this share.
+
+    Same rule the serve-mode browser applies, and it has to be the same rule:
+    a card's href is built from the level being shown, which drops the shared
+    item's own name. So for a share of ``photos`` the card for its sub-folder
+    is ``/browse/2024``, not ``/browse/photos/2024`` -- checking the raw path
+    against the files on disk would 404 the very links the page just drew.
+    """
+    wanted = folder.strip("/")
+    if not wanted:
+        return True
+    for item in manifest.items:
+        if item.is_dir:
+            if wanted == item.name:
+                # the share's own folder: the front page of a single-folder share
+                return True
+            sub = wanted[len(item.name) + 1 :] if wanted.startswith(f"{item.name}/") else wanted
+            if any(f.rel.startswith(f"{item.name}/{sub}/") for f in item.files):
+                return True
+        elif item.files and item.files[0].rel.startswith(f"{wanted}/"):
+            # a picked file, addressed below the folder the picker started in
+            return True
+    return False
+
+
+def _download_crumbs(ctx, folder: str | None) -> str:  # noqa: ANN001
+    """Where you are in a download share, and how to get back up.
+
+    Only rendered for a folder, because the front page is the top.
+    """
+    if not folder:
+        return ""
+    parts = [p for p in folder.split("/") if p]
+    # The share root is the first segment of ``level`` for a single shared
+    # folder, and is not a link of its own: it IS the front page.
+    items = ctx.manifest.items
+    root_name = items[0].name if len(items) == 1 and items[0].is_dir else ""
+    trail: list[str] = []
+    out = ['<a href="/">All Files</a>']
+    for part in parts:
+        trail.append(part)
+        label = html.escape(part)
+        href = "/browse/" + urllib.parse.quote("/".join(trail))
+        if root_name and part == root_name and len(trail) == 1:
+            out.append(f'<a href="{href}">{label}</a>')
+        else:
+            out.append(f'<span class="sep">/</span><a href="{href}">{label}</a>')
+    return "".join(out)
+
+
+def _pager_base(folder: str | None) -> str:
+    """A pager link base that keeps the folder being listed."""
+    if not folder:
+        return "?"
+    return "/browse/" + urllib.parse.quote(folder) + "?"
+
+
+def _folder_zip_url(folder: str | None) -> str:
+    """The zip for this level: everything, or just this folder."""
+    if not folder:
+        return "/download/all.zip"
+    return "/folder/" + urllib.parse.quote(folder)
 
 
 def _plural(noun: str, count: int) -> str:
@@ -1672,6 +1820,33 @@ def _entry_cards(manifest, *, level: str = "", page: int = 1) -> tuple[list[str]
             + "</div></article>"
         )
     return cards, total_items, pages
+
+
+def _picked_files(manifest) -> list[FileEntry] | None:  # noqa: ANN001
+    """The files of a share made only of individually-picked files, else None.
+
+    A share of whole folders has folder items and is handled by the normal
+    browser; this path exists for the "pick some files" case, where every item
+    is a file whose ``rel`` is a path below the folder the picker started from.
+    """
+    items = manifest.items
+    if not items or any(item.is_dir for item in items):
+        return None
+    return [entry for item in items for entry in item.files]
+
+
+class _PickedHolder:
+    """Enough of a ShareItem for the browser renderer to draw picked files."""
+
+    def __init__(self, *, name: str, files: list[FileEntry]) -> None:
+        self.name = name
+        self.files = files
+
+    item_id = ""
+
+    @property
+    def is_dir(self) -> bool:
+        return False
 
 
 #: Monochrome file glyphs. Emoji render as tofu boxes on a phone without a

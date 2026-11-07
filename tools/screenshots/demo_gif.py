@@ -40,8 +40,27 @@ def console_for(width: int) -> Console:
     return con
 
 
+#: The menu prints the machine's real hostname and LAN address. A gif of that
+#: is a gif of somebody's computer, published on GitHub: the committed recording
+#: carried the build sandbox's own hostname and link-local address, and on a
+#: contributor's laptop would have been theirs. Pin neutral values instead.
+DEMO_HOST = "my-laptop"
+DEMO_IP = "192.168.1.42"
+
+
+def _neutralise_machine_details() -> None:
+    """Make the menu's "this device" panel show example values, not real ones."""
+    from local_file_sharer import menu, platforms  # noqa: PLC0415
+    from local_file_sharer.network import LocalEndpoint  # noqa: PLC0415
+
+    platforms.hostname = lambda: DEMO_HOST  # type: ignore[assignment]
+    example = LocalEndpoint(ip=DEMO_IP, interface="wlan0", kind="wifi")
+    menu.local_endpoints = lambda **_: [example]  # type: ignore[assignment]
+
+
 def main() -> None:
     os.environ.setdefault("TERM", "xterm-256color")
+    _neutralise_machine_details()
     theme = build_theme("dark", "white")
     set_theme(theme)
     state = State.load(INPUTS / "shot-state.json")

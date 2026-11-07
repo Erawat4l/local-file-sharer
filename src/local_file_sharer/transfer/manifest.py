@@ -229,7 +229,16 @@ class Manifest:
         title: str = "",
     ) -> Manifest:
         roots = [Path(p) for p in paths]
-        items = [item_from_path(p, root=p.parent) for p in roots]
+        base = _common_root(roots)
+        items = []
+        for p in roots:
+            if p.is_dir():
+                items.append(item_from_path(p, root=p.parent))
+            else:
+                # Relative to the folder they were picked from, so nesting
+                # survives into the page.
+                rel = p.relative_to(base).as_posix() if base else p.name
+                items.append(item_from_path(p, root=base or p.parent, rel=rel))
         return cls(items, mode=mode, expires_at=expires_at, title=title)
 
     # ── access ──────────────────────────────────────────────────────────────
@@ -363,12 +372,40 @@ def walk_folder(folder: Path, *, root_name: str = "", max_files: int = 200_000) 
     return entries
 
 
-def item_from_path(path: Path, *, root: Path | None = None) -> ShareItem:
+def _common_root(paths: Sequence[Path]) -> Path | None:
+    """The deepest folder that contains every picked file.
+
+    Used to keep the folders a file was picked from. ``None`` when there is no
+    single such folder (different drives on Windows), in which case each file
+    falls back to its own basename -- the old behaviour, and the only one that
+    can produce a correct link.
+    """
+    files = [p for p in paths if not p.is_dir()]
+    if not files:
+        return None
+    try:
+        common = Path(os.path.commonpath([str(p) for p in files]))
+    except ValueError:
+        return None
+    # commonpath of ONE file is the file itself; its containing folder is what
+    # paths should be relative to.
+    if common in files:
+        common = common.parent
+    return common if common.is_dir() else None
+
+
+def item_from_path(path: Path, *, root: Path | None = None, rel: str | None = None) -> ShareItem:
     path = Path(path)
     root = root or path.parent
     if path.is_dir():
         return ShareItem(path=path, root=root, kind="folder", files=walk_folder(path))
-    return ShareItem(path=path, root=root, kind="file", files=[file_entry(path, rel=path.name)])
+    # A picked file is addressed by the path below the folder the picker was
+    # started from, not by its basename. `rel=path.name` threw away every
+    # directory above the file, so choosing Game/obb/main.obb and
+    # Game/data/save.dat produced two rows at the top of the page called
+    # "main.obb" and "save.dat" with no folders anywhere -- the same
+    # flattening the folder share was fixed for, reached by another door.
+    return ShareItem(path=path, root=root, kind="file", files=[file_entry(path, rel=rel or path.name)])
 
 
 def build_manifest(paths: Iterable[Path], **kwargs) -> Manifest:

@@ -89,7 +89,7 @@ def test_the_gif_shows_the_menu_the_code_draws(monkeypatch):
     # The "this device" panel is machine state, not copy: hostname, LAN address
     # and whether tailscale happens to be installed. All of it varies by host
     # (this test failed on every CI runner until it was excluded, because the
-    # recording was made on e2b.local / 169.254.0.21 with no tailscale). What is
+    # recording was made on the build sandbox's hostname / link-local IP with no
     # left -- the header chrome, the mode list, the descriptions and the footer
     # -- is what actually went stale in the gif, and is what this compares.
     def stable(text: str) -> list[str]:
@@ -277,3 +277,63 @@ def test_web_screenshots_do_not_revive_retired_copy():
     present = [text for text in retired if text in lines]
     present += [glyph for glyph in glyphs if glyph in drawn]
     assert not present, f"retired web copy came back: {present}"
+
+
+#: Every sample file, folder, host and token in the recording tools, the shot
+#: fixtures and the docs. These were a real device's contents: a game folder, a
+#: build number, two clips named after people, a laptop name, the build
+#: sandbox's hostname. They leaked into a public repository, and the whole set
+#: must stay out. Add a name here whenever one is retired.
+RETIRED_REAL_NAMES = (
+    "FREE FIRE",
+    "KRATOS",
+    "ISHAN",
+    "Agon-1.4",
+    "VID-2026",
+    "index_287",
+    "ab_book",
+    "roms/",
+    "aurora-laptop",
+    "Aurora-Film",
+    "Termux-notes",
+    "live-set-2026",
+    "moodboard",
+    "holiday-photos",
+    "IMG_2026",
+    "wedding",
+    "e2b.local",
+    "b45d56a6",
+)
+
+
+def test_no_real_file_names_are_published():
+    """Nothing committed may name a real file, folder or machine.
+
+    The screenshots, the gif and the tests are all published, and the person
+    who runs this program is not the only person who reads the repository. A
+    sample row that says "FREE FIRE MAX/" is somebody's phone, not an example.
+
+    Scans the tree rather than the assets only: the names got back in through
+    the generator scripts and a test fixture, not through the images.
+    """
+    repo = Path(__file__).resolve().parents[1]
+    offenders: list[str] = []
+    skip_dirs = {".git", ".venv", "node_modules", "__pycache__", "dist", "build", "inputs"}
+    suffixes = {".py", ".md", ".txt", ".html", ".css", ".js", ".toml", ".json", ".yml", ".yaml", ".cfg", ".sh"}
+    for path in sorted(repo.rglob("*")):
+        if not path.is_file() or set(path.parts) & skip_dirs:
+            continue
+        if path.suffix.lower() not in suffixes:
+            continue
+        if path.name == "test_asset_drift.py":
+            continue  # this file *is* the list; it would always match itself
+        try:
+            text = path.read_text(encoding="utf-8", errors="ignore")
+        except OSError:  # pragma: no cover - unreadable file
+            continue
+        for name in RETIRED_REAL_NAMES:
+            if name in text:
+                offenders.append(f"{path.relative_to(repo)}: {name}")
+    assert not offenders, (
+        "real device names are published in:\n  " + "\n  ".join(offenders)
+    )

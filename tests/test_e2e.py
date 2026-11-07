@@ -659,23 +659,29 @@ def _rows(port: int, path: str) -> list[str]:
 
 
 def _nested_share(tmp_path: Path):
-    """A share shaped like a real phone: a folder with depths, plus a loose file."""
+    """A share with a folder two levels deep, plus a loose file beside it.
+
+    The names are deliberately generic. This fixture used to be a copy of a
+    real phone: a game directory, two app builds and a set of ROM files, all of
+    which were somebody's actual device contents and had no business being in a
+    public repository. The shape is what the test is about, not the names.
+    """
     root = tmp_path / "share"
-    (root / "roms" / "optional").mkdir(parents=True)
-    (root / "roms" / "optional" / "ab_book_000.x").write_bytes(b"x" * 1000)
-    (root / "roms" / "index_287.m3u8").write_bytes(b"x" * 229)
-    loose = tmp_path / "Agon-1.4.58.apk"
+    (root / "alpha" / "beta").mkdir(parents=True)
+    (root / "alpha" / "beta" / "deep.bin").write_bytes(b"x" * 1000)
+    (root / "alpha" / "index.m3u8").write_bytes(b"x" * 229)
+    loose = tmp_path / "loose.apk"
     loose.write_bytes(b"x" * 24)
     return root, loose
 
 
 def test_serve_mode_front_page_lists_folders_not_deep_files(tmp_path, free_port):
-    """1,708 files rendered flat is what a phone share looked like.
+    """A folder's deep files must not be listed flat on the front page.
 
     Every file at every depth was listed with nothing but its basename, so
-    roms/optional/ab_book_001.x appeared as a bare "ab_book_001.x" row beside
-    the loose APK at the top. The folder was invisible and the page was
-    unusable. One level per page: folders here, their files inside.
+    alpha/beta/deep.bin appeared as a bare "deep.bin" row beside the loose
+    file at the top. The folder was invisible and the page was unusable. One
+    level per page: folders here, their files inside.
     """
     root, loose = _nested_share(tmp_path)
     server = ShareServer(Manifest.build([root, loose], mode="serve"), host="127.0.0.1", port=free_port)
@@ -685,7 +691,7 @@ def test_serve_mode_front_page_lists_folders_not_deep_files(tmp_path, free_port)
         rows = _rows(server.port, "/")
     finally:
         server.stop()
-    assert rows == ["roms/", "Agon-1.4.58.apk"], rows
+    assert rows == ["alpha/", "loose.apk"], rows
 
 
 def test_each_folder_drills_down_to_its_own_contents(tmp_path, free_port):
@@ -695,12 +701,12 @@ def test_each_folder_drills_down_to_its_own_contents(tmp_path, free_port):
     server.start()
     assert server.wait_until_ready(timeout=5)
     try:
-        roms = _rows(server.port, "/browse/roms")
-        deep = _rows(server.port, "/browse/roms/optional")
+        alpha = _rows(server.port, "/browse/alpha")
+        deep = _rows(server.port, "/browse/alpha/beta")
     finally:
         server.stop()
-    assert roms == ["optional/", "index_287.m3u8"], roms
-    assert deep == ["ab_book_000.x"], deep
+    assert alpha == ["beta/", "index.m3u8"], alpha
+    assert deep == ["deep.bin"], deep
 
 
 def test_a_folder_row_says_how_much_is_inside_it(tmp_path, free_port):
@@ -716,3 +722,115 @@ def test_a_folder_row_says_how_much_is_inside_it(tmp_path, free_port):
     # roms holds two files at two depths, 1229 bytes together
     assert "2 files" in body
     assert "1.2 KB" in body
+
+
+# ── picking individual files must not flatten their folders ────────────────
+def _picked_files(tmp_path: Path) -> list[Path]:
+    """Files chosen one at a time from inside nested folders, with extras."""
+    root = tmp_path / "phone"
+    (root / "Game" / "obb").mkdir(parents=True)
+    (root / "Game" / "data").mkdir(parents=True)
+    (root / "Game" / "clip.mp4").write_bytes(b"v" * 50)
+    (root / "Game" / "obb" / "main.obb").write_bytes(b"o" * 40)
+    (root / "Game" / "data" / "save.dat").write_bytes(b"d" * 30)
+    # A second folder at the top, so "Game" is itself a folder on the page and
+    # the picked paths show two levels of nesting, which is the case that broke.
+    (root / "Shots").mkdir()
+    (root / "Shots" / "first.jpg").write_bytes(b"j" * 20)
+    return [
+        root / "Game" / "clip.mp4",
+        root / "Game" / "obb" / "main.obb",
+        root / "Game" / "data" / "save.dat",
+        root / "Shots" / "first.jpg",
+    ]
+
+
+def test_files_picked_individually_keep_the_folder_they_lived_in(tmp_path, free_port):
+    """The picker hands over a list of files, and that list used to lose folders.
+
+    ``item_from_path`` addressed a file by ``path.name``, so choosing
+    Game/obb/main.obb and Game/data/save.dat produced two rows called
+    "main.obb" and "save.dat" at the top of the page, with no "obb" and no
+    "data" anywhere -- the same flattening the folder share was fixed for, by
+    a different route. A picked file has to keep the path below the folder the
+    picker started from.
+    """
+    files = _picked_files(tmp_path)
+    manifest = Manifest.build(files, mode="serve")
+    server = ShareServer(manifest, host="127.0.0.1", port=free_port)
+    server.start()
+    assert server.wait_until_ready(timeout=5)
+    try:
+        rows = _rows(server.port, "/")
+        game = _rows(server.port, "/browse/Game")
+    finally:
+        server.stop()
+    assert rows == ["Game/", "Shots/"], rows
+    assert game == ["data/", "obb/", "clip.mp4"], game
+
+
+def test_picking_one_file_still_shows_that_file(tmp_path, free_port):
+    """The grouping must not swallow the simple case: one file, one row."""
+    only = tmp_path / "album" / "track.mp3"
+    only.parent.mkdir()
+    only.write_bytes(b"m" * 10)
+    manifest = Manifest.build([only], mode="serve")
+    server = ShareServer(manifest, host="127.0.0.1", port=free_port)
+    server.start()
+    assert server.wait_until_ready(timeout=5)
+    try:
+        rows = _rows(server.port, "/")
+    finally:
+        server.stop()
+    assert rows == ["track.mp3"], rows
+
+
+def test_a_folder_picked_whole_lists_its_contents_not_itself(tmp_path, free_port):
+    """Sharing ~/Photos opens on what is inside Photos.
+
+    One shared folder is the whole share, so the front page *is* that folder --
+    asking it to render a single card named Photos, which you then have to
+    click to see anything, was the original complaint about the picker. Its
+    sub-folders are what should be listed.
+    """
+    root = tmp_path / "Photos"
+    (root / "2024").mkdir(parents=True)
+    (root / "2024" / "a.jpg").write_bytes(b"j" * 10)
+    (root / "b.jpg").write_bytes(b"j" * 10)
+    server = ShareServer(Manifest.build([root], mode="serve"), host="127.0.0.1", port=free_port)
+    server.start()
+    assert server.wait_until_ready(timeout=5)
+    try:
+        rows = _rows(server.port, "/")
+    finally:
+        server.stop()
+    assert rows == ["2024/", "b.jpg"], rows
+
+
+def test_opening_a_folder_in_download_mode_keeps_the_download_page(tmp_path, free_port):
+    """Download mode and serve mode are different pages, and one must not turn
+    into the other on a click.
+
+    ``/browse/<folder>`` was routed to the share-browser renderer, which always
+    writes the serve-mode template (server.html) -- so a download station whose
+    header said "Download Station" listed its files as a grey table with no
+    stat row, no QR card and no buttons, the moment you opened a folder.
+    """
+    root = tmp_path / "Photos"
+    (root / "2024").mkdir(parents=True)
+    (root / "2024" / "a.jpg").write_bytes(b"j" * 10)
+    server = ShareServer(Manifest.build([root], mode="download"), host="127.0.0.1", port=free_port)
+    server.start()
+    assert server.wait_until_ready(timeout=5)
+    try:
+        body = (
+            urllib.request.urlopen(f"http://127.0.0.1:{server.port}/browse/Photos", timeout=10)
+            .read()
+            .decode()
+        )
+    finally:
+        server.stop()
+    # the download station's own furniture, not the serve-mode table
+    assert "Download Everything" in body or 'class="hero"' in body, "lost the download station hero"
+    assert 'class="card file"' in body or 'class="card folder"' in body, "lost the card grid"
+    assert "qr-frame" in body, "lost the QR card"

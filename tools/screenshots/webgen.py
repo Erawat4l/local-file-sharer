@@ -96,7 +96,7 @@ def downloader() -> Shot:
     # The lead is one line in the template now: the stat row underneath already
     # says files, size and connections, so the sentence that repeated them was
     # removed from the page and has to leave the picture too.
-    shot.text(M + 34, hero_y + 88, "8 files · 4.0 GB shared from aurora-laptop.", size=14, fill=DIM)
+    shot.text(M + 34, hero_y + 88, "8 files · 4.0 GB shared from my-laptop.", size=14, fill=DIM)
 
     stats = [
         ("Files", "8", ""),
@@ -162,14 +162,14 @@ def downloader() -> Shot:
     # link: the page draws .btn.ghost buttons, and the shot drew a coloured
     # Twemoji icon next to a text arrow that exists nowhere in the markup.
     files = [
-        ("folder", "roms", "1,701 files · 4.0 GB"),
-        ("video", "Aurora-Film-Festival-Keynote-4K.mkv", "3.6 GB · video"),
-        ("text", "Termux-notes.txt", "4.1 KB · text"),
-        ("audio", "live-set-2026.flac", "402 MB · audio"),
-        ("image", "moodboard-final.png", "17.6 MB · image"),
-        ("pdf", "report.pdf", "2.8 MB · pdf"),
-        ("archive", "holiday-photos.zip", "612 MB · archive"),
-        ("image", "IMG_20261101_143210.jpg", "4.9 MB · image"),
+        ("folder", "2024", "1,701 files · 4.0 GB"),
+        ("video", "sample-video-4k.mkv", "3.6 GB · video"),
+        ("text", "notes.txt", "4.1 KB · text"),
+        ("audio", "track-01.flac", "402 MB · audio"),
+        ("image", "design-preview.png", "17.6 MB · image"),
+        ("pdf", "receipt.pdf", "2.8 MB · pdf"),
+        ("archive", "backup-2024.zip", "612 MB · archive"),
+        ("image", "screenshot-01.png", "4.9 MB · image"),
     ]
     col_w = (W - M * 2 - 20) // 2
     row_h = 66
@@ -197,7 +197,7 @@ def downloader() -> Shot:
 
 # ── 2. web file browser (serve mode) ────────────────────────────────────────
 def server() -> Shot:
-    shot = Shot(W, H, url="http://192.168.1.42:8080/d/3e4524dd/")
+    shot = Shot(W, H, url="http://192.168.1.42:8080/d/5e6f7a8b/")
     backdrop(shot)
     # Exact chip set from server.html: breadcrumb "All Files", "Serving",
     # "<n> files · <size>", "Download Folder", "Download Station".
@@ -253,15 +253,19 @@ def server() -> Shot:
     shot.text(W - M - 74, t + 22, "SIZE", size=10, fill=FAINT, spacing=1.4, anchor="end")
     shot.line(M, t + 34, W - M, t + 34, stroke=LINE)
 
+    # Example names only. These shots are published on GitHub, and the previous
+    # set were real files from a real phone -- a game, a build number, a date,
+    # and two names that were not the author's to publish. Nothing in a
+    # screenshot should identify anyone, so every row is generic.
     rows = [
-        ("folder", "FREE FIRE MAX/", "1701 files · 4 GB"),
-        ("video", "index_287.m3u8", "229 KB"),
-        ("archive", "Agon-1.4.58.apk", "2.4 MB"),
-        ("archive", "Agon-1.4.60.apk", "2.4 MB"),
-        ("video", "KRATOS_vs_ISHAN.mp4", "19 MB"),
-        ("video", "KRATOS_vs_ISHAN_stacked.mp4", "14 MB"),
-        ("video", "VID-20261105-WA0002.mp4", "3.2 MB"),
-        ("video", "VID-20261105-WA0006.mp4", "3.7 MB"),
+        ("folder", "2024/", "1,701 files · 4 GB"),
+        ("video", "sample-clip.mp4", "19 MB"),
+        ("video", "sample-clip-b.mp4", "14 MB"),
+        ("video", "recording-01.mp4", "3.2 MB"),
+        ("archive", "backup-2024.zip", "2.4 MB"),
+        ("image", "screenshot-01.png", "2.4 MB"),
+        ("audio", "track-01.mp3", "8.1 MB"),
+        ("pdf", "receipt.pdf", "229 KB"),
     ]
     row_h = 54
     for index, (kind, name, size) in enumerate(rows):
@@ -308,7 +312,7 @@ def player(*, chrome: bool = True) -> Shot:
     everywhere. The shot used to draw the shared site header, a rounded card
     holding the film, and a warning banner underneath; none of those exist.
     """
-    shot = Shot(W, H, url="http://192.168.1.42:8080/s/b45d56a6")
+    shot = Shot(W, H, url="http://192.168.1.42:8080/s/1a2b3c4d")
 
     stage_y = 64
     stage_h = H - stage_y
@@ -365,7 +369,7 @@ def player(*, chrome: bool = True) -> Shot:
     shot.rect(
         sx + 16, stage_y + 46, sidebar_w - 32, 54, fill="#161616", stroke="rgba(255,255,255,0.16)", r=10
     )
-    shot.text(sx + 28, stage_y + 68, "Aurora-Film…mkv", weight=600, size=12.5, fill=TEXT)
+    shot.text(sx + 28, stage_y + 68, "Sample-Video…mkv", weight=600, size=12.5, fill=TEXT)
     shot.text(sx + 28, stage_y + 86, "3.6 GB", family="mono", size=11, fill=FAINT)
     shot.text(sx + sidebar_w - 28, stage_y + 86, "3.6 GB", family="mono", size=11, fill=FAINT, anchor="end")
 
@@ -396,7 +400,7 @@ def _player_chrome(shot: Shot, *, stage_y: int, stage_h: int, vw: int) -> None:
     shot.parts.append(f'<rect x="0" y="{stage_y}" width="{vw}" height="120" fill="{scrim}"/>')
     shot.rect(20, stage_y + 16, 34, 34, fill="#111111", stroke=LINE_STRONG, r=10)
     shot.text(37, stage_y + 38, "LFS", family="mono", weight=700, size=11, fill=TEXT, anchor="middle")
-    shot.text(66, stage_y + 36, "Aurora-Film-Festival-Keynote-4K.mkv", weight=650, size=14, fill=TEXT)
+    shot.text(66, stage_y + 36, "Sample-Video-4K.mkv", weight=650, size=14, fill=TEXT)
     shot.chip(66 + 340, stage_y + 24, "3.6 GB", size=10.5)
     shot.chip(66 + 340 + 76, stage_y + 24, "72 MB/s", size=10.5)
     shot.text(vw - 20, stage_y + 36, "1.0.0", family="mono", size=10.5, fill=FAINT, anchor="end")

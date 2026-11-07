@@ -89,14 +89,14 @@ python - <<'PY'
 import pathlib
 root = pathlib.Path("tools/screenshots/inputs/sdcard/Download/demo")
 for rel, size in {
-    "Aurora-Film-Festival-Keynote-4K.mkv": 3_842_119_680,
-    "live-set-2026.flac": 421_003_264,
-    "moodboard-final.png": 18_412_339,
-    "report.pdf": 2_918_004,
-    "Termux-notes.txt": 4_211,
-    "DCIM/IMG_20261101_143210.jpg": 5_112_004,
-    "DCIM/IMG_20261101_143422.jpg": 5_112_004,
-    "Photos/2026-10-31-wedding-012.jpg": 5_112_004,
+    "Sample-Video-4K.mkv": 3_842_119_680,
+    "track-01.flac": 421_003_264,
+    "design-preview.png": 18_412_339,
+    "receipt.pdf": 2_918_004,
+    "notes.txt": 4_211,
+    "DCIM/screenshot-01.jpg": 5_112_004,
+    "DCIM/screenshot-02.jpg": 5_112_004,
+    "Photos/photo-01.jpg": 5_112_004,
 }.items():
     path = root / rel
     path.parent.mkdir(parents=True, exist_ok=True)

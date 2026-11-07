@@ -100,29 +100,29 @@ def main() -> None:
     picker = picker_ui.PickerState(cwd=DEMO_PICKER, page_size=12)
     picker.reload()
     for entry in picker.visible():
-        if entry.name in ("Aurora-Film-Festival-Keynote-4K.mkv", "live-set-2026.flac"):
+        if entry.name in ("Sample-Video-4K.mkv", "track-01.flac"):
             picker.selected[str(entry.path)] = entry.path
     picker.cursor = 0
     for index, entry in enumerate(picker.visible()):
-        if entry.name == "live-set-2026.flac":
+        if entry.name == "track-01.flac":
             picker.cursor = index
     picker.message = "Space toggles · Enter opens · a selects all"
     shot(picker_ui.render(picker, width=WIDTH - 2, height=40), "cli-picker", title="start — pick files")
 
     # ── 4. dashboard ────────────────────────────────────────────────────────
     tracker = TransferTracker()
-    tracker.start_file("b45d56a6", "Aurora-Film-Festival-Keynote-4K.mkv", 3_842_119_680)
-    tracker.start_file("75a8de01", "live-set-2026.flac", 421_003_264)
-    tracker.start_file("befb3d7a", "IMG_20261101_143210.jpg", 5_112_004)
-    tracker.start_file("3e4524dd", "moodboard-final.png", 18_412_339)
+    tracker.start_file("1a2b3c4d", "Sample-Video-4K.mkv", 3_842_119_680)
+    tracker.start_file("2b3c4d5e", "track-01.flac", 421_003_264)
+    tracker.start_file("befb3d7a", "screenshot-01.jpg", 5_112_004)
+    tracker.start_file("5e6f7a8b", "design-preview.png", 18_412_339)
     device = tracker.register_request("192.168.1.77", "curl/8.5.0")
     phone = tracker.register_request("192.168.1.144", "Android/14 OkHttp/4.12")
-    tracker.add_bytes(3_842_119_680, device=device, file_id="b45d56a6")
-    tracker.finish_file("b45d56a6")
-    tracker.add_bytes(260_000_000, device=phone, file_id="75a8de01")
+    tracker.add_bytes(3_842_119_680, device=device, file_id="1a2b3c4d")
+    tracker.finish_file("1a2b3c4d")
+    tracker.add_bytes(260_000_000, device=phone, file_id="2b3c4d5e")
     tracker.add_bytes(5_112_004, device=phone, file_id="befb3d7a")
     tracker.finish_file("befb3d7a")
-    tracker.add_bytes(11_400_000, device=device, file_id="3e4524dd")
+    tracker.add_bytes(11_400_000, device=device, file_id="5e6f7a8b")
     tracker.peak_speed = 78_643_200.0
     # realistic 72 MB/s window so the speed badge reads like a real Wi-Fi link
     now = time.time()
@@ -138,7 +138,7 @@ def main() -> None:
         links=[
             ("LAN", "http://192.168.1.42:8080/"),
             ("public", "http://103.21.54.19:8080/"),
-            ("tailscale", "http://aurora.tail1234.ts.net/"),
+            ("tailscale", "http://my-laptop.tail1234.ts.net/"),
         ],
         footer="c copy links · o open browser · p QR · q stop     (nothing was cleared)",
     )
