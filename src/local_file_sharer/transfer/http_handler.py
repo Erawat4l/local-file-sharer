@@ -1814,8 +1814,14 @@ def _entry_cards(manifest, *, level: str = "", page: int = 1) -> tuple[list[str]
             # "btn-ghost" matched neither, so every file card drew TWO solid
             # white buttons -- the loudest thing on a page meant to be quiet.
             # Only playable files get a second button: nothing else can stream.
-            f'<a class="btn ghost" href="/f/{entry.file_id}" download="{html.escape(label)}">'
-            f"{'Download' if playable else 'Get'}</a>"
+            # Videos and audio carry a single "Stream" pill, as the design
+            # draws them: two full pills ate the width and every long name
+            # truncated ("sample-...", "track-01..."). The download link still
+            # exists -- as the round icon the player uses -- because the card's
+            # parallel-download script is bound to it.
+            f'<a class="btn ghost{" icon" if playable else ""}" '
+            f'href="/f/{entry.file_id}" download="{html.escape(label)}"'
+            + (f' aria-label="Download" title="Download">{DOWNLOAD_ICON}</a>' if playable else ">Get</a>")
             + (f'<a class="btn ghost" href="/s/{entry.file_id}">Stream</a>' if playable else "")
             + "</div></article>"
         )
@@ -1868,6 +1874,15 @@ _ICON_KINDS = {"video": "video", "audio": "audio", "image": "image", "pdf": "pdf
 #: "Download zip" would be squeezed into "zip" on a phone in the old markup;
 #: the label is spelled out here and only shortened by CSS when it has to be.
 DOWNLOAD_ZIP_LABEL = '<span class="full">Download</span> zip'
+
+
+# A bare arrow, the same shape the rows and the player's download control use.
+DOWNLOAD_ICON = (
+    '<svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" '
+    'stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" '
+    'aria-hidden="true"><path d="M12 4v11"/><path d="M7 11l5 5 5-5"/>'
+    '<path d="M5 20h14"/></svg>'
+)
 
 
 def icon_svg(kind: str) -> str:

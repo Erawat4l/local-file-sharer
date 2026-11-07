@@ -6,21 +6,39 @@ package — it is a maintainer tool.
 
 ```text
 cli_shots.py ──┐
-demo_gif.py  ──┼──> termsvg.py  ──> PNG / GIF   (rich renderables → cells → SVG)
-hero.py      ──┤                 └─> webshot.py (hand-authored SVG for the hero)
-webgen.py    ──┘
+demo_gif.py  ──┼──> termsvg.py     ──> PNG / GIF   (rich renderables → cells → SVG)
+hero.py      ──┤
+web_gif.py   ──┘
+webshot_live.py ───> Chromium (CDP) ──> web-*.png   (the real pages, screenshotted)
 ```
 
-## Why not a headless browser?
+## The web screenshots are the pages
 
-The three web UIs are shipped HTML+CSS. Chromium needs `libnss3`, `libnspr4`,
-Pango and Cairo, which are not available in every build environment. Instead
-`webshot.py` draws the same screens with the *shipped* design tokens
-(`--bg`, `--accent`, radii, copy) and measures text with the real Inter and
-JetBrains Mono files — the PNGs are deterministic and reviewable in a diff.
+`web-download.png`, `web-server.png` and `web-player.png` come from
+`webshot_live.py`, which boots a real `ShareServer` on a loopback port, points
+headless Chromium at it and saves the viewport. There is no drawing step, so
+there is nothing to drift: whatever the HTML and CSS say is what the image says.
 
-`termsvg.py` does the same for the terminal: it renders a Rich renderable into a
-grid of `(char, fg, bg, bold)` cells and emits one `<text>` per style run. That
+They used to be hand-authored SVG (`webgen.py`, still used by `web_gif.py` for
+its own frames). It re-drew the pages from the design tokens so the files would
+be deterministic in a diff — and they drifted anyway, because nothing compared
+the drawing to the markup. The pictures showed a search box, two solid buttons
+and a header line the shipped page never had.
+
+`web-text.txt` is written from the live DOM: one label per visible element, read
+in place so CSS `text-transform` is applied the way a person sees it.
+`tests/test_asset_drift.py` holds that file against both the templates and a
+list of copy that must never come back.
+
+Running it needs a Chromium binary and `websocket-client`; CI does not run the
+capture, only the checks on the committed results.
+
+```bash
+python tools/screenshots/webshot_live.py --chrome "$(command -v chromium)" --root /path/to/demo-tree
+```
+
+`termsvg.py` renders the *terminal* the same way: a Rich renderable becomes a
+grid of `(char, fg, bg, bold)` cells and then one `<text>` per style run. That
 also fixes what `Console.export_svg` gets wrong here: it hard-codes Fira Code,
 uses clip-paths resvg ignores, and cannot draw emoji.
 

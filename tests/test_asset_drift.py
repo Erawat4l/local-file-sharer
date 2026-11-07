@@ -168,13 +168,15 @@ def test_the_web_gif_is_built_from_the_same_page_builders():
 #: anything a ``{{placeholder}}`` or the page's javascript fills in are not
 #: covered here — no text comparison can check those without a browser.
 _WEB_COPY = [
-    ("DOWNLOAD STATION", "text-transform: uppercase"),
-    ("Download Station", "Download Station"),
+    # The brand block reads as one run in the browser (a space, not a newline),
+    # and the caption is uppercased by CSS -- so the label is the pair.
+    ("LOCAL FILE SHARER DOWNLOAD STATION", "text-transform: uppercase"),
+    ("DOWNLOAD STATION", "Download Station"),  # the caption, uppercased by CSS
     ("Mode download", "Mode <b>{{mode}}</b>"),
-    ("3 Devices", "{{device_word}}"),
-    ("Download All", "Download all"),
-    ("Everything As .zip", "Everything as .zip"),
-    ("Copy curl One-liner", "Copy curl one-liner"),
+    ("1 Device", "{{device_word}}"),
+    ("Download all", "Download all"),
+    ("Everything as .zip", "Everything as .zip"),
+    ("Copy curl one-liner", "Copy curl one-liner"),
     ("aria2c -x16", "aria2c -x16"),
     ("scan to open on another device", "scan to open on another device"),
     ("Shared Files", "Shared Files"),
@@ -185,19 +187,20 @@ _WEB_COPY = [
     ("Audio", 'data-filter="audio"'),
     ("Documents", 'data-filter="document"'),
     ("Archives", 'data-filter="archive"'),
-    ("Web File Server", "Web File Server"),
+    ("LOCAL FILE SHARER WEB FILE SERVER", "Web File Server"),
     ("Browse ", "Browse "),
     ("Filter in this folder…", "Filter in this folder…"),
     ("Serving", "Serving"),
     ("All Files", "All Files"),
-    ("Streaming · Resume · Range", "Streaming · Resume · Range"),
+    ("Resume · Range", "Resume · Range"),
     ("Filter", ">Filter<"),
     ("Select All", "Select All"),
     ("Download Selected", "Download Selected"),
-    ("PLAYLIST · 1", "Playlist · {{playlist_count}}"),
+    # the count is the demo share's four playable files, uppercased by CSS
+    ("PLAYLIST · 4", "Playlist · {{playlist_count}}"),
     ("buffered", "buffered"),
     ("Streaming with HTTP Range", "Streaming with HTTP Range"),
-    ("72 MB/s", "0 B/s"),
+    ("0 B/s", "0 B/s"),
     # the player's back link, and the version badge that replaced the build id
     ("1.0.0", 'title="All Files in This Share"'),
     # the five stat rows the player actually renders
@@ -272,7 +275,7 @@ def test_web_screenshots_do_not_revive_retired_copy():
         "zero-copy sendfile",  # protocol brag, cut
         "Every file is served with HTTP Range support",  # cut from the heading
         "never expires",  # the chip is conditional now
-        "Download Everything, Fast.",  # the page is two runs, not one string
+        "Download everything, fast.",  # the old sentence-case heading
     ]
     glyphs = ["⏪", "⏩", "🔊"]  # the player draws no emoji controls
     present = [text for text in retired if text in lines]
@@ -510,3 +513,89 @@ def test_the_download_control_is_a_link_on_the_player():
     assert re.search(r'<a class="round" id="get"[^>]*download', page), (
         "the player's download control stopped being an <a download>"
     )
+
+
+def _web_png_pixels(name: str):
+    """Every pixel of a committed web screenshot, as ``(r, g, b)``."""
+    from PIL import Image  # noqa: PLC0415 - only the asset tests need it
+
+    path = ASSETS / name
+    if not path.exists():  # pragma: no cover - committed with the PNGs
+        pytest.skip(f"docs/assets/{name} is not present")
+    with Image.open(path) as image:
+        return image.convert("RGB").getdata()
+
+
+def test_the_web_screenshots_are_monochrome():
+    """Not one coloured pixel, in any of the three pages.
+
+    Everything about this product is black and white, and a real capture is the
+    only place a stray colour can be caught: the pages set no link colour of
+    their own, so the browser's default blue appears on any anchor that misses
+    the base rule, and the player's toast hard-coded a cyan border on a navy
+    background for months. Neither shows up in a template diff or in a
+    hand-drawn mock -- both show up here, in one line.
+
+    A pixel is allowed a little channel spread for antialiasing of white text
+    over near-black, but anything above the threshold is a real colour.
+    """
+    offenders = []
+    for name in ("web-download.png", "web-server.png", "web-player.png"):
+        worst = 0
+        count = 0
+        for red, green, blue in _web_png_pixels(name):
+            spread = max(red, green, blue) - min(red, green, blue)
+            if spread > 12:
+                count += 1
+                worst = max(worst, spread)
+        if count:
+            offenders.append(f"{name}: {count} coloured pixels (worst spread {worst})")
+    assert not offenders, "colour leaked into a monochrome page: " + "; ".join(offenders)
+
+
+def test_the_web_screenshots_are_the_declared_size():
+    """Each shot is the viewport the capture script asked for, at 2x.
+
+    The player is taller than the share pages on purpose -- at 900px its
+    "Streaming with HTTP Range" line lands one pixel below the fold and the
+    screenshot silently loses it. This holds the committed images to the
+    script's own table so a crop cannot quietly reappear.
+    """
+    from PIL import Image  # noqa: PLC0415
+
+    source = (Path(__file__).resolve().parents[1] / "tools" / "screenshots" / "webshot_live.py").read_text(
+        encoding="utf-8"
+    )
+    table = source[source.index("VIEWPORT = {") : source.index("\n", source.index("VIEWPORT = {"))]
+    scale = int(re.search(r"^SCALE = (\d+)$", source, re.MULTILINE).group(1))
+    for name, width, height in re.findall(r'"([\w-]+)": \((\d+), (\d+)\)', table):
+        path = ASSETS / f"{name}.png"
+        if not path.exists():  # pragma: no cover
+            pytest.skip(f"docs/assets/{name}.png is not present")
+        with Image.open(path) as image:
+            assert image.size == (int(width) * scale, int(height) * scale), (
+                f"{name}.png is {image.size}, but webshot_live.py captures "
+                f"{width}x{height} at {scale}x -- regenerate the shot"
+            )
+
+
+def test_the_qr_code_in_the_hero_shot_is_not_blank():
+    """The QR card must actually hold a scannable code.
+
+    A capture once shipped with a white square where the code belongs: it was
+    taken before the page's follow-up ``/api/qr`` request finished. The area is
+    white either way in a thumbnail, so count the ink.
+    """
+    path = ASSETS / "web-download.png"
+    if not path.exists():  # pragma: no cover
+        pytest.skip("docs/assets/web-download.png is not present")
+    from PIL import Image  # noqa: PLC0415
+
+    with Image.open(path) as image:
+        width, height = image.size
+        # the QR frame sits in the hero's right-hand card, near the top
+        card = image.convert("L").crop(
+            (int(width * 0.70), int(height * 0.12), int(width * 0.95), int(height * 0.45))
+        )
+        dark = sum(1 for pixel in card.get_flattened_data() if pixel < 100)
+    assert dark > 5_000, f"the QR area has only {dark} dark pixels -- it is blank"

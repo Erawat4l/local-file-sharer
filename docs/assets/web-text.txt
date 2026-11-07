@@ -1,37 +1,31 @@
-http://192.168.1.42:8080/
-no-store
 LFS
-LOCAL FILE SHARER
+LOCAL FILE SHARER DOWNLOAD STATION
 DOWNLOAD STATION
 Live
 Mode download
-3 Devices
+1 Device
 1.0.0
-Download Station
-Download 
-Everything
-, Fast.
-8 files · 4.0 GB shared from my-laptop.
-Files
-8
-Total Size
-4.0 GB
-Connections
-16
+Download Everything, Fast.
+9 files · 4 GB shared from my-laptop.
+my-laptop
+FILES
+9
+TOTAL SIZE
+4 GB
+CONNECTIONS
+16 parallel
 parallel
-Speed
-72 MB/s
-Download All
-Everything As .zip
-Copy curl One-liner
+SPEED
+—
+Download all
+Everything as .zip
+Copy curl one-liner
 aria2c -x16
-2.5 GB / 4.0 GB · 3 files
-ETA 21s · 72 MB/s
-192.168.1.42:8080
+Idle —
+http://192.168.1.42:57989
 Copy
 scan to open on another device
 Shared Files
-8 items · 4.0 GB
 Search name or type — try mp4
 All
 Video
@@ -39,99 +33,121 @@ Images
 Audio
 Documents
 Archives
+2024 2 files · 2 MB
 2024
-1,701 files · 4.0 GB
+2 files · 2 MB
 Download zip
-sample-video-4k.mkv
-3.6 GB · video
-Stream
-notes.txt
-4.1 KB · text
+backup-2024.zip
+598 KB · file
 Get
-track-01.flac
-402 MB · audio
-Stream
 design-preview.png
 17.6 MB · image
-Get
+notes.txt
+4 KB · text
 receipt.pdf
-2.8 MB · pdf
-Get
+2.6 MB · pdf
+Sample-Video-4K.mkv 3.6 GB · video
+Sample-Video-4K.mkv
+3.6 GB · video
+Stream
+screenshot-01.jpg
+4.9 MB · image
+track-01.flac 402 MB · audio
+track-01.flac
+402 MB · audio
+No files match that filter.
 LOCAL FILE SHARER 1.0.0
 Resume · Range
-http://192.168.1.42:8080/d/5e6f7a8b/
-no-store
-LFS
-LOCAL FILE SHARER
+breadcrumbs
+Share URL
+Filter by type
+Download
+LOCAL FILE SHARER WEB FILE SERVER
 WEB FILE SERVER
-All Files
+demo
 Serving
-1,708 files · 4 GB
+9 files · 4 GB
 Download Folder
 Download Station
-1.0.0
-Web File Server
-Browse 
-Folder
-Download Selected (0)
-Select All
+Browse Folder
 Filter in this folder…
 Filter
-Files
-1,708
-Folder Size
-4 GB
-Share Total
-4 GB
-Transferred
-28.5 MB
-Speed
-—
-NAME
-SIZE
+Select All
+Download Selected (2)
+FOLDER SIZE
+SHARE TOTAL
+TRANSFERRED
+0 B
+2024/ 2 files · 2 MB
+on
 2024/
-1,701 files · 4 GB
-sample-clip.mp4
-19 MB
-sample-clip-b.mp4
-14 MB
-recording-01.mp4
-3.2 MB
-backup-2024.zip
-2.4 MB
-screenshot-01.png
-2.4 MB
-track-01.mp3
-8.1 MB
-receipt.pdf
-229 KB
-LOCAL FILE SHARER 1.0.0
-Streaming · Resume · Range
-http://192.168.1.42:8080/s/1a2b3c4d
-no-store
-LFS
-Sample-Video-4K.mkv
+backup-2024.zip 598 KB
+598 KB
+design-preview.png 17.6 MB
+17.6 MB
+notes.txt 4 KB
+4 KB
+receipt.pdf 2.6 MB
+2.6 MB
+Sample-Video-4K.mkv 3.6 GB
 3.6 GB
-72 MB/s
-1.0.0
-0:41:12
-1:48:20
+screenshot-01.jpg 4.9 MB
+4.9 MB
+track-01.flac 402 MB
+402 MB
+This folder is empty — or the filter matched nothing.
+Download 2024 as a zip
+Download backup-2024.zip
+Download design-preview.png
+Download notes.txt
+Download receipt.pdf
+Download Sample-Video-4K.mkv
+Download screenshot-01.jpg
+Download track-01.flac
+demo/backup-2024.zip
+demo/design-preview.png
+demo/notes.txt
+demo/receipt.pdf
+demo/Sample-Video-4K.mkv
+demo/screenshot-01.jpg
+demo/track-01.flac
+0 B/s
+video/x-matroska · 3.6 GB
+This browser cannot decode this file
+The file itself is fine. Download it and play it locally — the transfer is lossless either way.
+likely HEVC or DivX — this browser plays AV1 / H.264 / AVC
+Try anyway
+0
 10
-10
+100
 1×
-PLAYLIST · 1
-Sample-Video…mkv
-3.6 GB
-3.6 GB
+Streaming with HTTP Range — seek anywhere instantly.
+space play · ←→ ±10s · f fullscreen · m mute
+PLAYLIST · 4
+clip-a.mp4 1.1 MB
+clip-a.mp4
+1.1 MB
+clip-b.mp4 879 KB
+clip-b.mp4
+879 KB
+ALSO IN THIS SHARE
 buffered
-38%
 transferred
-2.5 GB
 devices
-3
 format
-video/x-matroska
 shape
-16:9
-Streaming with HTTP Range
-seek anywhere instantly
+All Files
+Seek
+Play
+Back 10 seconds
+Forward 10 seconds
+Mute
+Volume
+Playback speed
+Picture in picture
+Fill the screen
+Fullscreen
+All Files in This Share
+Version 1.0.0 · build 2026-11-06.player3
+Back 10s
+Forward 10s

@@ -229,8 +229,16 @@
   button.primary{background:#f5f5f5;color:#000;border:0;font-weight:650}
   /* Round icon buttons, like every other player: a picture is quicker to read
      than the word "Full" or "PiP", and it stops the row wrapping on a phone. */
+  /* The download is an <a download> (only an anchor saves the file), so it
+     never matched the `button{...}` rule above and drew as a bare glyph in the
+     row -- no disc, no 40px box, the one control that was not a circle. Paint
+     the chrome on .round itself so the anchor and the buttons are identical. */
   .round{width:40px;height:40px;padding:0;border-radius:50%;justify-content:center;
-    position:relative;flex:0 1 auto;min-width:34px;text-decoration:none}
+    position:relative;flex:0 1 auto;min-width:34px;text-decoration:none;
+    color:var(--text);background:#141414;border:1px solid var(--line);
+    display:inline-flex;align-items:center;cursor:pointer;
+    transition:background .14s ease,transform .14s ease}
+  a.round:hover{background:#232323;transform:translateY(-1px)}
   .round.primary{width:46px;height:46px;min-width:46px;flex:0 0 auto}
   /* 360px and 320px phones are the tight ones: shrink the circles rather than
      let the row run off the card */
@@ -324,7 +332,7 @@
   .stats .row{display:flex;justify-content:space-between;font-size:12.5px;color:var(--dim)}
   .stats .row b{font-family:var(--mono);color:var(--text);font-weight:500}
   .toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(16px);opacity:0;
-    background:rgba(11,17,32,.96);border:1px solid rgba(34,211,238,.45);padding:11px 18px;border-radius:11px;
+    background:rgba(14,14,14,.96);border:1px solid #333;padding:11px 18px;border-radius:999px;
     font-size:13px;transition:.18s ease;z-index:50}
   .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 </style>
