@@ -63,7 +63,9 @@ jobs:
             echo '```' >> "$GITHUB_STEP_SUMMARY"
             cat .pytest_cache/v/cache/lastfailed >> "$GITHUB_STEP_SUMMARY"
             echo '```' >> "$GITHUB_STEP_SUMMARY"
-            echo "::error::failing tests: $(tr -d '\n' < .pytest_cache/v/cache/lastfailed | head -c 900)"
+            # One annotation per failing test: a multi-line message is cut at
+            # the first newline, which made the Windows failures unreadable.
+            python -c "import json,pathlib; [print('::error title=failing test::' + n) for n in list(json.loads(pathlib.Path('.pytest_cache/v/cache/lastfailed').read_text()))[:20]]" || true
           else
             echo "::error::pytest failed before running any test (collection or install error)"
           fi
