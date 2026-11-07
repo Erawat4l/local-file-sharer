@@ -515,9 +515,23 @@ def test_the_download_control_is_a_link_on_the_player():
     )
 
 
+def _pillow():
+    """Pillow, or skip.
+
+    CI installs only ``.[dev]``, which does not include Pillow, so the checks
+    that read committed pixels skip there. The copy guards above deliberately
+    do not need Pillow: those are the ones that must run on every platform.
+    """
+    try:
+        from PIL import Image  # noqa: PLC0415 - only the pixel checks need it
+    except ModuleNotFoundError:  # pragma: no cover - depends on the environment
+        pytest.skip("Pillow is not installed")
+    return Image
+
+
 def _web_png_pixels(name: str):
     """Every pixel of a committed web screenshot, as ``(r, g, b)``."""
-    from PIL import Image  # noqa: PLC0415 - only the asset tests need it
+    Image = _pillow()
 
     path = ASSETS / name
     if not path.exists():  # pragma: no cover - committed with the PNGs
@@ -561,7 +575,7 @@ def test_the_web_screenshots_are_the_declared_size():
     screenshot silently loses it. This holds the committed images to the
     script's own table so a crop cannot quietly reappear.
     """
-    from PIL import Image  # noqa: PLC0415
+    Image = _pillow()
 
     source = (Path(__file__).resolve().parents[1] / "tools" / "screenshots" / "webshot_live.py").read_text(
         encoding="utf-8"
@@ -589,7 +603,7 @@ def test_the_qr_code_in_the_hero_shot_is_not_blank():
     path = ASSETS / "web-download.png"
     if not path.exists():  # pragma: no cover
         pytest.skip("docs/assets/web-download.png is not present")
-    from PIL import Image  # noqa: PLC0415
+    Image = _pillow()
 
     with Image.open(path) as image:
         width, height = image.size
