@@ -6,31 +6,33 @@ in a still: the picture is the page, and the title and controls fade out over it
 while it plays. A screenshot of that looks like a film still; the fade is what
 makes it read as a video player.
 
-Every frame is drawn by ``webgen``'s own page builders -- the same functions
-that produce the committed PNGs -- so the gif cannot claim copy the templates do
-not contain. Only the two player states differ, and ``player(chrome=False)`` is
-a real state of the real page (``.is-playing:not(.show-controls)``).
+Every frame is a **screenshot of the running page**, taken by ``webshot_live``'s
+Chromium driver against a real ``ShareServer``. Nothing here is drawn: the gif
+cannot show copy or a layout the product does not have, because each frame is
+what the browser rendered.
+
+Only the two player states differ, and the chrome-less one is a real state of
+the real page -- ``.stage.is-playing:not(.show-controls)``, which is what the
+page does while a video plays and nobody has moved the mouse.
 """
 
 from __future__ import annotations
 
-import io
 import sys
+import tempfile
 from pathlib import Path
 
 from PIL import Image
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from paths import ASSETS, FONT_DIR  # noqa: E402
-from webgen import downloader, player, server  # noqa: E402
-from webshot import Shot  # noqa: E402
+from paths import ASSETS  # noqa: E402
 
 OUT = ASSETS / "web-demo.gif"
 
-#: 1.15x: three 2160x1350 frames at 2x would be tens of megabytes, and a README
-#: gif has to load on a phone.
-SCALE = 0.9
+#: The captures are 2880px wide at 2x; a README gif has to load on a phone, so
+#: each frame is halved before it goes into the palette.
+SIZE = (1080, 675)
 
 #: A monochrome page quantises to greys without banding, so no dithering is
 #: needed -- and dithering is what makes a gif of a dark UI look 3x bigger.
@@ -43,28 +45,62 @@ HOLD = 2200
 FADE_STEPS = 3
 
 
-def _raster(shot: Shot) -> Image.Image:
-    import resvg_py
+def _frames() -> tuple[Image.Image, Image.Image, Image.Image, Image.Image]:
+    """Shoot the three pages, plus the player with its chrome hidden."""
+    import webshot_live  # noqa: PLC0415 - needs websocket-client + a browser
 
-    fonts = [
-        FONT_DIR / name
-        for name in (
-            "Inter-Regular.ttf",
-            "Inter-Medium.ttf",
-            "Inter-SemiBold.ttf",
-            "Inter-Bold.ttf",
-            "Inter-ExtraBold.ttf",
-            "JetBrainsMono-Regular.ttf",
-            "JetBrainsMono-Bold.ttf",
-        )
-    ]
-    png = resvg_py.svg_to_bytes(
-        svg_string=shot.svg(),
-        font_files=[str(p) for p in fonts],
-        skip_system_fonts=True,
-        zoom=SCALE,
-    )
-    return Image.open(io.BytesIO(png)).convert("RGB")
+    chrome = _chrome()
+    root = _demo_tree()
+    browser = webshot_live.Browser(chrome)
+    pages = webshot_live.page_urls(root, "my-laptop")
+    shots: dict[str, Image.Image] = {}
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            for name, (_server, url) in pages.items():
+                path = Path(tmp) / f"{name}.png"
+                browser.capture(url, path, size=(1440, 900))
+                shots[name] = Image.open(path).convert("RGB").resize(SIZE, Image.LANCZOS)
+            playing = Path(tmp) / "playing.png"
+            browser.capture(
+                pages["web-player"][1],
+                playing,
+                size=(1440, 900),
+                after=(
+                    "(() => { const s = document.querySelector('.stage');"
+                    " s.classList.add('is-playing');"
+                    " s.classList.remove('show-controls'); return true; })()"
+                ),
+            )
+            shots["playing"] = Image.open(playing).convert("RGB").resize(SIZE, Image.LANCZOS)
+    finally:
+        browser.close()
+        for server, _url in pages.values():
+            server.stop()
+    return shots["web-download"], shots["web-server"], shots["web-player"], shots["playing"]
+
+
+def _chrome() -> str:
+    """The browser binary: ``$LFS_CHROME``, then the usual names on PATH."""
+    import os  # noqa: PLC0415
+    import shutil  # noqa: PLC0415
+
+    wanted = os.environ.get("LFS_CHROME")
+    if wanted:
+        return wanted
+    for name in ("chromium", "chromium-browser", "google-chrome", "chrome"):
+        found = shutil.which(name)
+        if found:
+            return found
+    raise SystemExit("no Chromium found -- set LFS_CHROME=/path/to/chromium")
+
+
+def _demo_tree() -> Path:
+    """The folder the pages show: the same demo tree the stills use."""
+    from paths import DEMO_PICKER  # noqa: PLC0415
+
+    if not DEMO_PICKER.is_dir():
+        raise SystemExit(f"the demo tree is missing: {DEMO_PICKER}")
+    return DEMO_PICKER
 
 
 def main() -> None:
@@ -80,10 +116,7 @@ def main() -> None:
             frames.append(Image.blend(before, after, step / FADE_STEPS))
             durations.append(120)
 
-    download = _raster(downloader())
-    serve = _raster(server())
-    play = _raster(player())
-    playing = _raster(player(chrome=False))
+    download, serve, play, playing = _frames()
 
     hold(download)
     crossfade(download, serve)
