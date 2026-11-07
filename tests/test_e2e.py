@@ -305,13 +305,13 @@ def test_downloader_js_fires_its_ranges_concurrently():
     function = function[: function.index("$('download-all')")]
 
     assert "Promise.all(parts.map(" in function, "ranges must be requested concurrently"
-    # The fetch belongs *inside* the Promise.all callback. A `for … of` loop
+    # The request belongs *inside* the Promise.all callback. A `for … of` loop
     # with a bare `await` is exactly what used to serialise the 16 requests.
+    # Ranges go through `fetchRange`, which owns the retry loop, so the call to
+    # it is what has to sit inside the callback.
     before_parallel, _, after_parallel = function.partition("Promise.all(parts.map(")
-    assert "await fetch(file.url, { headers: { Range" not in before_parallel, (
-        "a bare await before Promise.all serialises the ranges"
-    )
-    assert "await fetch(file.url, { headers: { Range" in after_parallel
+    assert "await fetchRange(" not in before_parallel, "a bare await before Promise.all serialises the ranges"
+    assert "await fetchRange(" in after_parallel
 
 
 # ── uploads ─────────────────────────────────────────────────────────────────
@@ -901,3 +901,50 @@ def test_opening_a_folder_in_download_mode_keeps_the_download_page(tmp_path, fre
     assert "Download Everything" in body or 'class="hero"' in body, "lost the download station hero"
     assert 'class="card file"' in body or 'class="card folder"' in body, "lost the card grid"
     assert "qr-frame" in body, "lost the QR card"
+
+
+def test_the_streaming_save_never_buffers_whole_parts():
+    """Saving to disk must stream each range, not collect it in memory.
+
+    `saveViaStream` used to fetch every part as an ArrayBuffer and only then
+    write them, so a multi-gigabyte file was resident in RAM in full before a
+    byte reached the disk. The tab is killed long before the transfer ends,
+    which the user sees as a download that stops dead partway through.
+    """
+    source = Path(__file__).resolve().parents[1] / "src/local_file_sharer/web/assets/downloader.html"
+    if not source.is_file():
+        pytest.skip("web assets not present")
+    script = source.read_text(encoding="utf-8")
+
+    body = script[script.index("async function saveViaStream") :]
+    body = body[: body.index("async function downloadParallel")]
+    # Comments explain the old behaviour and name it, so judge the code only.
+    code = "\n".join(line.split("//")[0] for line in body.splitlines())
+
+    assert "arrayBuffer()" not in code, "the save path must not buffer a whole part"
+    assert "r.body.getReader()" in body, "parts must be read as a stream"
+    assert "writable.write(value)" in body, "each chunk must be written as it arrives"
+
+
+def test_a_failed_range_is_retried_instead_of_restarting_the_file():
+    """A dropped range must cost one range, not the whole transfer.
+
+    Phones drop connections constantly. The old code let the error reach a
+    catch-all that navigated away and started the file again from byte zero.
+    """
+    source = Path(__file__).resolve().parents[1] / "src/local_file_sharer/web/assets/downloader.html"
+    if not source.is_file():
+        pytest.skip("web assets not present")
+    script = source.read_text(encoding="utf-8")
+
+    assert "async function fetchRange(" in script, "ranges need a retry wrapper"
+    retry = script[script.index("async function fetchRange(") :]
+    retry = retry[: retry.index("async function saveViaStream")]
+    assert "setTimeout" in retry, "the retry must back off between attempts"
+    assert "416" in retry, "a 416 is not worth retrying"
+
+    parallel = script[script.index("async function downloadParallel") :]
+    catch = parallel[parallel.index("} catch (e) {") :]
+    assert "window.location.href = file.url" not in catch, (
+        "navigating away on error throws away the bytes already written"
+    )

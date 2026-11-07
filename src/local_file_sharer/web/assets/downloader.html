@@ -34,7 +34,7 @@
         {{file_count}} files · {{total_size}} shared from <span class="mono">{{peer}}</span>.
       </p>
 
-      <div class="stat-row">
+      <div class="stat-row lit">
         <div class="stat"><div class="k">Files</div><div class="v">{{file_count}}</div></div>
         <div class="stat"><div class="k">Total Size</div><div class="v">{{total_size}}</div></div>
         <div class="stat"><div class="k">Connections</div><div class="v">{{parallel}} <small>parallel</small></div></div>
@@ -115,7 +115,8 @@
     id: el.dataset.id,
     name: el.querySelector('h3').textContent.trim(),
     url: `/f/${el.dataset.id}`,
-    size: el.querySelector('p').textContent.trim(),
+    size: parseInt(el.dataset.bytes || '0', 10),   // exact bytes, for progress
+    label: el.querySelector('p').textContent.trim(),
   }));
 
   const $ = (id) => document.getElementById(id);
@@ -171,20 +172,58 @@
     }
   }
 
+  // One range, retried. A dropped range used to throw straight out to the
+  // catch-all, which navigated away and restarted the whole file from zero --
+  // a 3.6 GB download that hiccuped at 90% began again at 0%. Phones drop
+  // connections constantly (screen off, Wi-Fi roaming, Android doze), so a
+  // transient failure is normal and must cost one range, not the transfer.
+  async function fetchRange(url, start, end, tries = 4) {
+    let lastErr = null;
+    for (let attempt = 0; attempt < tries; attempt++) {
+      try {
+        const r = await fetch(url, {
+          headers: { Range: `bytes=${start}-${end}` },
+          cache: 'no-store',
+        });
+        if (r.ok || r.status === 206) return r;
+        // 416 means the server disagrees about the range: retrying is pointless.
+        if (r.status === 416) throw new Error('range not satisfiable');
+        lastErr = new Error('range ' + r.status);
+      } catch (e) {
+        lastErr = e;
+      }
+      await new Promise(res => setTimeout(res, 250 * 2 ** attempt));  // 250, 500, 1000 ms
+    }
+    throw lastErr || new Error('range failed');
+  }
+
   async function saveViaStream(handle, file, parts) {
     const writable = await handle.createWritable();
-    // Written out of order is not allowed, so run the pieces in order but keep
-    // all of them in flight: each chunk resolves as it arrives and is appended
-    // as soon as it is its turn.
-    const pending = parts.map(p =>
-      fetch(file.url, { headers: { Range: `bytes=${p.start}-${p.end}` }, cache: 'no-store' })
-        .then(r => { if (!r.ok && r.status !== 206) throw new Error('range ' + r.status); return r.arrayBuffer(); })
-    );
-    for (let i = 0; i < pending.length; i++) {
-      const buf = await pending[i];
-      await writable.write(new Uint8Array(buf));
-      $('progress-bar').style.width = ((i + 1) / pending.length * 100).toFixed(1) + '%';
-      $('progress-text').textContent = `${file.name} · part ${i + 1}/${pending.length}`;
+    // A browser writes a file strictly front-to-back, so the pieces have to be
+    // appended in order. They are fetched in order too, and each one is piped
+    // straight through with `await r.body` instead of being collected into an
+    // ArrayBuffer first:
+    //
+    // * `arrayBuffer()` on every part meant all eight were resident at once.
+    //   On a 3.6 GB video that is the whole file in RAM before a single byte
+    //   reaches the disk, and the tab is killed by the OS long before the
+    //   transfer finishes — which is exactly the "it works, then it just
+    //   stops" report.
+    // * Reading with `r.body` and writing each chunk as it lands keeps memory
+    //   flat no matter how big the file is.
+    let written = 0;
+    for (let i = 0; i < parts.length; i++) {
+      const p = parts[i];
+      const r = await fetchRange(file.url, p.start, p.end);
+      const reader = r.body.getReader();
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        await writable.write(value);
+        written += value.byteLength;
+        if (file.size) $('progress-bar').style.width = (written / file.size * 100).toFixed(1) + '%';
+      }
+      $('progress-text').textContent = `${file.name} · part ${i + 1}/${parts.length}`;
     }
     await writable.close();
   }
@@ -225,8 +264,7 @@
       const blob = new Array(parts.length);
       let done = 0;
       await Promise.all(parts.map(async (p, i) => {
-        const r = await fetch(file.url, { headers: { Range: `bytes=${p.start}-${p.end}` }, cache: 'no-store' });
-        if (!r.ok && r.status !== 206) throw new Error('range failed: ' + r.status);
+        const r = await fetchRange(file.url, p.start, p.end);
         blob[i] = await r.arrayBuffer();
         done += 1;
         $('progress-bar').style.width = (done / parts.length * 100).toFixed(1) + '%';
@@ -239,7 +277,12 @@
       $('progress-text').textContent = `${file.name} · saved`;
       toast('Saved ' + file.name);
     } catch (e) {
-      window.location.href = file.url; // fall back to a normal download
+      // Do not navigate away here. This used to run `window.location.href =
+      // file.url` on any error, so a range that failed after 90% silently
+      // threw the whole partial transfer away and started again from byte
+      // zero. Offer the plain link instead and say what happened.
+      $('progress-text').textContent = `${file.name} · stopped: ${e.message}`;
+      toast('Stopped: ' + file.name);
     }
   }
 

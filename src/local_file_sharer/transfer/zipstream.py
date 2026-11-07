@@ -205,9 +205,20 @@ class ZipStream:
 
     # ── preparation (decides per-file method and sizes) ─────────────────────
     def _prepare(self) -> None:
+        # The budget is spent *before* any file is read. Checking it after
+        # deflating meant a folder of a few dozen compressible files under the
+        # 8 MiB per-file limit was deflated in full, one after another, before
+        # the first byte of the response went out: a 12 GB share could sit
+        # there for a long time with the browser showing "starting download"
+        # and no progress at all. Files are also skipped once the budget is
+        # gone instead of being deflated and thrown away.
         budget = INLINE_BUDGET if self.compression > 0 else 0
         for item in self.items:
             if budget <= 0 or not item.compressible:
+                continue
+            if item.size > budget * 4:
+                # Even a perfectly compressible file this large is a bad trade:
+                # it would be read in full to save space we do not need.
                 continue
             payload, crc = self._deflate_to_memory(item)
             if payload is None:
