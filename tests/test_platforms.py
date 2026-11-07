@@ -16,7 +16,6 @@ from pathlib import Path
 import pytest
 
 from conftest import unreadable_dir
-
 from local_file_sharer import network, platforms
 
 
