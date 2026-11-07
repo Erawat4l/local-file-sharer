@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from conftest import lfs_exe_name, make_symlink, on_path
 from local_file_sharer import uninstall as un
 from local_file_sharer.uninstall import _is_checkout, make_plan
 
@@ -88,11 +89,11 @@ def test_a_symlink_on_path_is_not_mistaken_for_the_running_copy(tmp_path, monkey
     binary = checkout / ".venv" / "bin" / "lfs"
     bindir = fake_home / ".local" / "bin"
     bindir.mkdir(parents=True)
-    link = bindir / "lfs"
-    link.symlink_to(binary)
+    link = bindir / lfs_exe_name()
+    make_symlink(link, binary)
 
     monkeypatch.setenv("HOME", str(fake_home))
-    monkeypatch.setenv("PATH", f"{bindir}:/usr/bin:/bin")
+    monkeypatch.setenv("PATH", on_path(bindir))
     monkeypatch.setattr(un, "find_duplicates", list)
     monkeypatch.setattr(un, "is_pipx_install", lambda _p: False)
     monkeypatch.setattr(un, "_own_tree", lambda: checkout)

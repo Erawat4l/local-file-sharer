@@ -61,6 +61,25 @@ def unreadable_dir(path: Path) -> None:
     pytest.skip("this platform ignores directory permissions (needs a POSIX mode)")
 
 
+def on_path(*dirs: Path | str) -> str:
+    """A PATH value for *dirs*, joined the way this platform joins it.
+
+    Tests built PATH with ":" and it silently became one long directory name
+    on Windows, so ``which()`` found nothing and the test failed on an empty
+    list rather than on the behaviour it was checking.
+    """
+    return os.pathsep.join(str(d) for d in dirs)
+
+
+def lfs_exe_name() -> str:
+    """What the installed command is called here: ``lfs`` or ``lfs.exe``.
+
+    ``shutil.which("lfs")`` on Windows only finds ``lfs.exe`` because it goes
+    through PATHEXT, so a POSIX-shaped fixture is invisible to it.
+    """
+    return "lfs.exe" if os.name == "nt" else "lfs"
+
+
 def make_symlink(link: Path, target: Path) -> None:
     """Create a symlink, or skip the test where the platform forbids it.
 

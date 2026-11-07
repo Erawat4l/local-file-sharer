@@ -83,6 +83,10 @@ def console() -> Console:
             emoji=True,
             log_time=False,
             stderr=_human_to_stderr,
+            # Rich swaps its rounded box corners for square ones on a legacy
+            # Windows console, which would make the menu a different picture
+            # per platform. The look is part of the product, so pin it.
+            safe_box=False,
         )
     return _console
 
@@ -99,6 +103,7 @@ def set_theme(theme: Theme) -> None:
         highlight=False,
         soft_wrap=False,
         emoji=True,
+        safe_box=False,
         force_terminal=None if previous is None else previous.is_terminal,
         width=None if previous is None or previous._width is None else previous.width,  # noqa: SLF001
     )

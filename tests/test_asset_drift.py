@@ -67,6 +67,10 @@ def test_the_gif_shows_the_menu_the_code_draws(monkeypatch):
         highlight=False,
         soft_wrap=False,
         color_system=None,
+        # Same reason as ui/console.py: without it Rich substitutes square box
+        # corners on a legacy Windows console and the menu no longer matches
+        # the gif it is being compared against.
+        safe_box=False,
     )
     set_console(con)
     state = State.load(None)

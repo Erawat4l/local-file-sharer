@@ -23,16 +23,20 @@ from local_file_sharer.ui.theme import build_theme
 
 # ── state ───────────────────────────────────────────────────────────────────
 def test_state_roundtrip(tmp_path: Path):
+    # Real paths, not the literal "/tmp/a.mp4": add_recent stores str(Path(...)),
+    # which is "\tmp\a.mp4" on Windows, so a POSIX literal asserted nothing
+    # there and made the test platform-specific for no reason.
+    first, second = tmp_path / "a.mp4", tmp_path / "b.mp4"
     state = State.load(tmp_path / "state.json")
-    state.add_recent("/tmp/a.mp4", limit=3)
-    state.add_recent("/tmp/b.mp4", limit=3)
-    state.add_recent("/tmp/a.mp4", limit=3)
-    assert state.recent_files()[0]["path"] == "/tmp/a.mp4"
+    state.add_recent(first, limit=3)
+    state.add_recent(second, limit=3)
+    state.add_recent(first, limit=3)
+    assert state.recent_files()[0]["path"] == str(first)
     assert state.recent_files()[0]["count"] == 2
     assert len(state.recent_files()) == 2
 
     again = State.load(tmp_path / "state.json")
-    assert again.recent_files()[0]["path"] == "/tmp/a.mp4"
+    assert again.recent_files()[0]["path"] == str(first)
     assert again.data["install_id"]
 
 

@@ -51,7 +51,9 @@ def test_dump_round_trip(tmp_path: Path):
     cfg.share.one_liners = ["curl", "aria2c"]
     text = dump_config(cfg)
     target = tmp_path / "config.toml"
-    target.write_text(text)
+    # The app writes UTF-8 (config.py save path); without this the default
+    # cp1252 on Windows cannot store the em dash in the header comment.
+    target.write_text(text, encoding="utf-8")
     loaded = load_config(path=target, respect_env=False)
     assert loaded.theme == "mono"
     assert loaded.network.port == 9999
@@ -218,12 +220,14 @@ def test_config_set_hint_says_nothing_was_written():
 
 def test_a_broken_config_file_points_at_the_file():
     """The opposite case: the file really is wrong, so say so."""
-    from local_file_sharer.config import load_config
+    # Ask the app where the file lives: it is ~/.config on POSIX and %APPDATA%
+    # on Windows, and a hardcoded POSIX path tested nothing there.
+    from local_file_sharer.config import config_path, load_config
     from local_file_sharer.errors import ConfigError
 
-    config_path = Path(os.environ["HOME"]) / ".config" / "local-file-sharer" / "config.toml"
-    config_path.parent.mkdir(parents=True, exist_ok=True)
-    config_path.write_text('[network]\nport = "not-a-number"\n', encoding="utf-8")
+    target = config_path()
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text('[network]\nport = "not-a-number"\n', encoding="utf-8")
     try:
         with pytest.raises(ConfigError) as excinfo:
             load_config()
@@ -231,7 +235,7 @@ def test_a_broken_config_file_points_at_the_file():
         assert "config file" in hints
         assert "nothing was written" not in hints
     finally:
-        config_path.unlink(missing_ok=True)
+        target.unlink(missing_ok=True)
 
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX permissions only")

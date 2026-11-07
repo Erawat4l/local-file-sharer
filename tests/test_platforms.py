@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-from conftest import unreadable_dir
+from conftest import make_symlink, unreadable_dir
 from local_file_sharer import network, platforms
 
 
@@ -93,7 +93,7 @@ def test_list_drives_posix_deduplicates_symlinked_roots(monkeypatch, tmp_path):
     real.mkdir()
     (real / "disk").mkdir()
     link = tmp_path / "link"
-    link.symlink_to(real)
+    make_symlink(link, real)
     monkeypatch.setattr(platforms, "WINDOWS", False)
     monkeypatch.setattr(platforms, "POSIX_MOUNT_ROOTS", (str(real), str(link)))
 
@@ -465,7 +465,7 @@ def test_sdcard_is_found_through_either_route(tmp_path, monkeypatch):
     assert platforms.sdcard_dir() == shared
 
     # some builds hide /sdcard but the ~/storage symlink is there
-    (home / "storage").symlink_to(shared)
+    make_symlink(home / "storage", shared)
     monkeypatch.setattr(platforms, "SDCARD_ALIASES", (tmp_path / "nope",))
     assert platforms.sdcard_dir() == home / "storage"
 

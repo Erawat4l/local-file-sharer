@@ -7,6 +7,7 @@ import json
 
 import pytest
 
+from conftest import lfs_exe_name, on_path
 from local_file_sharer import updater
 
 
@@ -393,6 +394,8 @@ def test_unknown_failures_keep_pips_own_words():
 
 # ── more than one copy of lfs on PATH ───────────────────────────────────────
 def _make_exe(path, shebang, body="import sys\n"):
+    # Windows decides "is this executable" from the extension, so the fixture
+    # has to be called lfs.exe there for which() to see it at all.
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(f"#!{shebang}\n{body}", encoding="utf-8")
     path.chmod(0o755)
@@ -411,9 +414,9 @@ def test_a_pipx_shim_is_recognised(tmp_path):
 
 def test_a_second_copy_on_path_is_reported(tmp_path, monkeypatch):
     """pipx install --force beside an existing copy leaves two lfs commands."""
-    a = _make_exe(tmp_path / "a" / "lfs", "/usr/bin/python3")
-    b = _make_exe(tmp_path / "b" / "lfs", "/home/u/.local/pipx/venvs/x/bin/python")
-    monkeypatch.setenv("PATH", f"{a.parent}:{b.parent}:/usr/bin:/bin")
+    a = _make_exe(tmp_path / "a" / lfs_exe_name(), "/usr/bin/python3")
+    b = _make_exe(tmp_path / "b" / lfs_exe_name(), "/home/u/.local/pipx/venvs/x/bin/python")
+    monkeypatch.setenv("PATH", on_path(a.parent, b.parent))
     monkeypatch.setattr("sys.argv", [str(a)])
     found = updater.find_duplicates()
     assert [item["path"] for item in found] == [str(b)]
@@ -421,8 +424,8 @@ def test_a_second_copy_on_path_is_reported(tmp_path, monkeypatch):
 
 
 def test_no_duplicates_when_only_one_copy_is_installed(tmp_path, monkeypatch):
-    a = _make_exe(tmp_path / "a" / "lfs", "/usr/bin/python3")
-    monkeypatch.setenv("PATH", f"{a.parent}:/usr/bin:/bin")
+    a = _make_exe(tmp_path / "a" / lfs_exe_name(), "/usr/bin/python3")
+    monkeypatch.setenv("PATH", on_path(a.parent))
     monkeypatch.setattr("sys.argv", [str(a)])
     assert updater.find_duplicates() == []
 
