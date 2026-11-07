@@ -319,7 +319,20 @@ def test_no_real_file_names_are_published():
     repo = Path(__file__).resolve().parents[1]
     offenders: list[str] = []
     skip_dirs = {".git", ".venv", "node_modules", "__pycache__", "dist", "build", "inputs"}
-    suffixes = {".py", ".md", ".txt", ".html", ".css", ".js", ".toml", ".json", ".yml", ".yaml", ".cfg", ".sh"}
+    suffixes = {
+        ".py",
+        ".md",
+        ".txt",
+        ".html",
+        ".css",
+        ".js",
+        ".toml",
+        ".json",
+        ".yml",
+        ".yaml",
+        ".cfg",
+        ".sh",
+    }
     for path in sorted(repo.rglob("*")):
         if not path.is_file() or set(path.parts) & skip_dirs:
             continue
@@ -334,6 +347,4 @@ def test_no_real_file_names_are_published():
         for name in RETIRED_REAL_NAMES:
             if name in text:
                 offenders.append(f"{path.relative_to(repo)}: {name}")
-    assert not offenders, (
-        "real device names are published in:\n  " + "\n  ".join(offenders)
-    )
+    assert not offenders, "real device names are published in:\n  " + "\n  ".join(offenders)
