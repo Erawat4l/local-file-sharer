@@ -375,6 +375,22 @@ def check_environment() -> list[Check]:
         )
     )
     checks.append(Check("os", OK, f"{os_name()} · {platforms.hostname()}", "", "runtime"))
+    if platforms.TERMUX:
+        # Android sleeps the CPU a minute after the screen goes off, which stops
+        # a running transfer dead. Say whether the phone will stay awake, and
+        # what to install when it will not.
+        from . import wakelock  # noqa: PLC0415 - only needed on a phone
+
+        state = wakelock.describe()
+        checks.append(
+            Check(
+                "wake lock",
+                OK if wakelock.is_held() else WARN,
+                state,
+                "Install the Termux:API app, then `pkg install termux-api`",
+                "runtime",
+            )
+        )
     return checks
 
 

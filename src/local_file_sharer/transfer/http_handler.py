@@ -834,7 +834,12 @@ class ShareRequestHandler(BaseHTTPRequestHandler):
         for kind, key in window:
             if kind == "folder":
                 trail = f"{sub}/{key}" if sub else key
-                inside = f"{descends}/{trail}/"
+                # `trail` is already the full path below the shared item, and so
+                # is `descends`. Prefixing one with the other asked for
+                # "Root/Level/Level/Child/", which matched nothing: every
+                # sub-folder row on a nested page read "0 files · 0 B" while its
+                # files were right there on disk.
+                inside = f"{descends}/{key}/"
                 depth = sum(1 for f in pool if f.rel.startswith(inside))
                 size = sum(f.size for f in pool if f.rel.startswith(inside))
                 parts.append(
@@ -1834,7 +1839,8 @@ def _entry_cards(manifest, *, level: str = "", page: int = 1) -> tuple[list[str]
         cards.append(
             f'<article class="card file" data-kind="{_filter_kind(entry.path)}" data-id="{entry.file_id}" '
             f'data-name="{html.escape(label.lower())}" '
-            f'data-dl="/f/{entry.file_id}" data-filename="{html.escape(label)}">'
+            f'data-dl="/f/{entry.file_id}" data-filename="{html.escape(label)}" '
+            f'data-bytes="{entry.size}">'
             f'<div class="card-icon">{_icon_for(entry)}</div>'
             f'{main}<h3 title="{html.escape(label)}">'
             f"{html.escape(label)}</h3>"

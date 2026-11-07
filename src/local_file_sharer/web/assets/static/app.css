@@ -153,6 +153,35 @@ button.chip:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
   box-shadow: var(--shadow);
 }
 .card.tight { padding: 16px; }
+/* The "lit panel" look: a soft highlight across the middle of the box that
+   fades to the panel colour at the top and the bottom, over the flat panel
+   fill. It reads as one raised surface catching light rather than a flat
+   rectangle, and it still has no hue -- the highlight is white at 5% alpha.
+   Used for the stat strip and the other small tiles so the whole page shares
+   one material instead of two. */
+.lit {
+  /* Five stops, not three. A three-stop gradient ramps linearly and reads as a
+     flat wash; the eye picks up the ramp. This one holds the edges dark, lifts
+     through the upper middle and settles again, which is the curve in the
+     reference: #181818 at the top and bottom edge, #101010 through the middle
+     band, brightest just above centre. */
+  background-color: #101010;
+  background-image: linear-gradient(
+    180deg,
+    #181818 0%,
+    #141414 14%,
+    #101010 30%,
+    #0d0d0d 46%,
+    #161616 54%,
+    #121212 72%,
+    #181818 100%
+  );
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.05) inset,
+    0 -1px 0 rgba(255, 255, 255, 0.02) inset;
+}
 .hero h1 { margin: 0 0 8px; font-size: clamp(24px, 4vw, 40px); letter-spacing: -0.03em; line-height: 1.08; }
 .hero h1 .grad { color: #fff; }
 .hero p.lead { color: var(--text-dim); margin: 0 0 20px; font-size: 15px; line-height: 1.6; max-width: 52ch; }
@@ -168,6 +197,10 @@ button.chip:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
   gap: 26px; margin: 22px 0;
 }
 @media (max-width: 620px) { .stat-row { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; } }
+/* The stat strip is one lit tile holding all of them, rather than a box per
+   number: the numbers stay label-over-value on a single surface, which is what
+   stops the row reading as a form, while the surface itself gets the gradient. */
+.stat-row.lit { padding: 18px 20px; }
 .stat { padding: 0; border: 0; background: none; }
 .stat .k {
   font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.1em;

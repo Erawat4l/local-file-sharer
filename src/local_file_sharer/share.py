@@ -22,7 +22,7 @@ from rich.console import Group
 from rich.prompt import Confirm, Prompt
 from rich.text import Text
 
-from . import APP_NAME, __version__, links, platforms
+from . import APP_NAME, __version__, links, platforms, wakelock
 from .config import Config
 from .errors import ShareError, SharerError
 from .fmt import human_size
@@ -171,6 +171,8 @@ class ShareRunner:
         self.tracker_registry = TrackerRegistry()
         self.torrent_stats = SeedStats()
         self._stop = threading.Event()
+        self._wake_locked = False
+        self._wake_note = ""
 
     # ── public API ──────────────────────────────────────────────────────────
     def run(self, *, wait: bool = True) -> ShareResult:
@@ -210,6 +212,10 @@ class ShareRunner:
         self.server.context.one_liners = one_liners
 
         self.server.start()
+        # Android freezes the process a minute after the screen sleeps, which
+        # stops a transfer dead with no error anywhere. Take a wake lock for
+        # the lifetime of the share; everywhere else this is a no-op.
+        self._wake_locked, self._wake_note = wakelock.acquire()
         base_url = f"http://{lan}:{self.server.port}"
         self.server.set_base_url(base_url)
         self.server.context.peer_name = platforms.hostname()
@@ -271,7 +277,11 @@ class ShareRunner:
         ]
         if self.server.context.pin:
             summary_rows.append(("PIN", self.server.context.pin))
+        if self._wake_locked:
+            summary_rows.append(("awake", "held — the phone will not sleep"))
         con.print(info_panel(summary_rows, title="share ready"))
+        if self._wake_note:
+            con.print(Text(f" ! {self._wake_note}", style=theme.warning))
 
         # ── LAN (primary) ───────────────────────────────────────────────────
         lan_lines: list[tuple[str, str]] = []
@@ -541,6 +551,9 @@ class ShareRunner:
                 con.print(Text(" no transfers completed — server stopped", style=theme.faint))
 
     def _shutdown(self) -> None:
+        if getattr(self, "_wake_locked", False):
+            wakelock.release()
+            self._wake_locked = False
         if self.tunnel is not None:
             self.tunnel.stop()
             self.tunnel = None

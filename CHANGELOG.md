@@ -8,6 +8,25 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 ## [Unreleased]
 
 ### Fixed
+- Every sub-folder on a nested page read `0 files · 0 B` even though its files
+  were on disk: the row's path was built by joining the level being listed with
+  a trail that already contained it, so it asked for `Root/Level/Level/Child/`
+  and matched nothing. The count and size now cover what the folder holds, and
+  its zip downloads those files instead of answering 404.
+- A large download stopped partway through and never resumed. Three causes, all
+  on the transfer path: saving to disk collected every range into memory before
+  writing any of it, so a multi-gigabyte file was resident in RAM in full
+  before a byte landed; one dropped range made the page navigate away and
+  restart the file from zero; and a 12 GB share spent its zip preparation
+  deflating files before the first byte of the response went out. Ranges are
+  now written as they arrive, a failed range is retried with backoff, and the
+  compression budget is checked before a file is read.
+- On Android the share did nothing to stop the device sleeping. A minute or two
+  after the screen went off the CPU is suspended and every transfer freezes,
+  with no error in the log because nothing failed. A share now takes a wake
+  lock while it runs (`termux-wake-lock`), says so in the summary panel, and
+  tells you to install Termux:API when the helper is missing. `lfs doctor`
+  reports the state on a phone.
 - Picking two folders and a file showed the file and neither folder: every
   path was stripped of its first segment, so `ADM/a.txt` became a loose
   `a.txt` at the top of the page and the folder card was never drawn. Folders

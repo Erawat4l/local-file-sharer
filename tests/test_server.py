@@ -1464,3 +1464,38 @@ def test_the_player_has_a_way_back_to_the_list():
 
     player = load_assets()["player.html"]
     assert 'href="/?list=1"' in player, "the player needs a way back to the list"
+
+
+# ── nested folder rows ──────────────────────────────────────────────────────
+def test_subfolder_rows_count_the_files_they_hold(tmp_path: Path, free_port: int):
+    """A folder row one level down must not read "0 files · 0 B".
+
+    The row's path is built from the level being listed (`sub`) *and* the
+    folder name, but the item files already carry the whole path in `rel`.
+    Joining the two wrote "Root/Level/Level/Child/" and matched nothing, so
+    every sub-folder on a nested page claimed to be empty while its files sat
+    on disk — a folder that says "0 files" cannot be downloaded with any
+    confidence.
+    """
+    root = tmp_path / "share"
+    top = root / "Level"
+    for name, count in (("Alpha", 3), ("Beta", 2)):
+        for i in range(count):
+            p = top / name / f"f{i}.bin"
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_bytes(b"x" * (100 * (i + 1)))
+
+    srv = ShareServer(Manifest.build([root], mode="serve"), host="127.0.0.1", port=free_port)
+    srv.start()
+    assert srv.wait_until_ready(timeout=5)
+    try:
+        page = get(srv, "/browse/Level").read().decode()
+    finally:
+        srv.stop()
+
+    rows = dict(
+        re.findall(r'<span class="row-name">([^<]+)/</span><span class="row-size">([^<]+)</span>', page)
+    )
+    assert rows.get("Alpha") == "3 files · 600 B", rows
+    assert rows.get("Beta") == "2 files · 300 B", rows
+    assert "0 files · 0 B" not in page
