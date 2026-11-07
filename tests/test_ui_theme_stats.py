@@ -56,7 +56,9 @@ def test_accent_resolution():
     rich_name, rgb = resolve_accent("#ff0000")
     assert rgb == (255, 0, 0)
     assert rich_name.startswith("#")
-    assert resolve_accent("nonsense")[1] == NAMED_ACCENTS["cyan"]
+    # An unparseable accent falls back to the product's accent, which is white
+    # now that the whole thing is monochrome. It used to be cyan.
+    assert resolve_accent("nonsense")[1] == NAMED_ACCENTS["white"]
 
 
 def test_parse_color():

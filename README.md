@@ -94,7 +94,7 @@ path is active on your machine.
 
 | Download station | Web file server | Media player |
 |---|---|---|
-| <img src="docs/assets/web-download.png" width="260" alt="download station"> | <img src="docs/assets/web-server.png" width="260" alt="web file server"> | <img src="docs/assets/web-player.png" width="260" alt="media player"> |
+| <img src="docs/assets/web-download.png" width="260" alt="Download Station"> | <img src="docs/assets/web-server.png" width="260" alt="Web File Server"> | <img src="docs/assets/web-player.png" width="260" alt="Media Player"> |
 
 </div>
 
@@ -113,7 +113,7 @@ scrollback, and a live dashboard with speed, ETA, progress, devices and total se
 | **Modes** | **Download** (forced, resumable, folders auto-zipped) · **Serve** (web file browser) · **Stream** (player with seeking) · **Torrent** (`.torrent` + magnet, built-in tracker, HTTP webseed) |
 | **Networks** | LAN/Wi-Fi IP first (QR + one-liners), public IP, Tailscale auto-detect (`serve`/`funnel`), Cloudflare Tunnel with a slow-speed warning |
 | **Speed** | `os.sendfile` → `socket.sendfile` fallback, 4 MiB buffers, `Range` support, 16-connection parallel downloader |
-| **Web UIs** | download station, file browser, media player — all offline-capable, browser caching disabled |
+| **Web UIs** | Download Station, File Browser, Media Player — all offline-capable, browser caching disabled |
 | **CLI polish** | animated banner, three monochrome themes (**dark / light / mono**), live transfer dashboard that redraws in place |
 | **Convenience** | fuzzy picker, recent files, favourite folders, one-key clipboard copy of links and one-liners |
 | **Safety** | optional PIN/password, auto-expiring links, upload toggle, gitignored per-machine secrets |

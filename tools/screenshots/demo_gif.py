@@ -42,7 +42,7 @@ def console_for(width: int) -> Console:
 
 def main() -> None:
     os.environ.setdefault("TERM", "xterm-256color")
-    theme = build_theme("dark", "cyan")
+    theme = build_theme("dark", "white")
     set_theme(theme)
     state = State.load(INPUTS / "shot-state.json")
     state.data["totals"] = {"bytes_sent": 128_849_018_880, "files_sent": 412, "shares": 37, "downloads": 96}

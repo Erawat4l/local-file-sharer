@@ -46,7 +46,7 @@ DEFAULT_CONFIG_TEMPLATE = """\
 # ─────────────────────────────────────────────────────────────────────────────
 
 theme = "dark"                  # dark | light | mono
-accent = "cyan"                 # any rich colour name or #RRGGBB
+accent = "white"                # any rich colour name or #RRGGBB
 animate_banner = true           # animated gradient banner on start
 icons = true                    # inline emoji icons in the file picker
 
@@ -206,7 +206,7 @@ class Device2Config:
 @dataclass
 class Config:
     theme: str = "dark"
-    accent: str = "cyan"
+    accent: str = "white"
     animate_banner: bool = True
     icons: bool = True
     network: NetworkConfig = field(default_factory=NetworkConfig)

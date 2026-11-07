@@ -140,7 +140,7 @@ def test_the_gif_text_is_recorded_beside_it():
 #: covered here — no text comparison can check those without a browser.
 _WEB_COPY = [
     ("DOWNLOAD STATION", "text-transform: uppercase"),
-    ("download station", "download station"),
+    ("Download Station", "Download Station"),
     ("mode download", "mode <b>{{mode}}</b>"),
     ("8 devices", "{{device_count}}"),
     ("Download all", "Download all"),
@@ -148,7 +148,7 @@ _WEB_COPY = [
     ("Copy curl one-liner", "Copy curl one-liner"),
     ("aria2c -x16", "aria2c -x16"),
     ("scan to open on another device", "scan to open on another device"),
-    ("Shared files", "Shared files"),
+    ("Shared Files", "Shared Files"),
     ("Search name or type — try mp4", "Search name or type — try mp4"),
     ("All", 'data-filter="all"'),
     ("Video", 'data-filter="video"'),
@@ -158,7 +158,7 @@ _WEB_COPY = [
     ("Archives", 'data-filter="archive"'),
     ("resumable · range requests · zero-copy sendfile", "resumable · range requests · zero-copy sendfile"),
     ("powered by pure Python + rich", "powered by pure Python + rich"),
-    ("web file server", "web file server"),
+    ("web file server", "Web File Server"),
     ("Browse ", "Browse "),
     (
         "Every file is served with HTTP Range support — resume, seek and parallelise freely.",
@@ -166,8 +166,8 @@ _WEB_COPY = [
     ),
     ("Filter in this folder…", "Filter in this folder…"),
     ("Filter", ">Filter<"),
-    ("Select all", "Select all"),
-    ("Download selected", "Download selected"),
+    ("Select All", "Select All"),
+    ("Download Selected", "Download Selected"),
     ("GET /api/manifest", "GET /api/manifest"),
     ("tip: aria2c -x16 -s16 for maximum speed", "for maximum speed"),
     ("Playlist · 1", "Playlist · {{playlist_count}}"),
@@ -243,7 +243,7 @@ def test_web_screenshots_do_not_revive_retired_copy():
         "powered by pure Python",  # truncated: the page says "+ rich"
         "HTTP Range seek",  # invented player badge
         "mode stream",  # invented player badge
-        "FILE BROWSER",  # the page says "web file server"
+        "FILE BROWSER",  # the page says "Web File Server"
         "seeking works instantly",  # invented overlay subtitle
     ]
     glyphs = ["⏪", "⏩", "🔊"]  # the player draws no emoji controls

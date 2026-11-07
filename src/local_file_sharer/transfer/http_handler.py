@@ -653,19 +653,30 @@ class ShareRequestHandler(BaseHTTPRequestHandler):
             return
         query = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
         search = (query.get("q") or [""])[0]
-        entries = self.ctx.manifest.iter_files()
+        # One level only, folder first. This page used to list every file at
+        # every depth, labelled with nothing but its basename: a share with
+        # roms/optional/ab_book_001.x showed a bare "ab_book_001.x" row beside
+        # the loose files at the top, so the folder it lived in was invisible
+        # and the page said "1,708 files" while showing no folders at all.
+        # Files deeper down belong to the folder that holds them, and that
+        # folder is a row you can open.
+        here, subfolders = _top_level(self.ctx.manifest)
         if search:
             lowered = search.lower()
-            entries = [f for f in entries if lowered in f.rel.lower()]
-        rows = "".join(self._browser_row(f, base="/") for f in entries)
-        for item in folders:
-            rows = (
-                f'<a class="row" href="/d/{item.item_id}">'
+            here = [f for f in here if lowered in f.rel.lower()]
+            subfolders = [(name, files) for name, files in subfolders if lowered in name.lower()]
+        rows = "".join(
+            (
+                f'<a class="row folder" href="/browse/{urllib.parse.quote(name)}" '
+                f'data-dl="/folder/{urllib.parse.quote(name)}" data-name="{html.escape(name)}">'
                 f'<span class="row-icon">{icon_svg("folder")}</span>'
-                f'<span class="row-name">{html.escape(item.name)}/</span>'
-                f'<span class="row-size">{item.size_text}</span>'
-                f'<span class="row-get">→</span></a>'
-            ) + rows
+                f'<span class="row-name">{html.escape(name)}/</span>'
+                f'<span class="row-size">{len(files)} files · {human_size(sum(f.size for f in files))}</span>'
+                f'<span class="row-get" role="button" tabindex="0" '
+                f'aria-label="Download {html.escape(name)} as a zip">{icon_svg("download")}</span></a>'
+            )
+            for name, files in subfolders
+        ) + "".join(self._browser_row(f, base="/") for f in here)
         body = (
             template.replace("{{title}}", html.escape(self.ctx.manifest.title))
             .replace("{{breadcrumbs}}", '<a href="/">all files</a>')
@@ -1419,6 +1430,30 @@ def _top_level_group(entry: FileEntry) -> str:
     """
     parts = entry.rel.split("/")
     return parts[1] if len(parts) > 2 else ""
+
+
+def _top_level(manifest) -> tuple[list[FileEntry], list[tuple[str, list[FileEntry]]]]:  # noqa: ANN001
+    """``(this level's files, this level's folders)`` for the front of a share.
+
+    A share's front page shows what is directly under each shared item: the
+    files sitting there, and one entry per folder that holds anything deeper.
+    Everything below that belongs to the folder row, not to the front page.
+    """
+    here: list[FileEntry] = []
+    groups: dict[str, list[FileEntry]] = {}
+    for entry in manifest.iter_files():
+        inner = _inside_item(entry.rel, manifest.items)
+        if inner is None:
+            continue
+        head, slash, _rest = inner.partition("/")
+        if slash and head:
+            groups.setdefault(head, []).append(entry)
+        else:
+            here.append(entry)
+    # A shared folder whose own name wrapped every file (the single-folder
+    # share) has no basename left to show, so it was already redirected to
+    # /d/<id> before we get here.
+    return here, sorted(groups.items(), key=lambda pair: pair[0].lower())
 
 
 def _inside_item(rel: str, items) -> str | None:  # noqa: ANN001

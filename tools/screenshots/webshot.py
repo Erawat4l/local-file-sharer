@@ -31,21 +31,24 @@ FONTS = {
     ],
 }
 
-# ── palette (from app.css :root) ────────────────────────────────────────────
-BG = "#05080f"
-BG2 = "#0a1120"
-PANEL = "#111a2b"
-PANEL2 = "#182338"
-LINE = "rgba(148,163,184,0.14)"
-LINE_STRONG = "rgba(148,163,184,0.28)"
-TEXT = "#e8eefc"
-DIM = "#9aa8c4"
-FAINT = "#64748b"
-ACCENT = "#22d3ee"
-ACCENT2 = "#a78bfa"
-ACCENT3 = "#34d399"
-DANGER = "#fb7185"
-WARN = "#fbbf24"
+# ── palette: read off app.css :root, and it is greys only ───────────────────
+# This block used to be a blue-black theme (#05080f page, #22d3ee cyan accent,
+# #a78bfa violet second accent), and the screenshots showed a product that no
+# longer exists. The page is black and white now, so the shots are too.
+BG = "#000000"
+BG2 = "#0a0a0a"
+PANEL = "#0d0d0d"
+PANEL2 = "#141414"
+LINE = "rgba(255,255,255,0.10)"
+LINE_STRONG = "rgba(255,255,255,0.22)"
+TEXT = "#f5f5f5"
+DIM = "#a3a3a3"
+FAINT = "#6b6b6b"
+ACCENT = "#f5f5f5"  # "accent" is contrast now, not a hue
+ACCENT2 = "#d4d4d4"
+ACCENT3 = "#a3a3a3"
+DANGER = "#f5f5f5"
+WARN = "#d4d4d4"
 
 
 class Measure:
@@ -301,11 +304,11 @@ class Shot(Canvas):
         # app background: layered radial glows over a vertical gradient
         self.rect(0, 0, width, height, fill=self.linear([(0, BG2), (1, BG)]))
         for cx, cy, r, color, op in (
-            (width * 0.12, -40, width * 0.8, "#22d3ee", 0.16),
-            (width * 0.92, 10, width * 0.65, "#a78bfa", 0.14),
-            (width * 0.5, height * 1.05, width * 0.6, "#34d399", 0.08),
+            (width * 0.12, -40, width * 0.8, "#afafaf", 0.16),
+            (width * 0.92, 10, width * 0.65, "#999999", 0.14),
+            (width * 0.5, height * 1.05, width * 0.6, "#adadad", 0.08),
         ):
-            g = self.radial([(0, color), (1, "rgba(5,8,15,0)")])
+            g = self.radial([(0, color), (1, "rgba(8,8,8,0)")])
             self.parts.append(
                 f'<ellipse cx="{cx:.0f}" cy="{cy:.0f}" rx="{r:.0f}" ry="{r * 0.62:.0f}" fill="{g}" opacity="{op}"/>'
             )
@@ -314,19 +317,19 @@ class Shot(Canvas):
         self.labels: list[str] = []
         self.chrome_h = 64
         # browser chrome bar
-        self.rect(0, 0, width, self.chrome_h, fill="rgba(10,17,32,0.92)")
-        self.line(0, self.chrome_h, width, self.chrome_h, stroke="rgba(148,163,184,0.16)")
-        for index, color in enumerate(("#ff5f57", "#febc2e", "#28c840")):
+        self.rect(0, 0, width, self.chrome_h, fill="rgba(17,17,17,0.92)")
+        self.line(0, self.chrome_h, width, self.chrome_h, stroke="rgba(161,161,161,0.16)")
+        for index, color in enumerate(("#808080", "#c0c0c0", "#9c9c9c")):
             self.circle(26 + index * 22, 24, 6.5, fill=color)
         # address pill
         pill_x, pill_y, pill_w, pill_h = 106, 12, width - 132, 24
-        self.rect(pill_x, pill_y, pill_w, pill_h, fill="rgba(17,26,43,0.9)", stroke=LINE, r=12)
+        self.rect(pill_x, pill_y, pill_w, pill_h, fill="rgba(25,25,25,0.9)", stroke=LINE, r=12)
         self.text(pill_x + 14, pill_y + 16.5, url, family="sans", size=11.5, fill=DIM)
         self.text(pill_x + pill_w - 12, pill_y + 16.5, "no-store", size=10.5, fill=FAINT, anchor="end")
 
     # rounded card
     def card(
-        self, x, y, w, h, *, r: float = 18, fill: str = "rgba(17,26,43,0.78)", stroke: str = LINE
+        self, x, y, w, h, *, r: float = 18, fill: str = "rgba(25,25,25,0.78)", stroke: str = LINE
     ) -> None:
         self.parts.append(
             f'<rect x="{x:.2f}" y="{y:.2f}" width="{w:.2f}" height="{h:.2f}" rx="{r:.2f}" '
@@ -338,11 +341,11 @@ class Shot(Canvas):
         w = m.width(label) + 24
         h = 26
         if accent:
-            self.rect(x, y, w, h, fill="rgba(34,211,238,0.12)", stroke="rgba(34,211,238,0.42)", r=13)
+            self.rect(x, y, w, h, fill="rgba(175,175,175,0.12)", stroke="rgba(175,175,175,0.42)", r=13)
             self.circle(x + 12, y + h / 2, 3.2, fill=ACCENT)
-            self.text(x + 20, y + 17, label, weight=500, size=size, fill="#a5f3fc")
+            self.text(x + 20, y + 17, label, weight=500, size=size, fill="#e3e3e3")
         else:
-            self.rect(x, y, w, h, fill="rgba(15,23,42,0.72)", stroke=LINE, r=13)
+            self.rect(x, y, w, h, fill="rgba(23,23,23,0.72)", stroke=LINE, r=13)
             self.text(x + 12, y + 17, label, weight=500, size=size, fill=DIM)
         return w
 
@@ -364,17 +367,17 @@ class Shot(Canvas):
             w = m.width(label) + 40 + (22 if icon else 0) + (52 if badge else 0)
         r = 12
         if variant == "primary":
-            fill = self.linear([(0, "#22d3ee"), (1, "#38bdf8")], x1=0, y1=0, x2=1, y2=1)
+            fill = self.linear([(0, "#afafaf"), (1, "#a5a5a5")], x1=0, y1=0, x2=1, y2=1)
             self.glow_rect(x, y, w, h, r=r, fill=fill, glow=ACCENT, spread=30, opacity=0.45)
-            text_fill = "#04212b"
+            text_fill = "#1c1c1c"
             weight = 700
         elif variant == "alt":
-            fill = self.linear([(0, "rgba(167,139,250,0.22)"), (1, "rgba(34,211,238,0.16)")])
-            self.rect(x, y, w, h, fill=fill, stroke="rgba(167,139,250,0.45)", r=r)
-            text_fill = "#ddd6fe"
+            fill = self.linear([(0, "rgba(153,153,153,0.22)"), (1, "rgba(175,175,175,0.16)")])
+            self.rect(x, y, w, h, fill=fill, stroke="rgba(153,153,153,0.45)", r=r)
+            text_fill = "#dadada"
             weight = 600
         else:  # ghost
-            self.rect(x, y, w, h, fill="rgba(148,163,184,0.06)", stroke=LINE_STRONG, r=r)
+            self.rect(x, y, w, h, fill="rgba(161,161,161,0.06)", stroke=LINE_STRONG, r=r)
             text_fill = DIM
             weight = 600
         cursor = x + (20 if not badge else 18)
@@ -385,7 +388,7 @@ class Shot(Canvas):
         if badge:
             bw = m.width(badge) + 16
             bx = x + w - bw - 10
-            self.rect(bx, y + 9, bw, h - 18, fill="rgba(4,33,43,0.22)", r=8)
+            self.rect(bx, y + 9, bw, h - 18, fill="rgba(28,28,28,0.22)", r=8)
             self.text(bx + 8, y + h / 2 + 4, badge, family="mono", weight=700, size=11, fill=text_fill)
         return w
 
@@ -399,9 +402,9 @@ class Shot(Canvas):
         seed_value = sum(ord(c) * (i + 7) for i, c in enumerate(seed))
 
         def finder(ox: float, oy: float) -> None:
-            self.rect(ox, oy, cell * 7, cell * 7, fill="#05080f")
+            self.rect(ox, oy, cell * 7, cell * 7, fill="#080808")
             self.rect(ox + cell, oy + cell, cell * 5, cell * 5, fill="#ffffff")
-            self.rect(ox + cell * 2, oy + cell * 2, cell * 3, cell * 3, fill="#05080f")
+            self.rect(ox + cell * 2, oy + cell * 2, cell * 3, cell * 3, fill="#080808")
 
         finder(x + pad, y + pad)
         finder(x + pad + inner - cell * 7, y + pad)
@@ -415,18 +418,18 @@ class Shot(Canvas):
                 value = (value * 1103515245 + 12345) & 0x7FFFFFFF
                 if (value >> 16) % 100 < 46:
                     self.rect(
-                        x + pad + col * cell, y + pad + row * cell, cell * 1.02, cell * 1.02, fill="#05080f"
+                        x + pad + col * cell, y + pad + row * cell, cell * 1.02, cell * 1.02, fill="#080808"
                     )
 
     def progress(
         self, x: float, y: float, w: float, ratio: float, *, h: float = 8, color: str = ACCENT
     ) -> None:
-        self.rect(x, y, w, h, fill="rgba(148,163,184,0.16)", r=h / 2)
+        self.rect(x, y, w, h, fill="rgba(161,161,161,0.16)", r=h / 2)
         grad = self.linear([(0, color), (1, ACCENT2)], x1=0, y1=0, x2=1, y2=0)
         self.rect(x, y, max(h, w * ratio), h, fill=grad, r=h / 2)
 
     def pill_input(
         self, x: float, y: float, w: float, value: str, *, h: float = 34, mono: bool = True
     ) -> None:
-        self.rect(x, y, w, h, fill="rgba(5,8,15,0.66)", stroke=LINE_STRONG, r=10)
-        self.text(x + 12, y + h / 2 + 4.5, value, family="mono" if mono else "sans", size=12, fill="#cbd5e1")
+        self.rect(x, y, w, h, fill="rgba(8,8,8,0.66)", stroke=LINE_STRONG, r=10)
+        self.text(x + 12, y + h / 2 + 4.5, value, family="mono" if mono else "sans", size=12, fill="#d4d4d4")

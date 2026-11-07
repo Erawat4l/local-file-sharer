@@ -322,7 +322,7 @@ def test_serve_mode_routes_to_browser(share_tree, free_port):
     try:
         assert server.wait_until_ready(timeout=5)
         body = get(server, "/").read().decode()
-        assert "web file server" in body
+        assert "Web File Server" in body
         assert "one.jpg" in body
     finally:
         server.stop()
