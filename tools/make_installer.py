@@ -1,6 +1,6 @@
 """Build a single-file installer that carries the source inside it.
 
-Cloning a private repository needs a credential the phone does not have, and
+A phone should not need git, a pip index or an account to install this, and
 retyping the owner name is a coin flip: it ends in a lowercase L that reads as
 a digit 1. `install-lfs.py` carries the whole checkout, so getting the app onto
 a device needs no git, no token and no URL.
@@ -58,8 +58,10 @@ def collect(root: pathlib.Path) -> bytes:
 TEMPLATE = '''#!/usr/bin/env python3
 """Install LOCAL FILE SHARER from this one file — no GitHub, no git, no token.
 
-The repository is private, so `pip install git+https://…` cannot work on a
-device without credentials. Everything the app needs is inside this file.
+The whole app is inside this file, so it installs on a phone over a plain
+download with no git, no pip index and no account. (The repository is public,
+but a one-file install is still the shortest path: no clone, no network fetch
+beyond the download itself.)
 
     python3 {name}              install (or upgrade) the `lfs` command
     python3 {name} --check      show what is installed
