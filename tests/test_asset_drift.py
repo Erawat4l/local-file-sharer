@@ -82,18 +82,35 @@ def test_the_gif_shows_the_menu_the_code_draws(monkeypatch):
     )
     today = buffer.getvalue()
 
+    # Two lines are machine-specific and cannot be compared on another host:
+    # the header carries the clock and hostname, and the "this device" panel
+    # prints the hostname and the machine's own IP. Everything else is copy, and
+    # that is the part that went stale. (This test failed on every CI runner
+    # until these were excluded: the recorded gif was made on e2b.local with
+    # 169.254.0.21, and no runner is that machine.)
     def stable(text: str) -> list[str]:
-        """Every line except the header, which carries the clock and hostname."""
         out = []
         for line in text.splitlines():
             if "·" in line and ("LFS" in line or "LOCAL FILE SHARER" in line):
                 continue
+            stripped = line.strip(" │")
+            if stripped.startswith("device ") or stripped.startswith("network "):
+                continue
             out.append(line)
         return out
 
-    assert stable(today) == stable(recorded.read_text(encoding="utf-8")), (
-        "docs/assets/demo.gif is stale — rerun tools/screenshots/demo_gif.py"
-    )
+    want = stable(recorded.read_text(encoding="utf-8"))
+    got = stable(today)
+    if got != want:
+        # Show the first differing line: on a remote runner the assertion is the
+        # only thing anyone can read, and "lists differ" is not actionable.
+        # zip(strict=...) is 3.10+, and this package supports 3.9.
+        first = f"{len(got)} lines drawn vs {len(want)} recorded"
+        for index in range(min(len(got), len(want))):
+            if got[index] != want[index]:
+                first = f"line {index}: drawn={got[index]!r} recorded={want[index]!r}"
+                break
+        raise AssertionError(f"docs/assets/demo.gif is stale — rerun tools/screenshots/demo_gif.py ({first})")
 
 
 def test_the_gif_text_is_recorded_beside_it():

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+import types
 from pathlib import Path
 
 import pytest
@@ -25,10 +26,13 @@ def test_list_drives_windows_uses_letter_mask(monkeypatch):
     mask = 0b100101  # A:, C:, F:
     monkeypatch.setattr(platforms, "WINDOWS", True)
     monkeypatch.setattr(ctypes, "windll", _FakeWindll(mask), raising=False)
+    # Must return something with .free/.total: on Python 3.12+ list_drives
+    # calls shutil.disk_usage and reads usage.free, and a CompletedProcess has
+    # neither -- so this mocked the wrong shape and only failed on 3.12/3.13.
     monkeypatch.setattr(
         platforms.shutil,
         "disk_usage",
-        lambda root: subprocess.CompletedProcess([], 0, "", ""),
+        lambda root: types.SimpleNamespace(total=500_000_000_000, free=250_000_000_000),
     )
 
     drives = platforms.list_drives()
