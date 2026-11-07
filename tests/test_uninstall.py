@@ -23,7 +23,12 @@ def _fake_checkout(root: Path) -> Path:
     (root / "setup").write_text("#!/bin/sh\n", encoding="utf-8")
     venv = root / ".venv" / "bin"
     venv.mkdir(parents=True, exist_ok=True)
-    (venv / "lfs").write_text("#!/bin/sh\n", encoding="utf-8")
+    launcher = venv / lfs_exe_name()
+    launcher.write_text("#!/bin/sh\n", encoding="utf-8")
+    # A real installed command is executable; find_on_path() skips files that
+    # are not, which is correct for the product and would silently make this
+    # fixture invisible.
+    launcher.chmod(0o755)
     return root
 
 

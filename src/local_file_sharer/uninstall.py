@@ -95,17 +95,15 @@ def running_from(path: Path) -> bool:
 
 
 def _path_entries(name: str) -> list[str]:
-    """Every *name* on PATH, whether or not it is the one that would run."""
-    import os  # noqa: PLC0415
+    """Every *name* on PATH, whether or not it is the one that would run.
 
-    found: list[str] = []
-    for directory in os.environ.get("PATH", "").split(os.pathsep):
-        if not directory:
-            continue
-        candidate = Path(directory) / name
-        if candidate.is_symlink() or candidate.exists():
-            found.append(str(candidate))
-    return found
+    Goes through platforms.find_on_path so Windows finds ``lfs.exe``: a walk
+    that looks only for a file called ``lfs`` finds nothing there, and
+    uninstall would leave the shell pointing at a deleted venv.
+    """
+    from .platforms import find_on_path  # noqa: PLC0415
+
+    return find_on_path(name)
 
 
 def _own_tree() -> Path | None:
