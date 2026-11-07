@@ -9,6 +9,7 @@ render path was covered; the *dispatch* path was not. These drive the real
 from __future__ import annotations
 
 import io
+from pathlib import Path
 
 import pytest
 from rich.console import Console
@@ -18,6 +19,8 @@ from local_file_sharer.config import load_config
 from local_file_sharer.state import State
 from local_file_sharer.ui.console import set_theme
 from local_file_sharer.ui.theme import build_theme
+
+ROOT = Path(__file__).resolve().parents[1]
 
 
 @pytest.fixture(autouse=True)
@@ -124,7 +127,14 @@ def test_a_narrow_phone_keeps_the_key_and_icon_columns(width, monkeypatch):
     out = buf.getvalue()
 
     for key, label, _action, _icon, _plain, _desc in menu.ALL_ACTIONS:
-        row = next((line for line in out.splitlines() if f" {label}" in line), None)
+        # Match the row, not just any line containing the name: the section
+        # heading " Recent & Favourites" also contains " Recent", and it comes
+        # first, so the old lookup tested the heading and reported the action
+        # as having lost its key.
+        row = next(
+            (line for line in out.splitlines() if line.strip().startswith(f"{key} ") and label in line),
+            None,
+        )
         assert row is not None, f"no row for {label} at width {width}"
         # the key is what the user presses: it must be on the line
         assert row.strip().startswith(key.strip()), f"{label} lost its key at {width}"
@@ -147,3 +157,24 @@ def test_no_row_is_wider_than_the_terminal(width, monkeypatch):
 
 def _ctx() -> menu.MenuContext:
     return menu.MenuContext(config=load_config(), state=State.load())
+
+
+def test_every_menu_icon_is_a_glyph_the_font_can_draw():
+    """A mark the shipped face does not have renders as an empty box.
+
+    Six of them did -- ⤓ ◷ ★ ⚙ ✚ ◑ -- so the icon column was a row of tofu
+    rectangles on the very terminals the screenshots are made from. Checked
+    against the font the screenshots actually use, which is also the face the
+    README tells people to install.
+    """
+    font_path = ROOT / "tools" / "screenshots" / "inputs" / "fonts" / "JetBrainsMono-Regular.ttf"
+    if not font_path.exists():  # pragma: no cover - fetched by the shot tooling
+        pytest.skip("the screenshot fonts are not present")
+
+    from fontTools.ttLib import TTFont
+
+    cmap = set(TTFont(str(font_path)).getBestCmap())
+    missing = [
+        (key, icon) for key, _label, _action, icon, _plain, _desc in menu.ALL_ACTIONS if ord(icon) not in cmap
+    ]
+    assert not missing, f"these icons have no glyph in the shipped font: {missing}"

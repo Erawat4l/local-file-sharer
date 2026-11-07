@@ -24,9 +24,9 @@ M = 40  # page gutter
 def backdrop(shot: Shot) -> None:
     """Faint 48px grid, masked towards the top like css body::before."""
     for x in range(0, W, 48):
-        shot.line(x, 0, x, H, stroke="rgba(148,163,184,0.055)")
+        shot.line(x, 0, x, H, stroke="rgba(161,161,161,0.055)")
     for y in range(0, H, 48):
-        shot.line(0, y, W, y, stroke="rgba(148,163,184,0.055)")
+        shot.line(0, y, W, y, stroke="rgba(161,161,161,0.055)")
 
 
 def topbar(
@@ -41,9 +41,9 @@ def topbar(
     h = 76
     shot.card(M, y, W - M * 2, h, r=18)
     # logo tile
-    g = shot.linear([(0, "rgba(34,211,238,0.22)"), (1, "rgba(167,139,250,0.22)")])
-    shot.rect(M + 18, y + 19, 38, 38, fill=g, stroke="rgba(34,211,238,0.4)", r=12)
-    shot.text(M + 37, y + 43, "LFS", family="mono", weight=700, size=13, fill="#c8f7ff", anchor="middle")
+    g = shot.linear([(0, "rgba(175,175,175,0.22)"), (1, "rgba(153,153,153,0.22)")])
+    shot.rect(M + 18, y + 19, 38, 38, fill=g, stroke="rgba(175,175,175,0.4)", r=12)
+    shot.text(M + 37, y + 43, "LFS", family="mono", weight=700, size=13, fill="#eeeeee", anchor="middle")
     shot.text(M + 70, y + 34, "local-file-sharer", weight=700, size=15.5, fill=TEXT)
     shot.text(M + 70, y + 53, subtitle, weight=500, size=11, fill=FAINT, spacing=0.8)
     x = M + 350
@@ -73,7 +73,7 @@ def downloader() -> Shot:
     backdrop(shot)
     y = topbar(
         shot,
-        title="download station",
+        title="Download Station",
         subtitle="DOWNLOAD STATION",
         chips=[("live", True), ("mode download", False), ("expires in 29m", False), ("8 devices", False)],
     )
@@ -87,7 +87,7 @@ def downloader() -> Shot:
         hero_y + 62,
         [
             ("Download ", {"weight": 800, "fill": TEXT}),
-            ("everything", {"weight": 800, "fill": grad}),
+            ("Everything", {"weight": 800, "fill": grad}),
             (", fast.", {"weight": 800, "fill": TEXT}),
         ],
         size=42,
@@ -103,7 +103,7 @@ def downloader() -> Shot:
         ("files", "8", ""),
         ("total size", "4.0 GB", ""),
         ("connections", "16", "parallel"),
-        ("speed", "72 MB/s", ""),
+        ("Speed", "72 MB/s", ""),
     ]
     sx = M + 34
     for label, value, note in stats:
@@ -140,7 +140,7 @@ def downloader() -> Shot:
 
     # file grid
     grid_y = hero_y + hero_h + 26
-    shot.text(M, grid_y + 8, "Shared files", weight=700, size=19, fill=TEXT)
+    shot.text(M, grid_y + 8, "Shared Files", weight=700, size=19, fill=TEXT)
     shot.text(M + 128, grid_y + 8, "8 items · 4.0 GB", size=12.5, fill=FAINT)
     # The real section head has a search box whose placeholder is literally
     # "Search name or type — try mp4", followed by a row of kind chips
@@ -174,9 +174,9 @@ def downloader() -> Shot:
         col, row = index % 2, index // 2
         cx = M + col * (col_w + 24)
         cy = chip_y + 34 + row * (row_h + 12)
-        shot.card(cx, cy, col_w, row_h, r=16, fill="rgba(17,26,43,0.72)")
+        shot.card(cx, cy, col_w, row_h, r=16, fill="rgba(25,25,25,0.72)")
         shot.rect(
-            cx + 16, cy + 16, 44, 44, fill="rgba(34,211,238,0.10)", stroke="rgba(34,211,238,0.22)", r=13
+            cx + 16, cy + 16, 44, 44, fill="rgba(175,175,175,0.10)", stroke="rgba(175,175,175,0.22)", r=13
         )
         shot.emoji(cx + 26, cy + 26, icon, 24)
         shot.text(cx + 74, cy + 34, name, weight=600, size=14, fill=TEXT)
@@ -200,7 +200,7 @@ def server() -> Shot:
         shot,
         title="web file server",
         subtitle="web file server",
-        chips=[("demo", False), ("8 files · 4.0 GB", False), ("download station", False)],
+        chips=[("demo", False), ("8 files · 4.0 GB", False), ("Download Station", False)],
     )
     head_y = y + 26
     shot.card(M, head_y, W - M * 2, 92, r=20)
@@ -210,7 +210,7 @@ def server() -> Shot:
         [
             ("Browse ", {"weight": 800, "fill": TEXT}),
             (
-                "folder",
+                "Folder",
                 {"weight": 800, "fill": shot.linear([(0, ACCENT), (1, ACCENT2)], x1=0, y1=0, x2=1, y2=0)},
             ),
         ],
@@ -224,11 +224,11 @@ def server() -> Shot:
         fill=DIM,
     )
     # Real markup: <form> with a search input ("Filter in this folder…") and a
-    # ghost "Filter" submit button, then actions "Select all" and
-    # "Download selected". The shot drew a lone "Filter…" pill and skipped the
+    # ghost "Filter" submit button, then actions "Select All" and
+    # "Download Selected". The shot drew a lone "Filter…" pill and skipped the
     # Select all button entirely.
-    shot.button(W - M - 28 - 168, head_y + 26, "Download selected", w=168, h=40, variant="primary")
-    shot.button(W - M - 28 - 168 - 12 - 92, head_y + 30, "Select all", w=92, h=32, size=12, variant="ghost")
+    shot.button(W - M - 28 - 168, head_y + 26, "Download Selected", w=168, h=40, variant="primary")
+    shot.button(W - M - 28 - 168 - 12 - 92, head_y + 30, "Select All", w=92, h=32, size=12, variant="ghost")
     form_w = 300
     form_x = W - M - 28 - 168 - 12 - 92 - 12 - form_w
     shot.pill_input(form_x, head_y + 30, form_w - 74, "Filter in this folder…", h=32, mono=False)
@@ -237,11 +237,11 @@ def server() -> Shot:
     # stat strip
     strip_y = head_y + 110
     cards = [
-        ("folder", "demo", ACCENT),
-        ("size", "4.0 GB", TEXT),
-        ("share total", "4.0 GB", TEXT),
-        ("transferred", "2.5 GB", ACCENT3),
-        ("speed", "72 MB/s", ACCENT),
+        ("Folder", "demo", ACCENT),
+        ("Size", "4.0 GB", TEXT),
+        ("Share Total", "4.0 GB", TEXT),
+        ("Transferred", "2.5 GB", ACCENT3),
+        ("Speed", "72 MB/s", ACCENT),
     ]
     cw = (W - M * 2 - 12 * 4) // 5
     for index, (label, value, color) in enumerate(cards):
@@ -270,8 +270,8 @@ def server() -> Shot:
     for index, (icon, name, size) in enumerate(rows):
         ry = t + 24 + index * row_h
         if index % 2 == 0:
-            shot.rect(M, ry, W - M * 2, row_h - 4, fill="rgba(148,163,184,0.035)", r=12)
-        shot.rect(M + 14, ry + 9, 30, 30, fill="rgba(34,211,238,0.08)", r=9)
+            shot.rect(M, ry, W - M * 2, row_h - 4, fill="rgba(161,161,161,0.035)", r=12)
+        shot.rect(M + 14, ry + 9, 30, 30, fill="rgba(175,175,175,0.08)", r=9)
         shot.emoji(M + 20, ry + 14, icon, 17)
         shot.text(M + 58, ry + 26, name, weight=500, size=13.5, fill=TEXT)
         shot.text(W - M - 90, ry + 26, size, family="mono", size=12, fill=DIM, anchor="end")
@@ -307,13 +307,13 @@ def player() -> Shot:
     vx, vy = M, y + 26
     vw, vh = W - M * 2 - 360, 452
     # video stage
-    shot.card(vx, vy, vw, vh, r=20, fill="#03060c")
-    stage = shot.radial([(0, "rgba(167,139,250,0.30)"), (1, "rgba(3,6,12,0)")], cx=0.5, cy=0.5, r=0.62)
+    shot.card(vx, vy, vw, vh, r=20, fill="#060606")
+    stage = shot.radial([(0, "rgba(153,153,153,0.30)"), (1, "rgba(6,6,6,0)")], cx=0.5, cy=0.5, r=0.62)
     shot.parts.append(f'<rect x="{vx}" y="{vy}" width="{vw}" height="{vh}" rx="20" fill="{stage}"/>')
-    shot.circle(vx + vw / 2, vy + vh / 2 - 12, 44, fill="rgba(34,211,238,0.92)")
+    shot.circle(vx + vw / 2, vy + vh / 2 - 12, 44, fill="rgba(175,175,175,0.92)")
     shot.parts.append(
         f'<path d="M{vx + vw / 2 - 12} {vy + vh / 2 - 34} L{vx + vw / 2 + 22} {vy + vh / 2 - 12} '
-        f'L{vx + vw / 2 - 12} {vy + vh / 2 + 10} Z" fill="#04212b"/>'
+        f'L{vx + vw / 2 - 12} {vy + vh / 2 + 10} Z" fill="#1c1c1c"/>'
     )
     shot.text(
         vx + vw / 2,
@@ -355,11 +355,11 @@ def player() -> Shot:
     cx = vx + 28
     for label, primary in (("10", False), ("▶", True), ("10", False), ("🔇", False)):
         r = 17 if not primary else 21
-        shot.circle(cx + r, cy, r, fill="rgba(34,211,238,0.16)" if primary else "rgba(148,163,184,0.12)")
+        shot.circle(cx + r, cy, r, fill="rgba(175,175,175,0.16)" if primary else "rgba(161,161,161,0.12)")
         if label == "🔇":
             shot.emoji(cx + r - 9, cy - 9, label, 18)
         elif label == "▶":
-            shot.text(cx + r + 1, cy + 5, label, weight=700, size=15, fill="#c8f7ff", anchor="middle")
+            shot.text(cx + r + 1, cy + 5, label, weight=700, size=15, fill="#eeeeee", anchor="middle")
         else:
             # back/fwd 10s: the number sits inside a round button
             shot.text(cx + r, cy + 4, label, weight=700, size=11, fill=DIM, anchor="middle")
@@ -369,11 +369,11 @@ def player() -> Shot:
     shot.line(cx, cy, cx + 40, cy, stroke=ACCENT, sw=4)
     cx += 82
     # playback speed
-    shot.rect(cx, cy - 13, 46, 26, fill="rgba(148,163,184,0.10)", stroke=LINE_STRONG, r=13)
+    shot.rect(cx, cy - 13, 46, 26, fill="rgba(161,161,161,0.10)", stroke=LINE_STRONG, r=13)
     shot.text(cx + 23, cy + 4, "1×", weight=600, size=12, fill=DIM, anchor="middle")
     cx += 58
     # pip — player.html:398 has it; the shot used to stop at the rate chip
-    shot.circle(cx + 17, cy, 17, fill="rgba(148,163,184,0.12)")
+    shot.circle(cx + 17, cy, 17, fill="rgba(161,161,161,0.12)")
     shot.rect(cx + 10, cy - 8, 14, 11, fill="none", stroke=DIM, r=2)
     shot.rect(cx + 14, cy - 4, 10, 8, fill="none", stroke=ACCENT, r=2)
     shot.text(vx + vw - 28, cy + 4, "buffered 38%", family="mono", size=11, fill=FAINT, anchor="end")
@@ -385,13 +385,13 @@ def player() -> Shot:
     shot.text(sx + 22, vy + 34, "Playlist · 1", weight=700, size=15, fill=TEXT)
     shot.line(sx + 18, vy + 48, sx + sw - 18, vy + 48, stroke=LINE)
     shot.rect(
-        sx + 18, vy + 62, sw - 36, 62, fill="rgba(34,211,238,0.10)", stroke="rgba(34,211,238,0.3)", r=12
+        sx + 18, vy + 62, sw - 36, 62, fill="rgba(175,175,175,0.10)", stroke="rgba(175,175,175,0.3)", r=12
     )
     shot.emoji(sx + 32, vy + 78, "🎵", 20)
     shot.text(sx + 60, vy + 86, "Aurora-Film…mkv", weight=600, size=12.5, fill=TEXT)
     shot.text(sx + 60, vy + 104, "3.6 GB · playing", size=11, fill=FAINT)
 
-    stats = [("transferred", "2.5 GB"), ("devices", "3"), ("format", "matroska"), ("speed", "72 MB/s")]
+    stats = [("Transferred", "2.5 GB"), ("Devices", "3"), ("Format", "matroska"), ("Speed", "72 MB/s")]
     sy = vy + 156
     for label, value in stats:
         shot.text(sx + 22, sy, label, size=10.5, fill=FAINT, spacing=1.0)
@@ -403,7 +403,7 @@ def player() -> Shot:
 
     # notice
     ny = vy + vh + 22
-    shot.rect(M, ny, W - M * 2, 62, fill="rgba(251,191,36,0.08)", stroke="rgba(251,191,36,0.32)", r=16)
+    shot.rect(M, ny, W - M * 2, 62, fill="rgba(193,193,193,0.08)", stroke="rgba(193,193,193,0.32)", r=16)
     shot.emoji(M + 22, ny + 20, "⚠️", 20)
     shot.text(
         M + 52,
@@ -411,7 +411,7 @@ def player() -> Shot:
         "If the preview stays black, the codec is not supported by this browser (common for MKV/HEVC).",
         weight=600,
         size=13,
-        fill="#fde68a",
+        fill="#e4e4e4",
     )
     shot.text(
         M + 52,

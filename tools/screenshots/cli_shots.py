@@ -47,7 +47,7 @@ def _console(width: int = WIDTH, height: int = HEIGHT) -> Console:
         _environ={"TERM": "xterm-256color", "COLORTERM": "truecolor"},
     )
     set_console(con)
-    set_theme(build_theme("dark", "cyan"))
+    set_theme(build_theme("dark", "white"))
     return con
 
 
@@ -86,7 +86,7 @@ def main() -> None:
     # ── 1. banner (hero) ────────────────────────────────────────────────────
     menu._STATE = state  # noqa: SLF001
     _console()
-    hero = banner.banner_renderable(build_theme("dark", "cyan"), offset=0.18)
+    hero = banner.banner_renderable(build_theme("dark", "white"), offset=0.18)
     shot(Align.center(hero, width=90), "cli-banner", title="start — banner", width=90)
 
     # ── 2. main menu ────────────────────────────────────────────────────────
@@ -149,7 +149,7 @@ def main() -> None:
 
     from local_file_sharer.ui.components import mode_badge
 
-    theme = build_theme("dark", "cyan")
+    theme = build_theme("dark", "white")
     ready = info_panel(
         [
             ("mode", mode_badge("download")),

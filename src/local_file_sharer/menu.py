@@ -37,36 +37,44 @@ from .ui.picker_ui import run_picker
 # The menu is five numbered choices, not twelve. Everything a user needs to
 # share a file is in those five; settings, doctor, theme and update live behind
 # `?` so the screen answers one question instead of listing a control panel.
-# Icons are the ones in docs/assets/demo.gif: real colour emoji, which are two
-# cells wide. Each has a single-cell fallback for terminals that draw them one
-# cell or not at all — an icon that is the wrong width shifts every row after
-# it, which is why these were avoided for a while. ``icon_for`` picks per
-# terminal, so alignment is never a gamble.
+# Every icon is one cell wide, so no row can shift the name column. This used to
+# carry real colour emoji with a single-cell fallback, chosen per terminal;
+# the emoji are gone because the product is monochrome. The two-column form is
+# kept so a caller can still force the plain set.
+#: Icons are monochrome glyphs, not colour emoji. The product has no colour in
+#: it anywhere -- terminal, web pages, README images -- and a row of emoji put
+#: eight different hues into a black-and-white screen. These are all single
+#: cell, all from the basic block/shape range, and all one weight, so the column
+#: reads as a set of marks rather than a set of pictures.
+# Every glyph below was checked against the font the app ships with
+# (JetBrainsMono). A mark the font does not have renders as a tofu box, which
+# is what ⤓ ◷ ★ ⚙ ✚ ◑ did -- six empty rectangles down the icon column -- so the
+# set is limited to what the face actually draws.
 ACTIONS = [
-    ("1", "Download", "download", "📥", "↓", "forced download · resumable · folders auto-zip"),
-    ("2", "Serve", "serve", "🌐", "◇", "web file browser for this device or the whole folder"),
-    ("3", "Stream", "stream", "▶️", "▶", "media player with instant seeking"),
-    ("4", "Torrent", "torrent", "🌱", "⤓", ".torrent + magnet · built-in tracker + webseed"),
+    ("1", "Download", "download", "↓", "v", "Forced Download · Resumable · Folders Auto-Zip"),
+    ("2", "Serve", "serve", "◈", "o", "Web File Browser For This Device Or The Whole Folder"),
+    ("3", "Stream", "stream", "▶", ">", "Media Player With Instant Seeking"),
+    ("4", "Torrent", "torrent", "◆", "*", ".Torrent + Magnet · Built-In Tracker + Webseed"),
 ]
 
 #: Shown by `?` — the same actions plus the maintenance commands.
 EXTRA_ACTIONS = [
-    ("r", "Recent", "recent", "🕐", "◷", "re-share a recently shared file"),
-    ("f", "Favourites", "favorites", "⭐", "★", "jump to a favourite folder"),
-    ("c", "Config", "config", "⚙️", "⚙", "edit settings, theme and PIN"),
-    ("d", "Doctor", "doctor", "🩺", "✚", "check dependencies, firewall and network"),
-    ("t", "Theme", "theme", "🎨", "◑", "switch dark / light / mono"),
-    ("u", "Update", "update", "⬆️", "↑", "install the newest code from GitHub"),
-    ("?", "Help", "help", "❓", "?", "keys, one-liners and troubleshooting"),
-    ("q", "Quit", "quit", "⏏️", "⏻", "leave the menu"),
+    ("r", "Recent", "recent", "●", "o", "Re-Share A Recently Shared File"),
+    ("f", "Favourites", "favorites", "◆", "*", "Jump To A Favourite Folder"),
+    ("c", "Config", "config", "≡", "=", "Edit Settings, Theme And PIN"),
+    ("d", "Doctor", "doctor", "✓", "+", "Check Dependencies, Firewall And Network"),
+    ("t", "Theme", "theme", "○", "o", "Switch Dark / Light / Mono"),
+    ("u", "Update", "update", "↑", "^", "Install The Newest Code From GitHub"),
+    ("?", "Help", "help", "?", "?", "Keys, One-Liners And Troubleshooting"),
+    ("q", "Quit", "quit", "⏻", "x", "Leave The Menu"),
 ]
 
 #: The menu is grouped like the design: what you came to do, then the two
 #: shortlists, then the settings that used to sit in a second screen.
 SECTIONS: tuple[tuple[str, tuple[str, ...]], ...] = (
-    ("SHARE", ("1", "2", "3", "4")),
-    ("RECENT & FAVOURITES", ("r", "f")),
-    ("SETTINGS", ("c", "d", "t", "u", "?", "q")),
+    ("Share", ("1", "2", "3", "4")),
+    ("Shortcuts", ("r", "f")),
+    ("Settings", ("c", "d", "t", "u", "?", "q")),
 )
 _BY_KEY = {
     key: (key, label, action, icon, plain, desc)
@@ -106,18 +114,17 @@ def _status_lines(config: Config) -> list[tuple[str, str]]:
 _STATE: State | None = None
 
 
-def icon_for(emoji: str, plain: str) -> str:
-    """The emoji when it is known to be two cells wide, else the glyph.
+def icon_for(icon: str, plain: str) -> str:
+    """The row's icon. Both arguments are monochrome now; kept for callers.
 
-    A terminal whose font draws U+1F4E5 one cell (or not at all) would shift the
-    name column by one character on that row only. ``LFS_ASCII_ICONS=1`` forces
-    the plain set for anyone who sees that happen.
+    ``LFS_ASCII_ICONS=1`` still selects the plainer of the two, for a terminal
+    whose font has no block or geometric shapes.
     """
     import os  # noqa: PLC0415 - only needed here
 
-    if os.environ.get("LFS_ASCII_ICONS") or os.environ.get("NO_COLOR"):
+    if os.environ.get("LFS_ASCII_ICONS"):
         return plain
-    return emoji
+    return icon
 
 
 def _state_totals(config: Config) -> str:

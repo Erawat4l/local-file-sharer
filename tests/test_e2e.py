@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import http.cookiejar
 import json
+import re
 import socket
 import urllib.error
 import urllib.parse
@@ -143,7 +144,7 @@ def test_head_matches_get(server):
 def test_serve_mode_shows_the_folder(server):
     status, body, _ = open_page(server, "/")
     assert status == 200
-    assert b"web file server" in body or b"file browser" in body.lower()
+    assert b"Web File Server" in body or b"file browser" in body.lower()
     assert b"photo.jpg" in body
 
 
@@ -648,3 +649,70 @@ def test_a_refused_upload_answers_before_the_body_finishes(server):
         sock.settimeout(5)
         head = sock.recv(4096)
     assert head.startswith(b"HTTP/1.1 403"), head[:80]
+
+
+# ── the front page shows folders, not a wall of files ───────────────────────
+def _rows(port: int, path: str) -> list[str]:
+    """The row labels on a page, in the order the page shows them."""
+    body = urllib.request.urlopen(f"http://127.0.0.1:{port}{path}", timeout=10).read().decode()
+    return re.findall(r'class="row-name"[^>]*>([^<]+)<', body)
+
+
+def _nested_share(tmp_path: Path):
+    """A share shaped like a real phone: a folder with depths, plus a loose file."""
+    root = tmp_path / "share"
+    (root / "roms" / "optional").mkdir(parents=True)
+    (root / "roms" / "optional" / "ab_book_000.x").write_bytes(b"x" * 1000)
+    (root / "roms" / "index_287.m3u8").write_bytes(b"x" * 229)
+    loose = tmp_path / "Agon-1.4.58.apk"
+    loose.write_bytes(b"x" * 24)
+    return root, loose
+
+
+def test_serve_mode_front_page_lists_folders_not_deep_files(tmp_path, free_port):
+    """1,708 files rendered flat is what a phone share looked like.
+
+    Every file at every depth was listed with nothing but its basename, so
+    roms/optional/ab_book_001.x appeared as a bare "ab_book_001.x" row beside
+    the loose APK at the top. The folder was invisible and the page was
+    unusable. One level per page: folders here, their files inside.
+    """
+    root, loose = _nested_share(tmp_path)
+    server = ShareServer(Manifest.build([root, loose], mode="serve"), host="127.0.0.1", port=free_port)
+    server.start()
+    assert server.wait_until_ready(timeout=5)
+    try:
+        rows = _rows(server.port, "/")
+    finally:
+        server.stop()
+    assert rows == ["roms/", "Agon-1.4.58.apk"], rows
+
+
+def test_each_folder_drills_down_to_its_own_contents(tmp_path, free_port):
+    """Opening a folder must show that folder, all the way down."""
+    root, loose = _nested_share(tmp_path)
+    server = ShareServer(Manifest.build([root, loose], mode="serve"), host="127.0.0.1", port=free_port)
+    server.start()
+    assert server.wait_until_ready(timeout=5)
+    try:
+        roms = _rows(server.port, "/browse/roms")
+        deep = _rows(server.port, "/browse/roms/optional")
+    finally:
+        server.stop()
+    assert roms == ["optional/", "index_287.m3u8"], roms
+    assert deep == ["ab_book_000.x"], deep
+
+
+def test_a_folder_row_says_how_much_is_inside_it(tmp_path, free_port):
+    """The count and size have to describe the whole folder, not its top level."""
+    root, loose = _nested_share(tmp_path)
+    server = ShareServer(Manifest.build([root, loose], mode="serve"), host="127.0.0.1", port=free_port)
+    server.start()
+    assert server.wait_until_ready(timeout=5)
+    try:
+        body = urllib.request.urlopen(f"http://127.0.0.1:{server.port}/", timeout=10).read().decode()
+    finally:
+        server.stop()
+    # roms holds two files at two depths, 1229 bytes together
+    assert "2 files" in body
+    assert "1.2 KB" in body

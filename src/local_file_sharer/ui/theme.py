@@ -37,6 +37,9 @@ def parse_color(value: str) -> RGB | None:
 
 
 NAMED_ACCENTS: dict[str, RGB] = {
+    # The product is monochrome; these two are the accents that are not a hue.
+    "white": (245, 245, 245),
+    "grey": (163, 163, 163),
     "cyan": (34, 211, 238),
     "teal": (45, 212, 191),
     "blue": (96, 165, 250),
@@ -58,6 +61,8 @@ NAMED_ACCENTS: dict[str, RGB] = {
 
 #: Named colour usable directly as a Rich style when it is not a hex value.
 NAME_TO_RICH = {
+    "white": "bright_white",
+    "grey": "grey70",
     "cyan": "bright_cyan",
     "teal": "turquoise2",
     "blue": "bright_blue",
@@ -80,13 +85,13 @@ NAME_TO_RICH = {
 
 def resolve_accent(name: str) -> tuple[str, RGB]:
     """Return ``(rich_colour, rgb)`` for a config accent value."""
-    key = (name or "cyan").strip().lower()
+    key = (name or "white").strip().lower()
     if key in NAMED_ACCENTS:
         return NAME_TO_RICH[key], NAMED_ACCENTS[key]
     rgb = parse_color(key)
     if rgb:
         return f"#{rgb[0]:02x}{rgb[1]:02x}{rgb[2]:02x}", rgb
-    return NAME_TO_RICH["cyan"], NAMED_ACCENTS["cyan"]
+    return "bright_white", NAMED_ACCENTS["white"]
 
 
 def lerp(a: RGB, b: RGB, t: float) -> RGB:
@@ -117,9 +122,9 @@ def gradient_rgb(stops: Sequence[RGB], position: float) -> RGB:
 @dataclass(frozen=True)
 class Theme:
     name: str = "dark"
-    accent_name: str = "cyan"
-    accent: str = "bright_cyan"
-    accent_rgb: RGB = NAMED_ACCENTS["cyan"]
+    accent_name: str = "white"
+    accent: str = "bright_white"
+    accent_rgb: RGB = NAMED_ACCENTS["white"]
     primary: str = "bold bright_white"
     secondary: str = "grey93"
     muted: str = "grey54"
@@ -127,15 +132,15 @@ class Theme:
     success: str = "bold green1"
     warning: str = "bold orange1"
     danger: str = "bold red1"
-    info: str = "bold bright_cyan"
+    info: str = "bold bright_white"
     border: str = "grey35"
     border_soft: str = "grey23"
     panel: str = "on grey7"
     surface: str = "on grey11"
-    highlight: str = "bold black on bright_cyan"
+    highlight: str = "bold black on bright_white"
     selection: str = "bold bright_white on grey23"
     key: str = "bold bright_black on grey30"
-    link: str = "underline bright_cyan"
+    link: str = "underline bright_white"
     gradient_stops: tuple[RGB, ...] = field(default_factory=tuple)
     logo_stops: tuple[RGB, ...] = field(default_factory=tuple)
 
@@ -188,29 +193,33 @@ def _greys(bright: bool) -> dict[str, str]:
     }
 
 
-#: The logo gradient from docs/assets/demo.gif: blue into cyan. Sampled from
-#: the reference frames rather than picked by eye.
-LOGO_BLUE: RGB = (98, 183, 246)  # #62B7F6
-LOGO_CYAN: RGB = (65, 217, 240)  # #41D9F0
-SUBTITLE_BLUE: RGB = (73, 187, 229)  # #49BBE5
+#: The wordmark gradient, in greys only.
+#:
+#: It used to be blue into cyan (#62B7F6 -> #41D9F0), taken from the first
+#: demo gif. The whole product is monochrome now -- terminal, web pages and
+#: the gif -- so the sweep is brightness instead of hue: white through mid
+#: grey and back. Names kept for compatibility with the docs and tests.
+LOGO_BLUE: RGB = (245, 245, 245)  # was #62B7F6; now the bright end
+LOGO_CYAN: RGB = (120, 120, 120)  # was #41D9F0; now the dim end
+SUBTITLE_BLUE: RGB = (163, 163, 163)  # was #49BBE5; now the subtitle grey
 
 
 def _build_dark(accent: str = "white") -> Theme:
-    """Dark terminal: greys carry the structure, the logo keeps its blue.
+    """Dark terminal: black, white and greys, with one weight of accent.
 
-    The wordmark was white/grey for a while, which is not what the banner in
-    the README shows -- those two drifted apart. The gradient below is the one
-    in docs/assets/demo.gif.
+    The *default* accent is white, so the product ships monochrome. ``accent``
+    is still honoured when someone sets one: it used to be ignored here, which
+    made `lfs config set accent cyan` a no-op and was its own small lie.
     """
     g = _greys(bright=True)
+    accent_style, accent_rgb = resolve_accent(accent)
     return Theme(
         name="dark",
-        # The gif's section headings and the ` LFS ` badge are cyan (#66E7F8),
-        # not white. The accent was white for a while, which made every heading
-        # look like ordinary body text.
-        accent_name="cyan",
-        accent="bold bright_cyan",
-        accent_rgb=SUBTITLE_BLUE,
+        # Headings and the ` LFS ` badge are told apart from body text by
+        # weight, not by hue; the badge is a filled block so it still reads.
+        accent_name=accent,
+        accent=f"bold {accent_style}",
+        accent_rgb=accent_rgb,
         primary=g["primary"],
         secondary=g["secondary"],
         muted=g["muted"],

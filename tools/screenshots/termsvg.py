@@ -30,23 +30,30 @@ PAD_BOTTOM = 22.0
 CHROME_H = 42.0
 
 DEFAULT_FG = "#e6edf3"
+#: The recorded terminal's own colours. Greys plus a warm white: the palette
+#: is here because Rich can emit an indexed colour, and an unlisted index was
+#: silently painted in whatever the last one was.
 ANSI_16 = [
-    "#0b0f19",
-    "#ff6b81",
-    "#4ade80",
-    "#fbbf24",
-    "#60a5fa",
-    "#c084fc",
-    "#22d3ee",
-    "#e6edf3",
-    "#5b6478",
-    "#ff8fa3",
-    "#86efac",
-    "#fcd34d",
-    "#93c5fd",
-    "#d8b4fe",
-    "#67e8f9",
-    "#ffffff",
+    # Monochrome, deliberately: the product has no accent hue, so an indexed
+    # colour must not be able to paint one. Rich still emits indexes for named
+    # styles, and before this the gif showed the blue-ish "#0b0f19" tint that
+    # the old palette carried in slot 0.
+    "#000000",  # black
+    "#3d3d3d",  # bright black / dark grey
+    "#8a8a8a",  # grey
+    "#a3a3a3",  # dim white
+    "#bcbcbc",
+    "#d4d4d4",
+    "#e8e8e8",
+    "#f5f5f5",  # white
+    "#5b5b5b",
+    "#6b6b6b",
+    "#7d7d7d",
+    "#8f8f8f",
+    "#a8a8a8",
+    "#c4c4c4",
+    "#dedede",
+    "#ffffff",  # bright white
 ]
 
 TWEMOJI = TWEMOJI_DIR
@@ -83,7 +90,7 @@ def _rgb(console: Console, style: Style) -> tuple[str, str | None, bool, bool]:
     return fg, bg, bool(style.bold), bool(style.dim)
 
 
-def to_grid(renderable: RenderableType, *, width: int, background: str = "#0b0f19") -> list[list[Cell]]:
+def to_grid(renderable: RenderableType, *, width: int, background: str = "#000000") -> list[list[Cell]]:
     """Render *renderable* and return a grid of styled cells."""
     buffer = io.StringIO()
     console = Console(
@@ -202,7 +209,7 @@ def to_svg(
     rows: list[list[Cell]],
     *,
     title: str = "",
-    background: str = "#0b0f19",
+    background: str = "#000000",
     chrome: bool = True,
     scale: float = 2.0,
     cols: int | None = None,
@@ -220,13 +227,15 @@ def to_svg(
     out.append(
         '<linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">'
         f'<stop offset="0" stop-color="{background}"/>'
-        '<stop offset="1" stop-color="#070a12"/></linearGradient>'
+        f'<stop offset="1" stop-color="{background}"/></linearGradient>'
     )
     out.append(
+        # A grey edge, not a cyan-to-purple one. The frame around the picture
+        # is part of the picture, and the product has no colour in it.
         '<linearGradient id="edge" x1="0" y1="0" x2="1" y2="1">'
-        '<stop offset="0" stop-color="#22d3ee" stop-opacity="0.55"/>'
-        '<stop offset="0.55" stop-color="#a78bfa" stop-opacity="0.35"/>'
-        '<stop offset="1" stop-color="#22d3ee" stop-opacity="0.12"/></linearGradient>'
+        '<stop offset="0" stop-color="#f5f5f5" stop-opacity="0.34"/>'
+        '<stop offset="0.55" stop-color="#8a8a8a" stop-opacity="0.22"/>'
+        '<stop offset="1" stop-color="#f5f5f5" stop-opacity="0.08"/></linearGradient>'
     )
     out.append("</defs>")
     out.append(f'<rect width="{width:.1f}" height="{height:.1f}" rx="14" fill="url(#bg)"/>')
@@ -235,7 +244,9 @@ def to_svg(
         'fill="none" stroke="url(#edge)" stroke-width="1.2"/>'
     )
     if chrome:
-        for index, color in enumerate(("#ff5f57", "#febc2e", "#28c840")):
+        # Greys, not the usual red/amber/green: these dots are part of the
+        # product's picture, and the product has no colour in it anywhere.
+        for index, color in enumerate(("#3d3d3d", "#6b6b6b", "#a3a3a3")):
             out.append(
                 f'<circle cx="{PAD_X + index * 21 + 4:.1f}" cy="{CHROME_H / 2 + 4:.1f}" r="6.5" fill="{color}"/>'
             )
@@ -247,7 +258,7 @@ def to_svg(
             )
         out.append(
             f'<line x1="0" y1="{CHROME_H:.1f}" x2="{width:.1f}" y2="{CHROME_H:.1f}" '
-            'stroke="#1b2233" stroke-width="1"/>'
+            'stroke="#262626" stroke-width="1"/>'
         )
 
     for row_index, row in enumerate(rows):

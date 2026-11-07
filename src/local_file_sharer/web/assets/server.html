@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#05080f">
+<meta name="theme-color" content="#000000">
 <meta name="robots" content="noindex, nofollow">
 <title>{{title}} · {{brand}} file server</title>
 <link rel="icon" href="/favicon.ico">
@@ -15,20 +15,20 @@
   <header class="topbar">
     <div class="brand">
       <span class="logo">LFS</span>
-      <span>{{brand}}<small>web file server</small></span>
+      <span>{{brand}}<small>Web File Server</small></span>
     </div>
     <nav class="chip" aria-label="breadcrumbs" style="gap:4px">{{breadcrumbs}}</nav>
     <div class="spacer"></div>
     <span class="chip accent"><span class="dot"></span> serving</span>
     <span class="chip">{{file_count}} files · {{folder_size}}</span>
-    <a class="chip" href="{{zip_url}}" download><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h16v12H4z"/><path d="M3 4h18v4H3z"/><path d="M10 12h4"/></svg> download folder</a>
-    <a class="chip" href="/"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"/><path d="M7 11l5 5 5-5"/><path d="M5 20h14"/></svg> download station</a>
+    <a class="chip" href="{{zip_url}}" download><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h16v12H4z"/><path d="M3 4h18v4H3z"/><path d="M10 12h4"/></svg> Download Folder</a>
+    <a class="chip" href="/"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"/><path d="M7 11l5 5 5-5"/><path d="M5 20h14"/></svg> Download Station</a>
   </header>
 
   <section class="card" style="margin-bottom:22px">
     <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end">
       <div style="flex:1;min-width:240px">
-        <h1 style="margin:0 0 6px;font-size:26px;letter-spacing:-0.02em">Browse <span class="grad">folder</span></h1>
+        <h1 style="margin:0 0 6px;font-size:26px;letter-spacing:-0.02em">Browse <span class="grad">Folder</span></h1>
         <p class="muted" style="margin:0;font-size:13.5px">
           Every file is served with HTTP Range support — resume, seek and parallelise freely.
         </p>
@@ -39,23 +39,23 @@
       </form>
       <div class="actions-wrap">
       <div class="actions">
-        <button class="btn sm" id="select-all">Select all</button>
-        <button class="btn alt sm" id="download-selected" disabled><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"/><path d="M7 11l5 5 5-5"/><path d="M5 20h14"/></svg> <span>Download selected (0)</span></button>
+        <button class="btn sm" id="select-all">Select All</button>
+        <button class="btn alt sm" id="download-selected" disabled><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"/><path d="M7 11l5 5 5-5"/><path d="M5 20h14"/></svg> <span>Download Selected (0)</span></button>
       </div>
       </div>
     </div>
     <div class="stat-row" style="margin-bottom:0">
-      <div class="stat"><div class="k">files</div><div class="v">{{file_count}}</div></div>
-      <div class="stat"><div class="k">folder size</div><div class="v">{{folder_size}}</div></div>
-      <div class="stat"><div class="k">share total</div><div class="v">{{total_size}}</div></div>
-      <div class="stat"><div class="k">transferred</div><div class="v" id="sent">—</div></div>
-      <div class="stat"><div class="k">speed</div><div class="v" id="speed">—</div></div>
+      <div class="stat"><div class="k">Files</div><div class="v">{{file_count}}</div></div>
+      <div class="stat"><div class="k">Folder Size</div><div class="v">{{folder_size}}</div></div>
+      <div class="stat"><div class="k">Share Total</div><div class="v">{{total_size}}</div></div>
+      <div class="stat"><div class="k">Transferred</div><div class="v" id="sent">—</div></div>
+      <div class="stat"><div class="k">Speed</div><div class="v" id="speed">—</div></div>
     </div>
   </section>
 
   <div class="list">
     <div class="list-head">
-      <span>name</span><span style="text-align:right">size</span><span></span>
+      <span>Name</span><span style="text-align:right">Size</span><span></span>
     </div>
     <div id="rows">
 {{rows}}
@@ -190,7 +190,7 @@
 
   function updateButton() {
     const btn = $('download-selected');
-    btn.querySelector("span").textContent = `Download selected (${selected.size})`;
+    btn.querySelector("span").textContent = `Download Selected (${selected.size})`;
     btn.disabled = selected.size === 0;
   }
 
@@ -203,7 +203,7 @@
       if (!all) selected.add(row); else selected.delete(row);
     });
     updateButton();
-    $('select-all').textContent = all ? 'Select all' : 'Clear';
+    $('select-all').textContent = all ? 'Select All' : 'Clear';
   });
 
   $('download-selected').addEventListener('click', () => {

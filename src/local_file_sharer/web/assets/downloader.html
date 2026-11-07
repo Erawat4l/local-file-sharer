@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#05080f">
+<meta name="theme-color" content="#000000">
 <meta name="robots" content="noindex, nofollow">
 <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate">
 <title>{{title}} · {{brand}}</title>
@@ -16,7 +16,7 @@
   <header class="topbar">
     <div class="brand">
       <span class="logo">LFS</span>
-      <span>{{brand}}<small>download station</small></span>
+      <span>{{brand}}<small>Download Station</small></span>
     </div>
     <span class="chip accent"><span class="dot"></span> live</span>
     <span class="chip">mode <b>{{mode}}</b></span>
@@ -28,7 +28,7 @@
 
   <section class="hero">
     <div class="card">
-      <h1>Download <span class="grad">everything</span>, fast.</h1>
+      <h1>Download <span class="grad">Everything</span>, fast.</h1>
       <p class="lead">
         {{file_count}} files · {{total_size}} shared from <span class="mono">{{peer}}</span>.
         Grab one file, several at once with 16 parallel connections, or pull the whole
@@ -36,10 +36,10 @@
       </p>
 
       <div class="stat-row">
-        <div class="stat"><div class="k">files</div><div class="v">{{file_count}}</div></div>
-        <div class="stat"><div class="k">total size</div><div class="v">{{total_size}}</div></div>
-        <div class="stat"><div class="k">connections</div><div class="v">{{parallel}} <small>parallel</small></div></div>
-        <div class="stat"><div class="k">speed</div><div class="v" id="speed">—</div></div>
+        <div class="stat"><div class="k">Files</div><div class="v">{{file_count}}</div></div>
+        <div class="stat"><div class="k">Total Size</div><div class="v">{{total_size}}</div></div>
+        <div class="stat"><div class="k">Connections</div><div class="v">{{parallel}} <small>parallel</small></div></div>
+        <div class="stat"><div class="k">Speed</div><div class="v" id="speed">—</div></div>
       </div>
 
       <div class="actions">
@@ -53,7 +53,7 @@
       <div style="margin-top:18px">
         <div class="progress"><i id="progress-bar"></i></div>
         <div style="display:flex;justify-content:space-between;margin-top:8px" class="mono muted">
-          <span id="progress-text">idle</span>
+          <span id="progress-text">Idle</span>
           <span id="eta">—</span>
         </div>
       </div>
@@ -73,7 +73,7 @@
 
   <section>
     <div class="section-head">
-      <h2>Shared files</h2>
+      <h2>Shared Files</h2>
       <span class="count">{{file_count}} items · {{total_size}}</span>
       <div class="spacer" style="flex:1"></div>
       <input id="filter" type="search" placeholder="Search name or type — try mp4" style="max-width:260px">

@@ -8,9 +8,9 @@ mode download
 expires in 29m
 8 devices
 1.0.0
-download station
+Download Station
 Download 
-everything
+Everything
 , fast.
 8 files · 4.0 GB shared from aurora-laptop. Grab one file, several at once with
 16 parallel connections, or pull the whole share as a single resumable .zip.
@@ -21,7 +21,7 @@ total size
 connections
 16
 parallel
-speed
+Speed
 72 MB/s
 Download all
 16×
@@ -33,7 +33,7 @@ ETA 21s · 72 MB/s
 192.168.1.42:8080
 Copy
 scan to open on another device
-Shared files
+Shared Files
 8 items · 4.0 GB
 Search name or type — try mp4
 All
@@ -71,25 +71,25 @@ local-file-sharer
 web file server
 demo
 8 files · 4.0 GB
-download station
+Download Station
 1.0.0
 web file server
 Browse 
-folder
+Folder
 Every file is served with HTTP Range support — resume, seek and parallelise freely.
-Download selected
-Select all
+Download Selected
+Select All
 Filter in this folder…
 Filter
-folder
+Folder
 demo
-size
+Size
 4.0 GB
-share total
+Share Total
 4.0 GB
-transferred
+Transferred
 2.5 GB
-speed
+Speed
 72 MB/s
 NAME
 SIZE
@@ -142,13 +142,13 @@ buffered 38%
 Playlist · 1
 Aurora-Film…mkv
 3.6 GB · playing
-transferred
+Transferred
 2.5 GB
-devices
+Devices
 3
-format
+Format
 matroska
-speed
+Speed
 72 MB/s
 space play · ← → ±10s · f fullscreen · m mute
 If the preview stays black, the codec is not supported by this browser (common for MKV/HEVC).

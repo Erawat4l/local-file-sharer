@@ -1,4 +1,4 @@
- LFS  LOCAL FILE SHARER  v1.0.0                                             19:03 · e2b.local
+ LFS  LOCAL FILE SHARER  v1.0.0                                             03:48 · e2b.local
 ───────────────────────────────────────────────────────────────────────────────────────────────
 ╭─ this device ─────────────────────────╮
 │      device  e2b.local                │
@@ -9,20 +9,20 @@
 │ sent so far  120 GB · 412 files       │
 ╰───────────────────────────────────────╯
 
- SHARE
- 1 📥 Download   forced download · resumable · folders auto-zip
- 2 🌐 Serve      web file browser for this device or the whole folder
- 3 ▶️ Stream     media player with instant seeking
- 4 🌱 Torrent    .torrent + magnet · built-in tracker + webseed
- RECENT & FAVOURITES
- r 🕐 Recent     re-share a recently shared file
- f ⭐ Favourites jump to a favourite folder
- SETTINGS
- c ⚙️ Config     edit settings, theme and PIN
- d 🩺 Doctor     check dependencies, firewall and network
- t 🎨 Theme      switch dark / light / mono
- u ⬆️ Update     install the newest code from GitHub
- ? ❓ Help       keys, one-liners and troubleshooting
- q ⏏️ Quit       leave the menu
+ Share
+ 1 ↓  Download   Forced Download · Resumable · Folders Auto-Zip
+ 2 ◈  Serve      Web File Browser For This Device Or The Whole Folder
+ 3 ▶  Stream     Media Player With Instant Seeking
+ 4 ◆  Torrent    .Torrent + Magnet · Built-In Tracker + Webseed
+ Shortcuts
+ r ●  Recent     Re-Share A Recently Shared File
+ f ◆  Favourites Jump To A Favourite Folder
+ Settings
+ c ≡  Config     Edit Settings, Theme And PIN
+ d ✓  Doctor     Check Dependencies, Firewall And Network
+ t ○  Theme      Switch Dark / Light / Mono
+ u ↑  Update     Install The Newest Code From GitHub
+ ? ?  Help       Keys, One-Liners And Troubleshooting
+ q ⏻  Quit       Leave The Menu
 
  `lfs <path>` shares straight away · `?` for more commands
