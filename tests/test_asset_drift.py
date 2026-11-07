@@ -82,19 +82,21 @@ def test_the_gif_shows_the_menu_the_code_draws(monkeypatch):
     )
     today = buffer.getvalue()
 
-    # Two lines are machine-specific and cannot be compared on another host:
-    # the header carries the clock and hostname, and the "this device" panel
-    # prints the hostname and the machine's own IP. Everything else is copy, and
-    # that is the part that went stale. (This test failed on every CI runner
-    # until these were excluded: the recorded gif was made on e2b.local with
-    # 169.254.0.21, and no runner is that machine.)
+    # The "this device" panel is machine state, not copy: hostname, LAN address
+    # and whether tailscale happens to be installed. All of it varies by host
+    # (this test failed on every CI runner until it was excluded, because the
+    # recording was made on e2b.local / 169.254.0.21 with no tailscale). What is
+    # left -- the header chrome, the mode list, the descriptions and the footer
+    # -- is what actually went stale in the gif, and is what this compares.
     def stable(text: str) -> list[str]:
         out = []
         for line in text.splitlines():
             if "·" in line and ("LFS" in line or "LOCAL FILE SHARER" in line):
                 continue
             stripped = line.strip(" │")
-            if stripped.startswith("device ") or stripped.startswith("network "):
+            if stripped.startswith(
+                ("device ", "network ", "public ", "tailscale ", "theme ", "sent so far ")
+            ):
                 continue
             out.append(line)
         return out

@@ -881,7 +881,29 @@ def cmd_banner(cfg: Config, state: State, args: argparse.Namespace) -> int:
 # ─────────────────────────────────────────────────────────────────────────────
 # main
 # ─────────────────────────────────────────────────────────────────────────────
+def _utf8_streams() -> None:
+    """Make stdout/stderr speak UTF-8, whatever the console claims.
+
+    Every message this program prints has a tick, an arrow or an emoji in it.
+    On a Windows console the default encoding is cp1252, so ``lfs version``
+    died with ``UnicodeEncodeError: 'charmap' codec can't encode character``
+    before printing anything -- and every test that shells out to the CLI
+    failed on Windows for the same reason. ``errors="replace"`` is the last
+    resort so a terminal that truly cannot render a glyph shows '?' instead of
+    crashing.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is None:  # pragma: no cover - replaced streams in tests
+            continue
+        try:
+            reconfigure(encoding="utf-8", errors="replace")
+        except (OSError, ValueError):  # pragma: no cover - detached/closed stream
+            pass
+
+
 def main(argv: list[str] | None = None) -> int:
+    _utf8_streams()
     argv = list(sys.argv[1:] if argv is None else argv)
     if "--no-color" in argv:
         os.environ["NO_COLOR"] = "1"

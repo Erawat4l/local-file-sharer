@@ -176,7 +176,12 @@ def test_sources_stay_compatible_with_python_39():
     if not script.is_file():
         pytest.skip("compatibility checker not present")
     result = subprocess.run(  # noqa: S603
-        [sys.executable, str(script)], capture_output=True, text=True, cwd=root, check=False
+        [sys.executable, str(script)],
+        capture_output=True,
+        encoding="utf-8",
+        errors="replace",
+        cwd=root,
+        check=False,
     )
     assert result.returncode == 0, result.stdout + result.stderr
 

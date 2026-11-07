@@ -580,7 +580,8 @@ def test_the_downloader_page_actually_runs_and_saves_every_file(server):
     result = subprocess.run(
         [node, str(harness), f"http://127.0.0.1:{server.port}/", str(html)],
         capture_output=True,
-        text=True,
+        encoding="utf-8",
+        errors="replace",
         timeout=120,
     )
     assert result.returncode == 0, f"{result.stdout}\n{result.stderr}"

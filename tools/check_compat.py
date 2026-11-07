@@ -68,7 +68,24 @@ def other_problems(path: Path, tree: ast.AST) -> list[str]:
     return problems
 
 
+def _utf8_stdout() -> None:
+    """Print UTF-8 regardless of the console.
+
+    This writes a tick and a cross. On a Windows console (cp1252) that raised
+    UnicodeEncodeError and the script exited non-zero without reporting
+    anything -- and tests/test_config.py shells out to it, so the failure
+    looked like a compatibility problem rather than an encoding one.
+    """
+    reconfigure = getattr(sys.stdout, "reconfigure", None)
+    if reconfigure is not None:
+        try:
+            reconfigure(encoding="utf-8", errors="replace")
+        except (OSError, ValueError):  # pragma: no cover
+            pass
+
+
 def main() -> int:
+    _utf8_stdout()
     problems: list[str] = []
     checked = 0
     for root in ROOTS:
