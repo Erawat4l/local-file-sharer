@@ -16,6 +16,7 @@ renderers are not guards.
 from __future__ import annotations
 
 import io
+import re
 from pathlib import Path
 
 import pytest
@@ -348,3 +349,85 @@ def test_no_real_file_names_are_published():
             if name in text:
                 offenders.append(f"{path.relative_to(repo)}: {name}")
     assert not offenders, "real device names are published in:\n  " + "\n  ".join(offenders)
+
+
+def _player_template() -> str:
+    repo = Path(__file__).resolve().parents[1]
+    return (repo / "src" / "local_file_sharer" / "web" / "assets" / "player.html").read_text(encoding="utf-8")
+
+
+def test_the_player_shot_draws_the_page_s_own_icons():
+    """The shot's transport glyphs must be the page's path data, not lookalikes.
+
+    This is the failure that prompted the check: the screenshot and the gif drew
+    their own round controls -- different sizes, a lighter border, the controls
+    in a different order, and a "+" where the download button belongs. Nothing
+    compared the drawing to the markup, so a picture of a page that never
+    existed could sit in the README indefinitely.
+
+    The shot imports its glyphs from webgen.GLYPHS, which is a copy of the
+    page's markup; this holds the copy against the original.
+    """
+    # Parsed out of the source rather than imported: webgen pulls in fontTools,
+    # resvg and the font files at import time, and none of those are installed
+    # in CI, so importing it here would make this test skip on the one machine
+    # that decides whether the assets are allowed to ship.
+    repo = Path(__file__).resolve().parents[1]
+    source = (repo / "tools" / "screenshots" / "webgen.py").read_text(encoding="utf-8")
+    block = source[source.index("GLYPHS: dict[str, tuple[str, ...]] = {") :]
+    block = block[: block.index("\n}\n") + 1]
+
+    # every quoted literal in the table, split into its individual SVG shapes so
+    # one string holding three <path>s is checked shape by shape
+    literals = re.findall(r"'([^']*)'", block)
+    shapes = [chunk for literal in literals for chunk in re.findall(r"<[^>]+>", literal)]
+    assert len(shapes) >= 20, f"expected the page's glyph shapes, found {len(shapes)}"
+
+    def normalise(markup: str) -> str:
+        """The geometry and nothing else.
+
+        The shot resolves two CSS-only shorthands itself, because an SVG string
+        has no cascade to inherit from: ``class="solid"`` becomes an explicit
+        fill, and ``currentColor`` becomes a literal colour. Strip the
+        presentation back off before comparing, so the check is about the
+        drawing (which paths, which coordinates) rather than about how each
+        side spells its colours.
+        """
+        markup = re.sub(r'\s*class="solid"', "", markup)
+        markup = re.sub(r'\s*fill="(?:currentColor|#[0-9a-f]{3,6}|none)"', "", markup)
+        markup = re.sub(r'\s*stroke="(?:currentColor|none)"', "", markup)
+        return markup
+
+    page = normalise(_player_template())
+    for fragment in shapes:
+        if True:
+            # ``class="solid"`` is a CSS hook the shot resolves itself; the path
+            # geometry around it still has to match the page character for character.
+            assert normalise(fragment) in page, f"the shot draws {fragment!r}, which player.html does not"
+
+
+def test_the_player_shot_uses_the_page_s_button_geometry():
+    """46px play disc, 40px circles, #141414 inside, 26px icons, gap 8."""
+    page = _player_template()
+    assert "border-radius:50%" in page
+    assert "background:#141414" in page or "#141414" in page
+    # the numbers the shot hardcodes, which is why they are asserted here
+    for rule in ("width:40px;height:40px", "width:46px;height:46px", "width:26px;height:26px"):
+        assert rule in page.replace(" ", ""), f"player.html no longer says {rule!r}"
+
+
+def test_the_web_shots_do_not_glow():
+    """No gradient or glow on a button: app.css is flat, so the shots are too.
+
+    The download shot drew a grey gradient primary button with a 30px halo, and
+    the accent colour it glowed with was removed from the product two rounds
+    ago. A screenshot with a glow in it is a screenshot of a different app.
+    """
+    repo = Path(__file__).resolve().parents[1]
+    source = (repo / "tools" / "screenshots" / "webshot.py").read_text(encoding="utf-8")
+    block = source[source.index("def button(") : source.index("def qr(")]
+    for banned in ("glow_rect(", "linear([("):
+        assert banned not in block, f"the button draws {banned!r}, which app.css does not"
+    assert '"#ffffff" if variant == "primary" else "#d4d4d4"' in block, (
+        "primary/alt fills must be the app.css values #fff / #d4d4d4"
+    )

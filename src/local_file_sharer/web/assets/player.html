@@ -240,20 +240,28 @@
     .round.primary{width:42px;height:42px;min-width:42px}
     #rate b{font-size:11px}
   }
-  .round .i{width:21px;height:21px;fill:none;stroke:currentColor;stroke-width:1.8;
+  /* 26px inside a 40px circle. At 21px the glyph sat in a ring of dead space
+     and read as a smaller, lighter button than the 46px play disc beside it;
+     the icons are the thing you aim at, so they get the room. */
+  .round .i{width:26px;height:26px;fill:none;stroke:currentColor;stroke-width:1.8;
     stroke-linecap:round;stroke-linejoin:round}
   .round.primary .i{width:24px;height:24px;fill:currentColor;stroke:none}
   .round .i .solid{fill:currentColor;stroke:none}
   .round .i.off{display:none}
   #fit svg{fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round}
   #fit svg .solid{stroke-width:2.4}
+  /* The number sits in the bottom of the circle with its own dark plate behind
+     it. Without the plate the "10" printed straight through the arrow's tail --
+     two grey shapes on top of each other, unreadable at 40px. The plate is the
+     circle's own colour, so it reads as a notch rather than a box. */
   .round .glyph{position:absolute;font-size:8.5px;font-weight:700;letter-spacing:0;
-    bottom:9px;left:50%;transform:translateX(-50%);pointer-events:none}
+    bottom:5px;left:50%;transform:translateX(-50%);pointer-events:none;line-height:1;
+    padding:0 1.5px;border-radius:3px;background:#141414;color:var(--dim)}
   /* the speed chip keeps its gauge logo and prints the rate in the corner */
   #rate .glyph{bottom:4px;font-size:9px;letter-spacing:-.02em;color:var(--text);
     background:rgba(0,0,0,.55);border-radius:4px;padding:0 2px;line-height:1.25}
-  #rate .i{width:18px;height:18px;margin-bottom:5px}
-  .round#mute .i{width:20px}
+  #rate .i{width:21px;height:21px;margin-bottom:4px}
+  .round#mute .i{width:24px}
   #vol{width:88px;flex:0 0 auto}
   @media (max-width:700px){ #vol{display:none} }   /* the mute button is enough */
   #rate b{font-size:12.5px;font-weight:650;font-variant-numeric:tabular-nums}

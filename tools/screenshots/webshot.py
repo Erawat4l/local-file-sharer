@@ -430,21 +430,25 @@ class Shot(Canvas):
         m = Measure("sans", 600, size)
         if w is None:
             w = m.width(label) + 40 + (22 if icon else 0) + (52 if badge else 0)
-        r = 12
-        if variant == "primary":
-            fill = self.linear([(0, "#afafaf"), (1, "#a5a5a5")], x1=0, y1=0, x2=1, y2=1)
-            self.glow_rect(x, y, w, h, r=r, fill=fill, glow=ACCENT, spread=30, opacity=0.45)
-            text_fill = "#1c1c1c"
-            weight = 700
-        elif variant == "alt":
-            fill = self.linear([(0, "rgba(153,153,153,0.22)"), (1, "rgba(175,175,175,0.16)")])
-            self.rect(x, y, w, h, fill=fill, stroke="rgba(153,153,153,0.45)", r=r)
-            text_fill = "#dadada"
+        # These are app.css's .btn rules, not an interpretation of them:
+        #   .btn        background #fff            border 1px #fff   color #000
+        #   .btn.alt    background #d4d4d4         border #d4d4d4     color #000
+        #   .btn.ghost  background transparent     border var(--line-strong)
+        # radius 10px, weight 600, 13.5px.
+        # The shot used to draw a grey gradient with a 30px glow on the primary
+        # button, which is not a button this project has ever shipped: the page
+        # is flat white on black, and the screenshots are supposed to be the
+        # page. Anything glowing was the old accent system leaking through.
+        r = 10
+        if variant in ("primary", "alt"):
+            fill = "#ffffff" if variant == "primary" else "#d4d4d4"
+            self.rect(x, y, w, h, fill=fill, stroke=fill, r=r)
+            text_fill = "#000000"
             weight = 600
         else:  # ghost
-            self.rect(x, y, w, h, fill="rgba(161,161,161,0.06)", stroke=LINE_STRONG, r=r)
-            text_fill = DIM
-            weight = 600
+            self.rect(x, y, w, h, fill="none", stroke=LINE_STRONG, r=r)
+            text_fill = TEXT
+            weight = 500
         cursor = x + (20 if not badge else 18)
         if icon:
             self.emoji(cursor, y + h / 2 - 9, icon, 18)
