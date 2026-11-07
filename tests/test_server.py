@@ -948,9 +948,10 @@ def test_nested_files_never_appear_at_their_grandparent_level(tmp_path, free_por
         assert 'data-name="dcim"' in top.lower()
         for i in range(5):
             assert f"IMG_{i}.jpg" not in top
-        # drilling in shows the next level only
+        # drilling in shows the next level only. This is the download page, so
+        # the sub-folder is a card (``data-name``) rather than a row ("Camera/").
         dcim = get(server, "/browse/DCIM").read().decode()
-        assert "Camera/" in dcim
+        assert 'data-name="camera"' in dcim
         assert "IMG_0.jpg" not in dcim
         camera = get(server, "/browse/DCIM/Camera").read().decode()
         assert "IMG_0.jpg" in camera
@@ -1007,7 +1008,7 @@ def test_folder_rows_carry_a_download_target_not_the_browse_page(tmp_path, free_
     root = tmp_path / "phone"
     (root / "DCIM" / "Camera").mkdir(parents=True)
     (root / "DCIM" / "Camera" / "a.jpg").write_bytes(b"x" * 10)
-    server = ShareServer(Manifest.build([root]), host="127.0.0.1", port=free_port)
+    server = ShareServer(Manifest.build([root], mode="serve"), host="127.0.0.1", port=free_port)
     server.start()
     assert server.wait_until_ready(timeout=5)
     try:
