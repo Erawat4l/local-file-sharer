@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#000000">
 <meta name="robots" content="noindex, nofollow">
-<title>{{title}} · {{brand}} file server</title>
+<title>{{brand}} · Web File Server</title>
 <link rel="icon" href="/favicon.ico">
 <link rel="stylesheet" href="/static/app.css">
 </head>
@@ -19,7 +19,7 @@
     </div>
     <nav class="chip" aria-label="breadcrumbs" style="gap:4px">{{breadcrumbs}}</nav>
     <div class="spacer"></div>
-    <span class="chip accent"><span class="dot"></span> serving</span>
+    <span class="chip accent"><span class="dot"></span> Serving</span>
     <span class="chip">{{file_count}} files · {{folder_size}}</span>
     <a class="chip" href="{{zip_url}}" download><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h16v12H4z"/><path d="M3 4h18v4H3z"/><path d="M10 12h4"/></svg> Download Folder</a>
     <a class="chip" href="/"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"/><path d="M7 11l5 5 5-5"/><path d="M5 20h14"/></svg> Download Station</a>
@@ -29,9 +29,6 @@
     <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end">
       <div style="flex:1;min-width:240px">
         <h1 style="margin:0 0 6px;font-size:26px;letter-spacing:-0.02em">Browse <span class="grad">Folder</span></h1>
-        <p class="muted" style="margin:0;font-size:13.5px">
-          Every file is served with HTTP Range support — resume, seek and parallelise freely.
-        </p>
       </div>
       <form method="get" style="display:flex;gap:8px;flex:1;min-width:240px;max-width:420px">
         <input type="search" name="q" value="{{search}}" placeholder="Filter in this folder…">
@@ -71,10 +68,8 @@
 
   <footer>
     <span>{{brand}} {{version}}</span>
-    <span class="muted">·</span>
-    <span class="mono muted">GET /api/manifest</span>
     <div class="spacer"></div>
-    <span class="muted">tip: <kbd>aria2c -x16 -s16</kbd> for maximum speed</span>
+    <span class="muted">Streaming · Resume · Range</span>
   </footer>
 </div>
 <div class="toast" id="toast"></div>

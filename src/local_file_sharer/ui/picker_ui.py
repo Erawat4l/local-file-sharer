@@ -11,9 +11,9 @@ Keys
 ``Enter``            open folder / pick highlighted
 ``Space``            toggle selection
 ``6,7,8`` / ``6-8``  select by number (type then Enter)
-``a``                select all          ``c`` clear
+``a``                Select All          ``c`` Clear
 ``s``                start sharing the selection
-``/``                fuzzy search        ``esc`` clear search
+``/``                Fuzzy Search        ``esc`` Clear Search
 ``f``                favourite this folder
 ``d``/``h``/``b``    drives / home / up
 ``t``                theme               ``?`` help          ``q`` quit

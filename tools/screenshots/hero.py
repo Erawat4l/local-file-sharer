@@ -1,123 +1,129 @@
-"""Hand-authored README hero: gradient wordmark + tagline + platform chips."""
+"""README hero: the product name, one line of what it does, and the command.
+
+Hand-authored rather than photographed, because there is nothing to photograph
+yet — but every string here is copy the product itself prints. It used to say
+"local-file-sharer" in a cyan-to-violet gradient with red/amber/green window
+dots and coloured platform chips, which was a banner for a different product:
+the app is black and white now and calls itself LOCAL FILE SHARER.
+
+The layout is deliberately sparse. A hero that lists five platforms in five
+colours is noise; the tagline is already in ``__init__.py`` and the command is
+already ``lfs``, so the picture only has to say those two things plus the name.
+"""
 
 from __future__ import annotations
 
+import base64
 from pathlib import Path
 
+import resvg_py
 from paths import ASSETS, FONT_DIR
-from webshot import (
-    ACCENT,
-    ACCENT2,
-    ACCENT3,
-    DIM,
-    FAINT,
-    TEXT,
-    Canvas,
-)
+from webshot import DIM, FAINT, LINE, LINE_STRONG, TEXT, Canvas
+
+from local_file_sharer import APP_NAME, APP_TAGLINE, __version__
 
 W, H = 1280, 340
+
+#: One weight of accent = contrast in a monochrome design. The wordmark is the
+#: brightest thing on the canvas; the logo tile is the darkest raised surface.
+PANEL = "#0d0d0d"
+
+
+def _b64(path: str | Path) -> str:
+    return base64.b64encode(Path(path).read_bytes()).decode("ascii")
+
+
+def _fonts() -> str:
+    faces = []
+    for weight, filename in (
+        (800, "Inter-ExtraBold.ttf"),
+        (600, "Inter-SemiBold.ttf"),
+        (400, "Inter-Regular.ttf"),
+    ):
+        faces.append(
+            f"@font-face{{font-family:'Inter';font-weight:{weight};"
+            f"src:url(data:font/ttf;base64,{_b64(FONT_DIR / filename)}) format('truetype');}}"
+        )
+    faces.append(
+        "@font-face{font-family:'JetBrains Mono';font-weight:700;"
+        f"src:url(data:font/ttf;base64,{_b64(FONT_DIR / 'JetBrainsMono-Bold.ttf')}) format('truetype');}}"
+    )
+    faces.append(
+        "@font-face{font-family:'JetBrains Mono';font-weight:400;"
+        f"src:url(data:font/ttf;base64,{_b64(FONT_DIR / 'JetBrainsMono-Regular.ttf')}) format('truetype');}}"
+    )
+    return "<style>" + "".join(faces) + "</style>"
 
 
 def main() -> None:
     canvas = Canvas(W, H)
-    canvas.defs.append(
-        "<style>@font-face{font-family:'Inter';font-weight:800;"
-        "src:url(data:font/ttf;base64,"
-        + _b64(str(FONT_DIR / "Inter-ExtraBold.ttf"))
-        + ") format('truetype');}"
-        "@font-face{font-family:'Inter';font-weight:600;"
-        "src:url(data:font/ttf;base64,"
-        + _b64(str(FONT_DIR / "Inter-SemiBold.ttf"))
-        + ") format('truetype');}"
-        "@font-face{font-family:'Inter';font-weight:400;"
-        "src:url(data:font/ttf;base64," + _b64(str(FONT_DIR / "Inter-Regular.ttf")) + ") format('truetype');}"
-        "@font-face{font-family:'JetBrains Mono';font-weight:700;"
-        "src:url(data:font/ttf;base64,"
-        + _b64(str(FONT_DIR / "JetBrainsMono-Bold.ttf"))
-        + ") format('truetype');}"
-        "</style>"
-    )
+    canvas.defs.append(_fonts())
 
-    # backdrop
-    canvas.rect(0, 0, W, H, fill=canvas.linear([(0, "#0b1120"), (1, "#05080f")], x1=0, y1=0, x2=0, y2=1))
-    for cx, cy, rx, ry, color, op in (
-        (150, -60, 620, 340, ACCENT, 0.20),
-        (1080, -30, 520, 300, ACCENT2, 0.18),
-        (640, H + 60, 700, 260, ACCENT3, 0.10),
-    ):
-        g = canvas.radial([(0, color), (1, "rgba(5,8,15,0)")])
-        canvas.parts.append(f'<ellipse cx="{cx}" cy="{cy}" rx="{rx}" ry="{ry}" fill="{g}" opacity="{op}"/>')
-    # grid + edge frame
+    # ── backdrop ────────────────────────────────────────────────────────────
+    # A single vertical wash from near-black to black. No radial glows: three
+    # coloured ellipses were most of what made the old banner look like a
+    # startup landing page.
+    canvas.rect(0, 0, W, H, fill=canvas.linear([(0, "#0c0c0c"), (1, "#000000")], x1=0, y1=0, x2=0, y2=1))
     for x in range(0, W, 40):
-        canvas.line(x, 0, x, H, stroke="rgba(148,163,184,0.045)")
+        canvas.line(x, 0, x, H, stroke="rgba(255,255,255,0.028)")
     for y in range(0, H, 40):
-        canvas.line(0, y, W, y, stroke="rgba(148,163,184,0.045)")
-    frame = canvas.linear(
-        [(0, "rgba(34,211,238,0.55)"), (0.55, "rgba(167,139,250,0.35)"), (1, "rgba(34,211,238,0.12)")]
-    )
-    canvas.rect(0.8, 0.8, W - 1.6, H - 1.6, fill="none", stroke=frame, sw=1.6, r=0)
-
-    # logo tile
-    tile = canvas.linear([(0, "rgba(34,211,238,0.26)"), (1, "rgba(167,139,250,0.26)")])
-    canvas.glow_rect(64, 60, 74, 74, r=20, fill=tile, glow=ACCENT, spread=48, opacity=0.5)
-    canvas.rect(64, 60, 74, 74, fill="none", stroke="rgba(34,211,238,0.5)", sw=1.4, r=20)
-    canvas.text(101, 106, "LFS", family="mono", weight=700, size=24, fill="#c8f7ff", anchor="middle")
-
-    # wordmark
-    grad = canvas.linear([(0, ACCENT), (0.5, "#7dd3fc"), (1, ACCENT2)], x1=0, y1=0, x2=1, y2=0)
-    canvas.text(164, 122, "local-file-sharer", weight=800, size=58, fill=grad)
-
-    # tagline
-    canvas.rich(
-        167,
-        172,
-        [
-            ("Share files between your devices ", {"weight": 600, "fill": "#c7d2fe"}),
-            ("at maximum speed.", {"weight": 600, "fill": TEXT}),
-        ],
-        size=25,
-    )
-    canvas.text(
-        167,
-        208,
-        "One command, an interactive menu, a QR code, and a real HTTP engine that saturates your Wi-Fi.",
-        size=15.5,
-        fill=DIM,
+        canvas.line(0, y, W, y, stroke="rgba(255,255,255,0.028)")
+    # hairline frame, greys only
+    canvas.rect(
+        0.8,
+        0.8,
+        W - 1.6,
+        H - 1.6,
+        fill="none",
+        stroke=canvas.linear([(0, "rgba(255,255,255,0.32)"), (1, "rgba(255,255,255,0.06)")]),
+        sw=1.2,
+        r=0,
     )
 
-    # chips
-    x = 167
-    for label, color, border in (
-        ("TERMUX", "#fbbf24", "rgba(251,191,36,0.45)"),
-        ("ANDROID", "#34d399", "rgba(52,211,153,0.45)"),
-        ("LINUX", "#e2e8f0", "rgba(226,232,240,0.35)"),
-        ("macOS", "#a78bfa", "rgba(167,139,250,0.45)"),
-        ("WINDOWS", "#60a5fa", "rgba(96,165,250,0.45)"),
-    ):
-        from webshot import Measure
+    # ── logo tile ───────────────────────────────────────────────────────────
+    canvas.rect(64, 74, 76, 76, fill="#ffffff", stroke="#ffffff", sw=1.2, r=20)
+    canvas.text(102, 122, "LFS", family="mono", weight=700, size=25, fill="#000000", anchor="middle")
 
-        width = Measure("sans", 600, 12).width(label) + 26
-        canvas.rect(x, 236, width, 28, fill="rgba(15,23,42,0.75)", stroke=border, r=14)
-        canvas.text(x + width / 2, 255, label, weight=600, size=12, fill=color, anchor="middle")
-        x += width + 9
-    canvas.text(x + 8, 255, "pure Python · rich + qrcode · MIT", size=13, fill=FAINT)
+    # ── wordmark ────────────────────────────────────────────────────────────
+    canvas.text(166, 128, APP_NAME, weight=800, size=52, fill=TEXT, spacing=-0.6)
 
-    # right-hand command card
-    cx, cy, cw, ch = 872, 96, 344, 148
-    gl = canvas.linear([(0, "rgba(34,211,238,0.10)"), (1, "rgba(167,139,250,0.10)")])
-    canvas.rect(cx, cy, cw, ch, fill="rgba(9,14,24,0.86)", stroke="rgba(148,163,184,0.20)", r=18)
-    canvas.rect(cx, cy, cw, ch, fill=gl, r=18)
-    canvas.circle(cx + 20, cy + 22, 5, fill="#ff5f57")
-    canvas.circle(cx + 36, cy + 22, 5, fill="#febc2e")
-    canvas.circle(cx + 52, cy + 22, 5, fill="#28c840")
-    canvas.line(cx + 1, cy + 40, cx + cw - 1, cy + 40, stroke="rgba(148,163,184,0.16)")
-    canvas.text(cx + 22, cy + 76, "$ start", family="mono", weight=700, size=18, fill=ACCENT3)
-    canvas.text(cx + 22, cy + 104, "→ pick files, scan, download", family="mono", size=14, fill=DIM)
-    canvas.text(cx + 22, cy + 128, "→ 72 MB/s on the same Wi-Fi", family="mono", size=14, fill=DIM)
+    # ── tagline ─────────────────────────────────────────────────────────────
+    canvas.text(168, 172, APP_TAGLINE, weight=400, size=22, fill=DIM)
+
+    # ── the one command ─────────────────────────────────────────────────────
+    # The install triad is three commands, and a hero is not the place to teach
+    # all three: the README does that. What someone needs at a glance is the
+    # command they will type every day afterwards.
+    pill_w = 262
+    canvas.rect(166, 202, pill_w, 40, fill=PANEL, stroke=LINE_STRONG, sw=1, r=10)
+    canvas.text(184, 229, "lfs", family="mono", weight=700, size=16, fill="#ffffff")
+    canvas.text(216, 229, "<folder>", family="mono", weight=400, size=16, fill=FAINT)
+
+    # ── right-hand card: what happens ───────────────────────────────────────
+    # A triple: the three things the program does in order. Mono, no colour, no
+    # window dots -- the dots were a macOS traffic light in red/amber/green on a
+    # card that is not a window.
+    cx, cy, cw, ch = 856, 88, 360, 164
+    canvas.rect(cx, cy, cw, ch, fill="#0a0a0a", stroke=LINE, sw=1, r=16)
+    canvas.text(cx + 22, cy + 30, "lfs 1.0.0", family="mono", weight=700, size=11, fill=FAINT)
+    canvas.line(cx + 20, cy + 42, cx + cw - 20, cy + 42, stroke=LINE)
+    steps = (
+        ("1", "Pick Files", "any folder, any size"),
+        ("2", "Scan The QR", "open it on any device"),
+        ("3", "Download", "resumable, parallel"),
+    )
+    for index, (number, title, note) in enumerate(steps):
+        row_y = cy + 74 + index * 32
+        canvas.text(cx + 22, row_y, number, family="mono", weight=700, size=12, fill=FAINT)
+        canvas.text(cx + 40, row_y, title, weight=600, size=13.5, fill=TEXT)
+        canvas.text(cx + 156, row_y, note, weight=400, size=12.5, fill=FAINT)
+
+    # ── footer line ─────────────────────────────────────────────────────────
+    canvas.line(64, H - 44, W - 64, H - 44, stroke=LINE)
+    canvas.text(64, H - 22, "Termux · Android · Linux · macOS · Windows", size=12.5, fill=FAINT)
+    canvas.text(W - 64, H - 22, f"v{__version__} · MIT", family="mono", size=12, fill=FAINT, anchor="end")
 
     # PNG only: the SVG would need 4.7 MB of embedded fonts
-    import resvg_py
-
     png = resvg_py.svg_to_bytes(
         svg_string=canvas.svg(),
         font_files=[
@@ -125,17 +131,14 @@ def main() -> None:
             str(FONT_DIR / "Inter-SemiBold.ttf"),
             str(FONT_DIR / "Inter-ExtraBold.ttf"),
             str(FONT_DIR / "JetBrainsMono-Bold.ttf"),
+            str(FONT_DIR / "JetBrainsMono-Regular.ttf"),
         ],
         skip_system_fonts=True,
         zoom=1.5,
     )
+    ASSETS.mkdir(parents=True, exist_ok=True)
     (ASSETS / "banner.png").write_bytes(png)
-
-
-def _b64(path: str) -> str:
-    import base64
-
-    return base64.b64encode(Path(path).read_bytes()).decode("ascii")
+    print("wrote", ASSETS / "banner.png", len(png) // 1024, "KB")
 
 
 if __name__ == "__main__":

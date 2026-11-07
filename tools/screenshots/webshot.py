@@ -51,6 +51,41 @@ DANGER = "#f5f5f5"
 WARN = "#d4d4d4"
 
 
+#: Geometry copied from ``_ICON_PATHS`` in transfer/http_handler.py -- the glyphs
+#: the listing actually draws. Keep them in sync; test_asset_drift.py checks
+#: that every kind drawn in a shot has a glyph in the template's table.
+_PAGE_ICON_PATHS: dict[str, tuple[str, ...]] = {
+    "folder": ('<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',),
+    "video": ('<path d="M4 6h11v12H4z"/>', '<path d="M15 10l5-3v10l-5-3z"/>'),
+    "audio": (
+        '<path d="M9 18V6l10-2v12"/>',
+        '<circle cx="6" cy="18" r="3"/>',
+        '<circle cx="16" cy="16" r="3"/>',
+    ),
+    "image": (
+        '<rect x="3" y="4" width="18" height="16" rx="2"/>',
+        '<circle cx="9" cy="10" r="2"/>',
+        '<path d="M21 16l-5-5-6 6-3-3-4 4"/>',
+    ),
+    "pdf": (
+        '<path d="M6 3h8l4 4v14H6z"/>',
+        '<path d="M14 3v5h4"/>',
+        '<path d="M9 13h6M9 17h4"/>',
+    ),
+    "text": (
+        '<path d="M6 3h8l4 4v14H6z"/>',
+        '<path d="M14 3v5h4"/>',
+        '<path d="M9 12h6M9 16h6"/>',
+    ),
+    "archive": ('<path d="M4 8h16v12H4z"/>', '<path d="M3 4h18v4H3z"/>', '<path d="M10 12h4"/>'),
+    "download": (
+        '<path d="M12 4v11"/>',
+        '<path d="M7 11l5 5 5-5"/>',
+        '<path d="M5 20h14"/>',
+    ),
+}
+
+
 class Measure:
     _cache: ClassVar[dict] = {}
 
@@ -95,6 +130,10 @@ class Canvas:
         self._grad = 0
         self._clip = 0
         self._emoji = 0
+        #: every visible string drawn, in draw order. ``Shot`` records it to
+        #: web-text.txt so a test can hold the copy against the real templates;
+        #: a bare Canvas (the README hero) just needs the list to exist.
+        self.labels: list[str] = []
         self._setup_defs()
         if background:
             self.rect(0, 0, width, height, fill=background)
@@ -208,7 +247,7 @@ class Canvas:
     ) -> float:
         """Draw consecutive styled runs on one baseline."""
         cursor = x
-        for chunk, opts in runs:
+        for index, (chunk, opts) in enumerate(runs):
             drawn = self.text(
                 cursor,
                 y,
@@ -219,7 +258,18 @@ class Canvas:
                 fill=opts.get("fill", fill),
                 opacity=opts.get("opacity", 1.0),
             )
-            cursor += drawn + opts.get("gap", 0.0)
+            gap = opts.get("gap")
+            if gap is None:
+                # Runs are separate <text> elements. In the markup a heading is
+                # literally "Download <span>Everything</span>, fast.", so the
+                # space lives at the end of the first run -- where it is
+                # measured but never drawn, which is how "DownloadEverything"
+                # appeared. Re-add it as an advance. A following run that starts
+                # with punctuation ("  , fast.") gets nothing: its own leading
+                # space plus a gap floated the comma off the word.
+                nxt = runs[index + 1][0] if index + 1 < len(runs) else ""
+                gap = size * 0.26 if chunk.endswith(" ") and nxt[:1] not in ",.;:!?)" else 0.0
+            cursor += drawn + gap
         return cursor - x
 
     def emoji(self, x: float, y: float, char: str, size: float) -> None:
@@ -231,6 +281,24 @@ class Canvas:
         body = path.read_text(encoding="utf-8")
         body = strip_svg_head(body)
         self.parts.append(f'<g transform="translate({x:.2f},{y:.2f}) scale({size / 36:.4f})">{body}</g>')
+
+    def icon(self, x: float, y: float, kind: str, size: float = 20, color: str = DIM) -> None:
+        """One of the page's own file glyphs, at ``size`` pixels.
+
+        The shots used to draw Twemoji: a red PDF, a green video camera, a blue
+        audio note. The real listing draws inline monochrome SVG from
+        ``icon_svg()`` in http_handler.py, so the screenshots were not just
+        tinted -- they were showing icons that no template contains, and those
+        emoji were the only colour left in any committed asset.
+        """
+        paths = _PAGE_ICON_PATHS.get(kind, _PAGE_ICON_PATHS["archive"])
+        scale = size / 24
+        body = "".join(paths).replace("<path ", "<path ")
+        self.parts.append(
+            f'<g transform="translate({x:.2f},{y:.2f}) scale({scale:.4f})" fill="none" '
+            f'stroke="{color}" stroke-width="1.6" stroke-linecap="round" '
+            f'stroke-linejoin="round">{body}</g>'
+        )
 
     # ── gradients ───────────────────────────────────────────────────────────
     def linear(self, stops: list[tuple[float, str]], *, x1=0, y1=0, x2=1, y2=1) -> str:
@@ -312,9 +380,6 @@ class Shot(Canvas):
             self.parts.append(
                 f'<ellipse cx="{cx:.0f}" cy="{cy:.0f}" rx="{r:.0f}" ry="{r * 0.62:.0f}" fill="{g}" opacity="{op}"/>'
             )
-        #: every visible string drawn on this shot, in draw order — recorded to
-        #: web-text.txt so a test can compare the copy with the shipped HTML.
-        self.labels: list[str] = []
         self.chrome_h = 64
         # browser chrome bar
         self.rect(0, 0, width, self.chrome_h, fill="rgba(17,17,17,0.92)")

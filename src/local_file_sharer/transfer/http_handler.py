@@ -626,7 +626,7 @@ class ShareRequestHandler(BaseHTTPRequestHandler):
             .replace("{{file_count}}", str(self.ctx.manifest.file_count))
             .replace("{{total_size}}", human_size(self.ctx.manifest.total_bytes))
             .replace("{{mode}}", self.ctx.manifest.mode)
-            .replace("{{expiry}}", self.ctx.manifest.expiry_text())
+            .replace("{{expiry_chip}}", _expiry_chip(self.ctx.manifest.expiry_text()))
             .replace("{{base_url}}", html.escape(self.ctx.base_url))
             .replace("{{zip_url}}", "/download/all.zip")
             .replace("{{parallel}}", "16")
@@ -636,6 +636,7 @@ class ShareRequestHandler(BaseHTTPRequestHandler):
             .replace("{{peer}}", html.escape(self.ctx.peer_name or "this device"))
             .replace("{{can_upload}}", "true" if self.ctx.allow_upload else "false")
             .replace("{{device_count}}", str(len(tracker.active_devices())))
+            .replace("{{device_word}}", _plural("Device", len(tracker.active_devices())))
             .replace("{{upload_section}}", self._upload_section())
         )
         self.send_html(body)
@@ -679,7 +680,7 @@ class ShareRequestHandler(BaseHTTPRequestHandler):
         ) + "".join(self._browser_row(f, base="/") for f in here)
         body = (
             template.replace("{{title}}", html.escape(self.ctx.manifest.title))
-            .replace("{{breadcrumbs}}", '<a href="/">all files</a>')
+            .replace("{{breadcrumbs}}", '<a href="/">All Files</a>')
             .replace("{{rows}}", rows)
             .replace("{{file_count}}", str(self.ctx.manifest.file_count))
             .replace("{{folder_size}}", human_size(self.ctx.manifest.total_bytes))
@@ -1489,6 +1490,34 @@ def _other_files_block(files) -> str:  # noqa: ANN001
     return f'<h3 class="also">Also in this share</h3>\n<ul class="playlist also-files">\n{rows}\n</ul>'
 
 
+def _plural(noun: str, count: int) -> str:
+    """``Device`` or ``Devices``.
+
+    The page said "1 devices" for the ordinary case of a share opened on
+    nothing but the host: a chip that is wrong on its most common value reads
+    as a bug, not as a label.
+    """
+    return noun if count == 1 else noun + "s"
+
+
+def _expiry_chip(text: str) -> str:
+    """The countdown chip, or nothing when the share has no deadline.
+
+    "never expires" under a clock icon was the most prominent chip on a page
+    with nothing to say: an open-ended share is the normal case, and a chip
+    that always reads the same is furniture. Only a real deadline is worth a
+    countdown.
+    """
+    if not text or text in ("never expires", "expired"):
+        return ""
+    icon = (
+        '<svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" '
+        'stroke-width="1.6" stroke-linecap="round" aria-hidden="true">'
+        '<circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg>'
+    )
+    return f'<span class="chip">{icon} <b id="expiry">{html.escape(text)}</b></span>'
+
+
 def _page_number(query: dict[str, list[str]]) -> int:
     """``?p=3`` → 3, and anything silly → 1."""
     try:
@@ -1633,9 +1662,14 @@ def _entry_cards(manifest, *, level: str = "", page: int = 1) -> tuple[list[str]
             f"{html.escape(label)}</h3>"
             f"<p>{entry.size_text} · {html.escape(kind_of(entry.path))}</p>{close}"
             f'<div class="card-actions">'
-            f'<a class="btn btn-ghost" href="/f/{entry.file_id}" download="{html.escape(label)}">Download</a>'
-            f'<a class="btn btn-ghost" href="/s/{entry.file_id}">Stream</a>'
-            f"</div></article>"
+            # .btn is the solid white style and .btn.ghost the outlined one;
+            # "btn-ghost" matched neither, so every file card drew TWO solid
+            # white buttons -- the loudest thing on a page meant to be quiet.
+            # Only playable files get a second button: nothing else can stream.
+            f'<a class="btn ghost" href="/f/{entry.file_id}" download="{html.escape(label)}">'
+            f"{'Download' if playable else 'Get'}</a>"
+            + (f'<a class="btn ghost" href="/s/{entry.file_id}">Stream</a>' if playable else "")
+            + "</div></article>"
         )
     return cards, total_items, pages
 
