@@ -54,32 +54,30 @@ jobs:
         # which a plain pipe would replace with tee's (always 0).
         run: |
           set -o pipefail
-          pytest -q --cov=local_file_sharer --cov-report=xml --cov-report=term-missing | tee pytest-output.txt
+          pytest -q --tb=line -rf --cov=local_file_sharer --cov-report=xml --cov-report=term-missing | tee pytest-output.txt
       # When this fails, the failing test names go into the job summary and an
       # annotation. Without it the only copy is in the log blob, which is not
       # always reachable -- and a red matrix you cannot read is a red matrix
       # nobody fixes. Runs even when pytest fails, and never masks its status.
+      # Annotations are the only part of a run that can be read back from here:
+      # the log blob and the artifacts both live on a host this sandbox cannot
+      # reach, and .output.summary is not exposed. So the reason for every
+      # failure goes into its own annotation, one line each -- pytest -q
+      # --tb=line -rf puts exactly that on the FAILED line, and a multi-line
+      # message would be truncated at the first newline anyway.
       - name: failure summary
         if: failure()
         shell: bash
         run: |
-          if [ -f .pytest_cache/v/cache/lastfailed ]; then
-            echo "### failing tests" >> "$GITHUB_STEP_SUMMARY"
-            echo '```' >> "$GITHUB_STEP_SUMMARY"
-            cat .pytest_cache/v/cache/lastfailed >> "$GITHUB_STEP_SUMMARY"
-            echo '```' >> "$GITHUB_STEP_SUMMARY"
-            # One annotation per failing test: a multi-line message is cut at
-            # the first newline, which made the Windows failures unreadable.
-            python -c "import json,pathlib; [print('::error title=failing test::' + n) for n in list(json.loads(pathlib.Path('.pytest_cache/v/cache/lastfailed').read_text()))[:20]]" || true
-            # The summary is the only part of a run that can be read without the
-            # log blob, so the failure text goes there too, indented per test.
-            echo '### failure detail' >> "$GITHUB_STEP_SUMMARY"
-            echo '```text' >> "$GITHUB_STEP_SUMMARY"
-            head -c 8000 pytest-output.txt >> "$GITHUB_STEP_SUMMARY" || true
-            echo '```' >> "$GITHUB_STEP_SUMMARY"
-          else
-            echo "::error::pytest failed before running any test (collection or install error)"
+          if [ ! -f pytest-output.txt ]; then
+            echo "::error::pytest did not produce any output (install or collection error)"
+            exit 0
           fi
+          echo "### failing tests" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          grep '^FAILED ' pytest-output.txt >> "$GITHUB_STEP_SUMMARY" || true
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          python tools/report_failures.py pytest-output.txt || true
       - name: upload failure output
         if: failure()
         uses: actions/upload-artifact@v4
