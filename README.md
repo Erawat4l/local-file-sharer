@@ -456,15 +456,7 @@ lfs --help
 
 ## What a new person needs
 
-It depends on one thing: **can they read this repository?**
-
-| Situation | What they do | What it costs |
-|---|---|---|
-| **Repository is public** | the one command below | nothing — this is one setting |
-| **Repository is private**, they were added as a collaborator | `git clone`, then `./run install` (they need a GitHub login) | they must be added by name |
-| **Repository is private**, they are a stranger | you send them `install-lfs.py`; they run `python3 install-lfs.py` | the file must reach them — USB, chat, a local share |
-
-Once the repository is public, a stranger needs exactly this:
+The repository is public, so anyone can install it. Two commands:
 
 ```bash
 curl -LO https://github.com/Erawat4l/local-file-sharer/raw/main/install-lfs.py
@@ -475,41 +467,14 @@ python3 install-lfs.py
 downloads `rich` and `qrcode`). Nothing else. `aria2c`, `tailscale` and
 `cloudflared` are optional and unlock extra features.
 
-**Why "private" produces such a confusing failure.** GitHub answers `404 Not
-Found` for a private repository to anyone without a token — the *same* 404 it
-gives for a repository that does not exist. So a stranger who tries the `curl`
-line above gets:
+`install-lfs.py` carries the whole source inside it, so it also works as an
+offline hand-over: copy the file over USB or chat, run it, done. No git, no
+clone, no account.
 
-```text
-urllib.error.HTTPError: HTTP Error 404: Not Found
-```
-
-which looks like a broken link in this README. It is not. It is a permission
-answer, and the only fixes are to make the repository public or to hand the
-file over directly.
-
-**Never test this while logged in.** The owner of a private repository can
-always download their own files, so the `raw` link works perfectly in your
-browser and fails for everybody else. Use a private window, a phone on mobile
-data, or `curl` from a machine with no credentials.
-
-`install-lfs.py` carries the entire source, so once it is in someone's hands it
-needs no GitHub access at all — only PyPI.
-
-**Updating is the one thing that still needs access.** `lfs upgrade` re-installs
-from `github.com`, so a stranger running a private-repository copy gets the same
-404 when they try to update:
-
-```text
-lfs upgrade
-from  main  (https://github.com/Erawat4l/local-file-sharer.git)
-  ...fails, because git is refused...
-```
-
-That is expected, not broken: there is nothing they are allowed to download.
-An install handed over directly is a snapshot; to move it forward, hand over a
-newer `install-lfs.py`. Making the repository public turns `lfs upgrade` into
-the one-command update it is meant to be.
+**Test the link while logged out.** The owner of a repository can always
+download their own files, so a broken `raw` link still works in the owner's
+browser. Use a private window, a phone on mobile data, or `curl` from a machine
+with no credentials.
 
 ## Updating
 
