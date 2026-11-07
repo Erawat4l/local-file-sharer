@@ -469,3 +469,44 @@ def test_the_server_shot_draws_the_page_s_row_metrics():
     )
     assert "row_h = 46" in block, ".row is 11px padding around a 14px line: 46px"
     assert "size=14" in block, ".row-name is 14px"
+
+
+def test_every_page_sets_a_base_anchor_colour():
+    """No page may fall back to the browser's default link colour.
+
+    The player's download control is an ``<a download>`` -- a link, because that
+    is how a browser is asked to save a file -- and ``player.html`` set no base
+    ``a`` rule. On a real phone it rendered in Chrome's default link blue,
+    underlined, inside a circle of otherwise monochrome icons: the only colour
+    in the whole application, straight from a missing three-line CSS rule.
+
+    Any page that can render a link needs the rule, so every template is
+    checked rather than just the player.
+    """
+    repo = Path(__file__).resolve().parents[1]
+    assets = repo / "src" / "local_file_sharer" / "web" / "assets"
+
+    # The player carries its own <style> block and links no stylesheet, so its
+    # rule has to be in the file itself. The other two link app.css, which
+    # already sets it -- checked once, there.
+    player = (assets / "player.html").read_text(encoding="utf-8")
+    # anchored to the start of a line: `.understage a{color:…}` and
+    # `.playlist li a{color:…}` are not the base rule and were matching it,
+    # which made this test pass with the rule deleted.
+    assert re.search(r"(?m)^\s*a\s*\{\s*color:", player), (
+        "player.html has no base `a{color:…}` rule of its own, so its <a download> "
+        "control renders in the browser's default link blue"
+    )
+    app_css = (assets / "static" / "app.css").read_text(encoding="utf-8")
+    assert re.search(r"(^|\n)a\s*\{\s*color:", app_css), (
+        "app.css lost its base anchor colour, which server.html and downloader.html rely on"
+    )
+
+
+def test_the_download_control_is_a_link_on_the_player():
+    """Holds the reason the rule above matters: that control is an anchor."""
+    repo = Path(__file__).resolve().parents[1]
+    page = (repo / "src" / "local_file_sharer" / "web" / "assets" / "player.html").read_text(encoding="utf-8")
+    assert re.search(r'<a class="round" id="get"[^>]*download', page), (
+        "the player's download control stopped being an <a download>"
+    )

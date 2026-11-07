@@ -401,17 +401,37 @@ class Shot(Canvas):
             f'fill="{fill}" stroke="{stroke}" stroke-width="1"/>'
         )
 
-    def chip(self, x: float, y: float, label: str, *, accent: bool = False, size: float = 11.5) -> float:
+    def chip(
+        self,
+        x: float,
+        y: float,
+        label: str,
+        *,
+        accent: bool = False,
+        size: float = 11.5,
+        icon: str | None = None,
+    ) -> float:
+        """A header/link chip, per app.css .chip.
+
+        ``icon`` draws the page's leading glyph: "Download Folder" and
+        "Download Station" are anchors with an SVG inside them, which the shot
+        drew as bare text.
+        """
         m = Measure("sans", 500, size)
-        w = m.width(label) + 24
+        icon_w = 16 if icon else 0
+        w = m.width(label) + 24 + (icon_w + 7 if icon else 0)
         h = 26
         if accent:
             self.rect(x, y, w, h, fill="rgba(175,175,175,0.12)", stroke="rgba(175,175,175,0.42)", r=13)
             self.circle(x + 12, y + h / 2, 3.2, fill=ACCENT)
             self.text(x + 20, y + 17, label, weight=500, size=size, fill="#e3e3e3")
-        else:
-            self.rect(x, y, w, h, fill="rgba(23,23,23,0.72)", stroke=LINE, r=13)
-            self.text(x + 12, y + 17, label, weight=500, size=size, fill=DIM)
+            return w
+        self.rect(x, y, w, h, fill="rgba(23,23,23,0.72)", stroke=LINE, r=13)
+        tx = x + 12
+        if icon:
+            self.icon(tx, y + h / 2 - icon_w / 2, icon, icon_w, color=DIM)
+            tx += icon_w + 7
+        self.text(tx, y + 17, label, weight=500, size=size, fill=DIM)
         return w
 
     def button(
