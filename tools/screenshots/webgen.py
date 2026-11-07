@@ -419,75 +419,126 @@ def _player_chrome(shot: Shot, *, stage_y: int, stage_h: int, vw: int) -> None:
     pad = 26
     seek_y = bottom - 132
     shot.text(pad, seek_y + 4, "0:41:12", family="mono", size=11, fill=DIM)
-    shot.progress(pad + 62, seek_y - 3, vw - pad * 2 - 124, 0.38, h=6)
-    shot.circle(pad + 62 + (vw - pad * 2 - 124) * 0.38, seek_y, 7, fill="#ffffff")
+    shot.progress(pad + 62, seek_y - 3, vw - pad * 2 - 124, 0.38, h=6, color="#ffffff")
+    thumb_x = pad + 62 + (vw - pad * 2 - 124) * 0.38
+    # input[type=range]::-webkit-slider-thumb: 14px white dot inside a
+    # box-shadow 0 0 0 4px rgba(255,255,255,.22) -- the ring is most of what
+    # makes the slider look like the player's rather than a plain line.
+    shot.circle(thumb_x, seek_y, 11, fill="rgba(255,255,255,0.22)")
+    shot.circle(thumb_x, seek_y, 7, fill="#ffffff")
     shot.text(vw - pad, seek_y + 4, "1:48:20", family="mono", size=11, fill=DIM, anchor="end")
 
     cy = bottom - 74
-    shot.circle(pad + 21, cy, 21, fill="#ffffff")
-    shot.parts.append(
-        f'<path d="M{pad + 17} {cy - 9} L{pad + 30} {cy} L{pad + 17} {cy + 9} Z" fill="#000000"/>'
-    )
-    for offset, label in ((72, "10"), (128, "10")):
-        shot.circle(pad + offset, cy, 17, fill="#0a0a0a")
-        shot.parts.append(
-            f'<circle cx="{pad + offset}" cy="{cy}" r="17" fill="none" stroke="{LINE_STRONG}" stroke-width="1"/>'
-        )
-        shot.text(pad + offset, cy + 4, label, weight=700, size=10, fill=DIM, anchor="middle")
-    mx = pad + 184
-    shot.circle(mx, cy, 17, fill="#0a0a0a")
-    shot.parts.append(
-        f'<circle cx="{mx}" cy="{cy}" r="17" fill="none" stroke="{LINE_STRONG}" stroke-width="1"/>'
-    )
-    shot.parts.append(f'<path d="M{mx - 7} {cy - 3}h4l5-4v14l-5-4h-4z" fill="{DIM}"/>')
-    shot.parts.append(
-        f'<path d="M{mx + 4} {cy - 4}a5 5 0 0 1 0 8" stroke="{DIM}" stroke-width="1.4" fill="none"/>'
-    )
-    vx = mx + 30
-    shot.line(vx, cy, vx + 74, cy, stroke="rgba(255,255,255,0.20)", sw=5)
-    shot.line(vx, cy, vx + 56, cy, stroke="#ffffff", sw=5)
-    shot.circle(vx + 56, cy, 6, fill="#ffffff")
+    # ── transport ───────────────────────────────────────────────────────────
+    # Every number here is read off player.html, not guessed, because this row
+    # is the one thing the gifs are compared against: a 46px white play disc
+    # and 40px outlined circles at --line #232323, glyphs drawn from the same
+    # 24x24 viewBox paths the page uses, and #141414 inside every circle. The
+    # shot used to draw 34px circles with a lighter stroke and a different
+    # order of controls, which is not the player anyone installs.
+    ROUND, PRIMARY = 20.0, 23.0
+    CIRCLED = "#141414"
 
-    rx = vw - pad - 17 - 3 * 44
-    for kind in ("rate", "pip", "fit", "full"):
-        shot.circle(rx, cy, 17, fill="#0a0a0a")
+    def control(cx: float, radius: float) -> None:
+        shot.circle(cx, cy, radius, fill=CIRCLED)
         shot.parts.append(
-            f'<circle cx="{rx}" cy="{cy}" r="17" fill="none" stroke="{LINE_STRONG}" stroke-width="1"/>'
+            f'<circle cx="{cx}" cy="{cy}" r="{radius}" fill="none" '
+            'stroke="#232323" stroke-width="1"/>'
         )
+
+    # play: white disc, black triangle. player.html's .round.primary
+    shot.circle(pad + PRIMARY, cy, PRIMARY, fill=TEXT)
+    # player.html: <svg class="i" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/> at 24px
+    kp = 24 / 24
+    shot.parts.append(
+        f'<path d="M{pad + PRIMARY + (8 - 12) * kp:.2f} {cy + (5 - 12) * kp:.2f} '
+        f'V{cy + (19 - 12) * kp:.2f} L{pad + PRIMARY + (19 - 12) * kp:.2f} {cy:.2f} Z" fill="#000000"/>'
+    )
+
+    x = pad + PRIMARY * 2 + 10
+    for kind in ("back10", "fwd10", "mute"):
+        control(x, ROUND)
+        _transport_glyph(shot, x, cy, kind)
+        x += ROUND * 2 + 10
+
+    # #vol: a 88px range, 6px tall, white up to the thumb
+    vx = x
+    shot.line(vx, cy, vx + 88, cy, stroke="#333333", sw=6)
+    shot.line(vx, cy, vx + 66, cy, stroke="#ffffff", sw=6)
+    shot.circle(vx + 66, cy, 7, fill="#ffffff")
+
+    # right group: rate, pip, download, fit, fullscreen
+    rx = vw - pad - ROUND - 4 * (ROUND * 2 + 10)
+    for kind in ("rate", "pip", "download", "fit", "full"):
+        # #full is a 46px circle? no: every .round but play is 40px
+        control(rx, ROUND)
         _transport_glyph(shot, rx, cy, kind)
-        rx += 44
+        rx += ROUND * 2 + 10
+
+
+#: The transport glyphs, copied verbatim from player.html: a 24x24 viewBox and
+#: the exact ``d`` / rect geometry the page draws. Nothing is recomputed, which
+#: is the point -- a hand-traced copy of these already shipped once and managed
+#: to draw a "+" where the download control belongs, because a shape was being
+#: approximated instead of copied.
+GLYPHS: dict[str, tuple[str, ...]] = {
+    "back10": ('<path d="M11 5 6.5 9 11 13"/><path d="M6.5 9H13a5.5 5.5 0 1 1 0 11h-3"/>'),
+    "fwd10": ('<path d="m13 5 4.5 4-4.5 4"/><path d="M17.5 9H11a5.5 5.5 0 1 0 0 11h3"/>'),
+    "mute": (
+        '<path d="M4 9.5h3L11.5 6v12L7 14.5H4z"/><path d="M15.5 9a4 4 0 0 1 0 6"/>'
+        '<path d="M18 6.5a7.5 7.5 0 0 1 0 11"/>'
+    ),
+    "rate": (
+        '<path d="M4.2 17.5a8.5 8.5 0 1 1 15.6 0"/><path d="m12 14.5 4-4.2"/>'
+        '<circle cx="12" cy="15.2" r="1.4" fill="currentColor" stroke="none"/>'
+    ),
+    "pip": ('<rect x="3" y="5" width="18" height="14" rx="2.5"/>'
+            '<rect x="12" y="11" width="7" height="6" rx="1.2" fill="currentColor" stroke="none"/>'),
+    "download": ('<path d="M12 4v10"/><path d="m7.5 10.5 4.5 4 4.5-4"/><path d="M5 19h14"/>'),
+    # ``class="solid"`` is a CSS hook (.round .i .solid{fill:currentColor}), not
+    # a presentation attribute, so it is written as one here and resolved below.
+    "fit": ('<rect x="3" y="5" width="18" height="14" rx="2.5"/>'
+            '<path d="M7 12h10M12 8v8" class="solid"/>'),
+    "full": ('<path d="M4 9V4h5"/><path d="M20 9V4h-5"/><path d="M4 15v5h5"/><path d="M20 15v5h-5"/>'),
+}
+
+#: page.css: ``.round .i{width:26px;height:26px;stroke-width:1.8}`` -- the icon
+#: is 26px inside the 40px circle, so the 24-unit box scales by 26/24. (It was
+#: 21px, which left the circles looking hollow next to the 46px play disc; the
+#: shot and the page were changed together, because the shot is the promise.)
+ICON_PX = 26
+
+
+#: page.css: ``.round .i .solid{fill:currentColor;stroke:none}``. A ``.solid``
+#: shape on the page is the bright interior of an outline icon; here it is the
+#: same colour written out, since there is no cascade to inherit it from.
+SOLID = f'fill="{DIM}" stroke="none"'
 
 
 def _transport_glyph(shot, cx: float, cy: float, kind: str) -> None:
-    """The symbol inside a round control, in the page's own geometry."""
-    if kind == "rate":
-        # speedometer: an arc with a needle, exactly the path player.html uses
-        shot.parts.append(
-            f'<path d="M{cx - 8} {cy + 5}a8.5 8.5 0 1 1 15.6 0" fill="none" stroke="{DIM}" '
-            'stroke-width="1.5" stroke-linecap="round"/>'
-        )
-        shot.parts.append(
-            f'<path d="M{cx} {cy + 3}l4-4" stroke="{DIM}" stroke-width="1.5" stroke-linecap="round"/>'
-        )
-        shot.circle(cx, cy + 4, 1.4, fill=DIM)
-    elif kind == "pip":
-        shot.parts.append(
-            f'<rect x="{cx - 8}" y="{cy - 6}" width="16" height="12" rx="2" fill="none" '
-            f'stroke="{DIM}" stroke-width="1.4"/>'
-        )
-        shot.parts.append(f'<rect x="{cx + 1}" y="{cy}" width="6" height="5" rx="1" fill="{DIM}"/>')
-    elif kind == "fit":
-        shot.parts.append(
-            f'<rect x="{cx - 8}" y="{cy - 6}" width="16" height="12" rx="2" fill="none" '
-            f'stroke="{DIM}" stroke-width="1.4"/>'
-        )
-        shot.parts.append(f'<path d="M{cx - 4} {cy}h8M{cx} {cy - 4}v8" stroke="{DIM}" stroke-width="1.4"/>')
-    else:  # fullscreen: four corners
-        for dx, dy, sx, sy in ((-8, -6, 1, 1), (8, -6, -1, 1), (-8, 6, 1, -1), (8, 6, -1, -1)):
-            shot.parts.append(
-                f'<path d="M{cx + dx} {cy + dy + 4 * sy}V{cy + dy}H{cx + dx + 4 * sx}" fill="none" '
-                f'stroke="{DIM}" stroke-width="1.4" stroke-linecap="round"/>'
-            )
+    """Stamp one page glyph, centred, at the size the page draws it."""
+    scale = ICON_PX / 24
+    half = 12 * scale
+    shot.parts.append(
+        f'<g transform="translate({cx - half:.2f} {cy - half:.2f}) scale({scale:.4f})" '
+        f'fill="none" stroke="{DIM}" stroke-width="1.8" '
+        'stroke-linecap="round" stroke-linejoin="round">'
+        # ``currentColor`` is the page's shorthand for "the button's text
+        # colour"; outside a CSS context it resolves to black, which drew the
+        # "+" inside the fill-screen icon invisibly on a black circle. Substitute
+        # the colour the page actually ends up with.
+        + "".join(GLYPHS[kind]).replace("currentColor", DIM).replace('class="solid"', SOLID)
+        + "</g>"
+    )
+    # `10` and the current rate print in the lower half of the circle
+    # (page.css: .round .glyph{bottom:9px}) rather than under the icon.
+    if kind in ("back10", "fwd10"):
+        # page.css .round .glyph: 8.5px bold in the bottom of the circle, on a
+        # plate of #141414 so it does not print through the arrow.
+        shot.rect(cx - 6, cy + 6, 12, 11, fill="#141414", r=3)
+        shot.text(cx, cy + 14, "10", family="mono", weight=700, size=8.5, fill=DIM, anchor="middle")
+    elif kind == "rate":
+        shot.text(cx, cy + 13, "1\u00d7", weight=700, size=8.5, fill=TEXT, anchor="middle")
 
 
 def recorded_text() -> list[str]:
