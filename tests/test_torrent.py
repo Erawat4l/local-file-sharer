@@ -21,6 +21,7 @@ from local_file_sharer.transfer.torrent import (
     info_hash_hex,
     parse_torrent,
     read_torrent,
+    torrent_hint,
 )
 
 
@@ -225,3 +226,57 @@ def test_numwant_caps_the_peer_list():
         registry.announce(info_hash, peer_id=bytes([n]) * 20, ip=f"10.0.0.{n + 1}", port=7000 + n, left=0)
     seen = registry.announce(info_hash, peer_id=b"A" * 20, ip="10.0.0.1", port=6881, left=0, numwant=3)
     assert len(seen) == 3
+
+
+# ── the file has to work without our server ─────────────────────────────────
+def test_the_torrent_carries_dht_bootstrap_nodes(share_tree):
+    """A .torrent you cannot hand to somebody else is not a .torrent.
+
+    The file used to name only this machine's own tracker and webseed, so it
+    was an HTTP download with a torrent's clothes on: pass it to a friend, stop
+    the share, and it stops working. The DHT node list (BEP-5) is what lets
+    their client find peers with nothing of ours running.
+    """
+    build = build_torrent(_files(share_tree), name="share", tracker_url="http://192.168.1.4:8080/announce")
+    meta = parse_torrent(build.content)
+
+    assert b"nodes" in meta, "without DHT nodes the torrent dies with the share"
+    nodes = dict(meta[b"nodes"])
+    assert b"router.bittorrent.com" in nodes
+    assert nodes[b"router.bittorrent.com"] == 6881
+    assert build.portable is True
+
+
+def test_a_private_torrent_stays_private(share_tree):
+    """`private` means "same swarm only", so no DHT and no public trackers."""
+    build = build_torrent(_files(share_tree), name="share", private=True)
+    meta = parse_torrent(build.content)
+    assert meta[b"info"][b"private"] == 1
+    assert b"nodes" not in meta
+    assert build.portable is False
+
+
+def test_public_trackers_are_listed_one_per_tier(share_tree):
+    """Tiers are tried one at a time, so each tracker needs its own."""
+    build = build_torrent(_files(share_tree), name="share", tracker_url="http://192.168.1.4:8080/announce")
+    tiers = parse_torrent(build.content)[b"announce-list"]
+    assert [t.decode() for t in tiers[0]] == ["http://192.168.1.4:8080/announce"]
+    assert len(tiers) > 1, "a dead built-in tracker must not be the only option"
+    assert all(len(tier) == 1 for tier in tiers), "one tracker per tier"
+    flat = [t.decode() for tier in tiers for t in tier]
+    assert any(u.startswith("udp://") for u in flat)
+
+
+def test_the_magnet_carries_a_peer_to_bootstrap_from(share_tree):
+    """A magnet without a peer or tracker is a hash nobody can act on."""
+    build = build_torrent(_files(share_tree), name="share")
+    assert "x.pe=" in build.magnet
+    assert "router.bittorrent.com" in build.magnet
+
+
+def test_the_hint_says_whether_it_outlives_the_share(share_tree):
+    portable = build_torrent(_files(share_tree), name="share")
+    assert "without this device running" in torrent_hint(portable)
+
+    private = build_torrent(_files(share_tree), name="share", private=True)
+    assert "stops working" in torrent_hint(private)

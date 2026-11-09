@@ -8,6 +8,19 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 ## [Unreleased]
 
 ### Fixed
+- Torrent mode produced a `.torrent` that only worked while the share was
+  running. The file named this machine's own tracker and its own HTTP webseed,
+  so handing it to somebody else and closing the share left them with a dead
+  link in a `.torrent` costume. The file now carries public **DHT bootstrap
+  nodes** and public fallback trackers, so their client joins the global DHT
+  and can find peers with nothing of yours running. `private=True` still
+  produces a swarm-only torrent with neither.
+- The `.torrent` path was never printed: it was written to `~/Downloads` and
+  the panel showed only the magnet, so the file you asked for was invisible.
+  It is now the first line of the torrent panel, with its size and piece count.
+- The torrent panel claimed the webseed "pulls pieces straight from this
+  device", which was true and useless — it described a download that stops when
+  the share does. It now says whether the file outlives the share.
 - Every sub-folder on a nested page read `0 files · 0 B` even though its files
   were on disk: the row's path was built by joining the level being listed with
   a trail that already contained it, so it asked for `Root/Level/Level/Child/`
