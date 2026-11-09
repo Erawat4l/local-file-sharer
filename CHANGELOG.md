@@ -8,20 +8,40 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 ## [Unreleased]
 
 ### Changed
+- The README offers one default install command. It had four routes — the
+  `install-lfs.py` one-liner, clone plus `./run install`, a `pipx` subsection,
+  and `pipx` as the *only* method shown under Windows — and `pipx` is not
+  installed by default on Termux, most Linux distributions or a clean Windows
+  machine, so a first-time reader had to install a tool before the tool. The
+  subsection is gone, Windows leads with the same one-liner as everywhere else,
+  and `pipx` survives as one optional sentence for people who already have it.
+  The references in `lfs doctor --fix-copies` and `lfs uninstall` stay: those
+  describe what the program does when it *finds* a pipx install, which is not
+  the same as recommending one.
+- The Windows one-liner uses `curl.exe`, not `curl`. PowerShell 5.1 aliases
+  `curl` to `Invoke-WebRequest`, which has no `-LO` and fails with "a parameter
+  cannot be found that matches parameter name 'L'". It is the one command in
+  the file that had to differ per platform, so it says why.
+- `lfs doctor` no longer suggests `pipx install local-file-sharer` as the fix
+  for a missing dependency, and `updater.py` no longer calls pipx "the
+  recommended install". Both contradicted the docs above. The dependency fix is
+  now `pip install <package>` or `lfs upgrade`.
+- The Termux block installs `python python-pip`; `git` moved to a sentence
+  saying it is only needed for the clone route.
 - The README's install section is a third of its former length. It opened with
   a long branch on the repository being **private** — a first-time reader had
   to work out which of three situations applied before typing anything — but
   the repository is public, so most of that was a second audience reading
   documentation for a situation that applied to neither of them. The section is
-  now: one-liner, clone, pipx, update, Termux, Windows, stale-copy, source. The
+  now: one-liner, clone, update, Termux, Windows, stale-copy, source. The
   `gh repo edit --visibility` recipe, the "you may not have access" path and the
   "test the link while logged out" note are gone with the condition they
   described.
 - The table of contents was pointing at four sections that no longer existed
   (`#if-you-just-want-it-running`, `#the-three-commands`, `#one-file-no-git-no-url-to-type`,
   `#linux--macos`) and at two anchors that never resolved
-  (`#platform-support`, `#shell-integration--completions`). All 33 internal
-  links now resolve.
+  (`#platform-support`, `#shell-integration--completions`). All internal links
+  resolve.
 
 ### Fixed
 - Torrent mode produced a `.torrent` that only worked while the share was

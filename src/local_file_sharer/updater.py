@@ -2,7 +2,8 @@
 
 Strategy, best first:
 
-1. **pipx** (the recommended install) → ``lfs upgrade`` (installs from GitHub)
+1. **pipx** (if that is how this copy was installed) → ``lfs upgrade``
+   (installs from GitHub)
 2. **pip** in the current environment → ``python -m pip install --upgrade``
 3. **standalone Windows .exe** → download the release asset next to the current
    executable and print the swap instructions (never overwrite a running exe).

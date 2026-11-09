@@ -31,7 +31,6 @@ saturates your Wi-Fi. Works on **Termux/Android**, **Linux**, **macOS** and **Wi
 - [Install](#install)
   - [The one-liner](#the-one-liner)
   - [Or clone it, if you want to `git pull`](#or-clone-it-if-you-want-to-git-pull)
-  - [pipx, if you already use it](#pipx-if-you-already-use-it)
   - [Updating](#updating)
   - [Termux](#termux)
   - [Windows](#windows)
@@ -166,15 +165,9 @@ the checkout only — the command to remember is `lfs`.
 no PATH editing afterwards. If neither is on your PATH it says so and prints
 the line for your shell rather than leaving you with `command not found`.
 
-### pipx, if you already use it
-
-```bash
-pipx install "local-file-sharer @ git+https://github.com/Erawat4l/local-file-sharer.git"
-```
-
-Not on PyPI yet, so point pip at the repository. `pipx` avoids the "externally
-managed" question on Debian/Ubuntu entirely, which is why it is preferred over
-`pip --user` there.
+Already a `pipx` user? `pipx install "local-file-sharer @ git+https://github.com/Erawat4l/local-file-sharer.git"`
+works too. It is not required, and it is not installed by default on Termux,
+most Linux distributions, or Windows.
 
 ### Updating
 
@@ -190,12 +183,14 @@ Same command either way, and the same one the menu's **Update** item runs.
 ### Termux
 
 ```bash
-pkg install python python-pip git
+pkg install python python-pip
 ```
 
+That is all the one-liner needs. Add `git` only if you are taking the clone
+route above.
+
 `python-pip` is not optional: Termux's `python` ships `venv` but no pip and no
-`ensurepip`, so a virtualenv made without it cannot install anything. Then use
-either path above.
+`ensurepip`, so a virtualenv made without it cannot install anything.
 
 Two Termux traps worth knowing, because neither looks like its cause:
 
@@ -215,8 +210,12 @@ Two Termux traps worth knowing, because neither looks like its cause:
 ### Windows
 
 ```powershell
-pipx install "local-file-sharer @ git+https://github.com/Erawat4l/local-file-sharer.git"
+curl.exe -LO https://github.com/Erawat4l/local-file-sharer/raw/main/install-lfs.py
+python3 install-lfs.py
 ```
+
+`curl.exe`, not `curl`: PowerShell 5.1 aliases `curl` to `Invoke-WebRequest`,
+which has no `-LO` and fails on this line.
 
 There is also a standalone **`local-file-sharer.exe`** on every tagged release
 — no Python required, and `lfs upgrade` will not touch it (download a new one
@@ -274,92 +273,7 @@ PyPI is needed on the first run (for `rich` and `qrcode`) and nothing else.
 The file also works as an offline hand-over: copy it over USB or chat, run it,
 done — no git, no clone, no account.
 
-Details, including clone and pipx routes: [Install](#install).
-
-## Updating
-
-```bash
-lfs upgrade
-```
-
-In a clone this is `git pull` plus a reinstall. Everywhere else — pipx, a
-frozen build, a copy unpacked from `install-lfs.py` — it reinstalls from GitHub.
-Same command either way, and the same one the menu's **Update** item runs.
-`lfs upgrade --ref main` pins a branch.
-
-### Termux
-
-```bash
-pkg install python python-pip git
-```
-
-`python-pip` is not optional: Termux's `python` ships `venv` but no pip and no
-`ensurepip`, so a virtualenv made without it cannot install anything. Then use
-either path above.
-
-Two Termux traps worth knowing, because neither looks like its cause:
-
-- **No `/tmp`.** `run` keeps its error output in `.lfs-tmp` inside the
-  checkout.
-- **`dlopen failed: cannot locate symbol "XML_GetCurrentLineNumber64"`** means
-  `libexpat` is older than the `python` package linking against it. Every
-  install fails from deep inside pip. Fix:
-
-  ```bash
-  pkg update && pkg upgrade
-  pkg install --reinstall libexpat python
-  ```
-
-`termux-setup-storage` once, so the picker can read `/sdcard`.
-
-### Windows
-
-```powershell
-pipx install "local-file-sharer @ git+https://github.com/Erawat4l/local-file-sharer.git"
-```
-
-There is also a standalone **`local-file-sharer.exe`** on every tagged release
-— no Python required, and `lfs upgrade` will not touch it (download a new one
-instead). If PowerShell blocks a script:
-`Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass`.
-
-### When `lfs` is not the copy you just upgraded
-
-The most confusing failure this app has: a device ends up with several `lfs`
-binaries, and the oldest one is first on `PATH`, so it answers every command.
-The symptoms look unrelated — an old menu, a subcommand that "does not exist" —
-because a *different program* is running.
-
-```bash
-lfs doctor                # the INSTALL section names the winner
-lfs doctor --fix-copies   # remove only the copies shadowing this one
-```
-
-A `pipx` install is left alone (it prints `pipx uninstall local-file-sharer`
-instead, since deleting a pipx launcher by hand leaves a broken half-install).
-Your shell may then need to forget the old path:
-
-| Shell | Command |
-|---|---|
-| fish | nothing — fish reads `$PATH` on every command |
-| bash / zsh | `hash -r` |
-| sh | `command -v lfs` |
-| PowerShell | `$env:PATH = $env:PATH` |
-
-`hash -r` and `rehash` are both wrong in fish — the first is bash/zsh only, the
-second was a fish function that no longer exists. In fish, nothing is needed.
-`lfs doctor --fix-copies` prints the right line for the shell you ran it in.
-
-### From source, if you are working on it
-
-```bash
-git clone https://github.com/Erawat4l/local-file-sharer.git
-cd local-file-sharer
-python3 -m venv .venv && . .venv/bin/activate
-pip install -e ".[dev]"
-```
-
----
+Details, including the clone route: [Install](#install).
 
 ## Uninstalling
 

@@ -122,7 +122,7 @@ def check_dependencies() -> list[Check]:
                     f"{module}",
                     FAIL if required else WARN,
                     "not installed",
-                    f"pip install {package}   (or: pipx install local-file-sharer)",
+                    f"pip install {package}   (or: lfs upgrade)",
                     "dependencies",
                 )
             )
