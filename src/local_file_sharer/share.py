@@ -486,18 +486,28 @@ class ShareRunner:
     def _show_torrent(self, torrent: TorrentBuild) -> None:
         theme = current_theme()
         con = console()
-        con.print(
-            panel(
-                Group(
-                    Text(f"🧲 {torrent.magnet}", style=theme.link),
-                    Text(""),
-                    Text(torrent_hint(torrent), style=theme.muted),
-                    Text(f"info-hash {torrent.info_hash_hex}", style=theme.faint),
-                ),
-                title="torrent",
-                border=theme.success,
+        lines = []
+        # The file is the thing you send. It used to be written to ~/Downloads
+        # and never mentioned again -- the panel showed only the magnet, so
+        # nobody could find the .torrent they had just asked for.
+        if self.torrent_path is not None:
+            lines.append(Text(f"file    {self.torrent_path}", style=theme.secondary))
+            lines.append(
+                Text(
+                    f"        {human_size(torrent.total_bytes)} · {torrent.piece_count} pieces",
+                    style=theme.faint,
+                )
             )
+            lines.append(Text(""))
+        lines.extend(
+            [
+                Text(f"🧲 {torrent.magnet}", style=theme.link),
+                Text(""),
+                Text(torrent_hint(torrent), style=theme.muted),
+                Text(f"info-hash {torrent.info_hash_hex}", style=theme.faint),
+            ]
         )
+        con.print(panel(Group(*lines), title="torrent", border=theme.success))
 
     # ── main loop ───────────────────────────────────────────────────────────
     def _wait_loop(self, result: ShareResult) -> None:

@@ -112,7 +112,7 @@ scrollback, and a live dashboard with speed, ETA, progress, devices and total se
 | Area | What you get |
 |---|---|
 | **Picker** | scroll-friendly, never clears the screen, auto-fits any width, inline icons, no *Type* column, Windows drive letters, fuzzy search (`/`), `6,7,8` / `6-8` selection, folder summaries (files, subfolders, size, shareable) |
-| **Modes** | **Download** (forced, resumable, folders auto-zipped) · **Serve** (web file browser) · **Stream** (player with seeking) · **Torrent** (`.torrent` + magnet, built-in tracker, HTTP webseed) |
+| **Modes** | **Download** (forced, resumable, folders auto-zipped) · **Serve** (web file browser) · **Stream** (player with seeking) · **Torrent** (portable `.torrent` + magnet, DHT, built-in tracker, HTTP webseed) |
 | **Networks** | LAN/Wi-Fi IP first (QR + one-liners), public IP, Tailscale auto-detect (`serve`/`funnel`), Cloudflare Tunnel with a slow-speed warning |
 | **Speed** | `os.sendfile` → `socket.sendfile` fallback, 4 MiB buffers, `Range` support, 16-connection parallel downloader |
 | **Web UIs** | Download Station, File Browser, Media Player — all offline-capable, browser caching disabled |
@@ -538,7 +538,7 @@ lfs                            # interactive menu
 lfs ~/Movies                   # share a folder in download mode
 lfs film.mkv episode.mp4       # share several files
 lfs --mode stream ~/Videos   # pick media, open the player
-lfs --mode torrent ~/Photos  # .torrent + magnet + tracker + webseed
+lfs --mode torrent ~/Photos  # portable .torrent + magnet, DHT + tracker + webseed
 lfs doctor                   # check tools, firewall, network
 lfs config show              # effective configuration
 lfs upgrade                  # install the newest code from GitHub
@@ -585,7 +585,7 @@ status** — and folders are analysed as you select them.
 | **Download** | `lfs --mode download <paths>` | One landing page with every file, a "download all" button using 16 parallel range requests, and a resumable `.zip` for folders |
 | **Serve** | `lfs --mode serve <folder>` | A web file browser (search, multi-select, breadcrumbs, download folder as zip) |
 | **Stream** | `lfs --mode stream <media>` | A media player page with seeking, playback speed, playlist and keyboard control |
-| **Torrent** | `lfs --mode torrent <paths>` | A real `.torrent` + `magnet:` link, a **built-in HTTP tracker** and an **HTTP webseed** so pieces come straight from this machine |
+| **Torrent** | `lfs --mode torrent <paths>` | A portable `.torrent` + `magnet:` link carrying **public DHT bootstrap nodes**, so the person you send it to keeps downloading after you close the share. Plus a built-in tracker and HTTP webseed for instant transfer while you are both online |
 
 All modes support the PIN gate, expiry and (optionally) uploads back to you.
 
@@ -880,7 +880,9 @@ Run it again with `--debug` for a traceback, or
 - [ ] **Resumable uploads** from the browser UI (chunked, restartable)
 - [ ] **Native Android share sheet** integration for Termux
 - [ ] **QR pairing codes** that prefill PIN + expiry
-- [ ] **Multi-file torrent** seeding from a real peer (not only the webseed)
+- [ ] **Multi-file torrent** seeding from a real peer (the file is portable now,
+      but this program still serves pieces over HTTP rather than speaking the
+      BitTorrent wire protocol to other clients)
 - [ ] **Plugin API** for custom landing pages
 
 Vote with a 👍 on an issue, or open a PR — see [CONTRIBUTING.md](CONTRIBUTING.md).

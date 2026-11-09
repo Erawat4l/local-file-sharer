@@ -13,10 +13,26 @@ What "torrent mode" gives you
   over HTTP with Range requests.
 * Progress reporting for the dashboard (pieces sent by the webseed).
 
-The torrent is intentionally "seeded by the sharer only": pieces come from the
-HTTP webseed, and peers exchange metadata via the built-in tracker. A normal
-BitTorrent client such as qBittorrent, aria2 or Transmission picks it up
-without configuration.
+What the file is, and what it is not
+------------------------------------
+The .torrent carries four things that matter:
+
+* ``info`` — names, sizes and the SHA-1 of every piece, so a client can verify
+  what it received.
+* ``nodes`` — public DHT bootstrap entries (BEP-5). This is what makes the file
+  portable: the recipient's client joins the global DHT and can find a peer
+  without this device being awake, online, or even on the same network.
+* ``url-list`` — the HTTP webseed on this device. While the share is running
+  this is the fastest source, because it needs no peer to have the data first.
+* ``announce`` — the built-in tracker, used only while the share is up.
+
+Before this, only the last two were present. Both named this machine, so the
+file was a torrent in format and an HTML download in practice: hand it to
+somebody else, close the share, and it stopped working. The DHT node list is
+what turns it into a file worth sending.
+
+A share that has finished, or a device that is asleep, is not a failure of the
+format — with the nodes present another peer can serve the same pieces.
 """
 
 from __future__ import annotations
@@ -40,6 +56,52 @@ from .zipstream import ZipItem
 
 PIECE_MIN = 32 * 1024
 PIECE_MAX = 4 * 1024 * 1024
+
+#: Public DHT bootstrap nodes (BEP-5), as ``host:port``.
+#:
+#: These are the well-known entry points run by the wider BitTorrent ecosystem
+#: -- not ours, and not something that stops when a share does. A client that
+#: reads them joins the global DHT, which is what lets it find a peer days
+#: after this machine has gone to sleep. They are written into the .torrent so
+#: the file carries everything needed to start.
+DHT_NODES: tuple[str, ...] = (
+    "router.bittorrent.com:6881",
+    "dht.transmissionbt.com:6881",
+    "router.utorrent.com:6881",
+    "dht.libtorrent.org:25401",
+)
+
+
+#: Public open trackers used as a fallback alongside the built-in one.
+#:
+#: The built-in tracker is the fastest way for two devices on the same Wi-Fi to
+#: find each other, but it only answers while the share is running. Listing
+#: public trackers too means a client still has somewhere to announce once this
+#: device is gone -- provided somebody who already has the data is seeding.
+PUBLIC_TRACKERS: tuple[str, ...] = (
+    "udp://tracker.opentrackr.org:1337/announce",
+    "udp://open.tracker.cl:1337/announce",
+    "udp://tracker.openbittorrent.com:6969/announce",
+    "udp://exodus.desync.com:6969/announce",
+)
+
+
+def _split_node(node: str) -> tuple[str, int]:
+    """``"host:port"`` -> ``("host", port)``; a bad entry is dropped, not raised.
+
+    The node list is a nicety on top of the torrent. A malformed entry must not
+    stop the .torrent from being written, because the files are still shared
+    over plain HTTP whether the DHT piece works or not.
+    """
+    host, _, port = node.rpartition(":")
+    if not host:
+        return "", 0
+    try:
+        return host, int(port)
+    except ValueError:
+        return "", 0
+
+
 BENCODE_INT = b"i"
 TRACKER_INTERVAL = 60
 
@@ -173,7 +235,20 @@ class TorrentBuild:
     total_bytes: int
     tracker_url: str
     webseed_url: str
+    nodes: tuple[str, ...] = ()
     created_at: float = field(default_factory=time.time)
+
+    @property
+    def portable(self) -> bool:
+        """True when the torrent can be opened with no server of ours running.
+
+        A torrent whose only announce URL is this machine's own tracker, and
+        whose only source of pieces is this machine's own webseed, dies the
+        moment the share stops. Peer discovery through a DHT bootstrap node
+        survives that, because the node is a way into the network, not a
+        service of ours.
+        """
+        return bool(self.nodes)
 
     @property
     def info_hash(self) -> bytes:
@@ -185,13 +260,17 @@ class TorrentBuild:
 
     @property
     def magnet(self) -> str:
-        return build_magnet(
+        base = build_magnet(
             self.info_hash_hex,
             name=self.name,
             tracker=self.tracker_url,
             webseeds=[self.webseed_url],
             total_bytes=self.total_bytes,
         )
+        # x.pe is the magnet spelling of "peer": a DHT bootstrap node. Without
+        # it a magnet link is a 40-character hash and nothing else, which no
+        # client can act on.
+        return merge_magnet(base, **{("x.pe" if i == 0 else f"x.pe{i}"): n for i, n in enumerate(self.nodes)})
 
     def save(self, path: Path | None = None) -> Path:
         target = path or Path.cwd() / f"{self.name}.torrent"
@@ -243,6 +322,8 @@ def build_torrent(
     webseed_url: str = "",
     piece_length: int = 0,
     private: bool = False,
+    nodes: Sequence[str] = DHT_NODES,
+    public_trackers: Sequence[str] = PUBLIC_TRACKERS,
     progress=None,
 ) -> TorrentBuild:
     """Create a v1 multi-file torrent for *files*."""
@@ -280,9 +361,24 @@ def build_torrent(
     }
     if tracker_url:
         meta["announce"] = tracker_url
-        meta["announce-list"] = [[tracker_url]]
+        tiers: list[list[str]] = [[tracker_url]]
+        if not private and public_trackers:
+            # Each public tracker gets its own tier: a client tries one per
+            # tier, so putting them together means it only ever asks the first
+            # and never falls through to the rest.
+            tiers.extend([t] for t in public_trackers)
+        meta["announce-list"] = tiers
     if webseed_url:
         meta["url-list"] = [webseed_url]
+    # `nodes` is BEP-5: a list of [host, port] DHT bootstrap entries. This is
+    # what makes the file stand on its own. A torrent that only lists our own
+    # tracker announces to a service that has stopped the moment the share
+    # does, so the download is dead in the water; with a bootstrap node the
+    # client joins the public DHT and can find peers that have nothing to do
+    # with this machine.
+    if nodes and not private:
+        pairs = [_split_node(n) for n in nodes]
+        meta["nodes"] = [[h, p] for h, p in pairs if h]
     content = bencode(meta)
     return TorrentBuild(
         content=content,
@@ -293,6 +389,7 @@ def build_torrent(
         total_bytes=total,
         tracker_url=tracker_url,
         webseed_url=webseed_url,
+        nodes=tuple(nodes) if nodes and not private else (),
     )
 
 
@@ -471,11 +568,19 @@ class SeedStats:
 
 
 def torrent_hint(build: TorrentBuild) -> str:
-    """A short, honest note shown in the CLI."""
-    return (
-        "Open the .torrent (or magnet) in qBittorrent, Transmission or aria2 — "
-        "the webseed pulls pieces straight from this device at LAN speed."
-    )
+    """A short, honest note shown in the CLI.
+
+    The old wording promised "the webseed pulls pieces straight from this
+    device", which was true and useless: it described a download that dies with
+    the share window. Say what the file actually is now, and say the part that
+    matters -- whether it keeps working once this device stops serving.
+    """
+    if build.portable:
+        return (
+            "Send this .torrent to anyone. It carries public DHT bootstrap "
+            "nodes, so their client finds peers without this device running."
+        )
+    return "This .torrent points only at this device's own tracker, so it stops working when the share ends."
 
 
 def parse_torrent(data: bytes) -> dict:
