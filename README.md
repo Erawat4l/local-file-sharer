@@ -10,7 +10,7 @@ One command (`lfs`), an interactive menu, a QR code, and a real HTTP engine that
 saturates your Wi-Fi. Works on **Termux/Android**, **Linux**, **macOS** and **Windows**.
 
 [![Python](https://img.shields.io/badge/python-3.9%2B-3776ab?logo=python&logoColor=white)](https://www.python.org/)
-[![Platforms](https://img.shields.io/badge/platforms-Termux%20%C2%B7%20Linux%20%C2%B7%20macOS%20%C2%B7%20Windows-22d3ee)](#platform-support)
+[![Platforms](https://img.shields.io/badge/platforms-Termux%20%C2%B7%20Linux%20%C2%B7%20macOS%20%C2%B7%20Windows-22d3ee)](#install)
 [![License: MIT](https://img.shields.io/badge/license-MIT-34d399)](LICENSE)
 [![CI](https://github.com/Erawat4l/local-file-sharer/actions/workflows/ci.yml/badge.svg)](../../actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/Erawat4l/local-file-sharer?color=a78bfa&label=release)](../../releases/latest)
@@ -29,14 +29,15 @@ saturates your Wi-Fi. Works on **Termux/Android**, **Linux**, **macOS** and **Wi
 - [Demo](#demo)
 - [Features](#features)
 - [Install](#install)
-  - [If you just want it running](#if-you-just-want-it-running)
-  - [The three commands](#the-three-commands)
-  - [One file (no git, no URL to type)](#one-file-no-git-no-url-to-type)
-  - [Termux (Android)](#termux-android)
-  - [When `lfs` is not the copy you just upgraded](#when-lfs-is-not-the-copy-you-just-upgraded)
-  - [Linux / macOS](#linux--macos)
+  - [The one-liner](#the-one-liner)
+  - [Or clone it, if you want to `git pull`](#or-clone-it-if-you-want-to-git-pull)
+  - [pipx, if you already use it](#pipx-if-you-already-use-it)
+  - [Updating](#updating)
+  - [Termux](#termux)
   - [Windows](#windows)
-  - [From source](#from-source)
+  - [When `lfs` is not the copy you just upgraded](#when-lfs-is-not-the-copy-you-just-upgraded)
+  - [From source, if you are working on it](#from-source-if-you-are-working-on-it)
+- [What a new person needs](#what-a-new-person-needs)
 - [Quick start](#quick-start)
 - [The file picker](#the-file-picker)
 - [Share modes](#share-modes)
@@ -46,7 +47,7 @@ saturates your Wi-Fi. Works on **Termux/Android**, **Linux**, **macOS** and **Wi
 - [Configuration](#configuration)
 - [Command reference](#command-reference)
 - [Diagnostics](#diagnostics)
-- [Shell integration & completions](#shell-integration--completions)
+- [Shell integration & completions](#shell-integration-completions)
 - [Performance notes](#performance-notes)
 - [Troubleshooting](#troubleshooting)
 - [Roadmap](#roadmap)
@@ -127,70 +128,21 @@ scrollback, and a live dashboard with speed, ETA, progress, devices and total se
 
 ## Install
 
-> Requirements: **Python 3.9+**. Everything else is optional (`aria2c`,
-> `tailscale`, `cloudflared` unlock extra features).
+**Requirements:** Python 3.9+. `aria2c`, `tailscale` and `cloudflared` are
+optional and unlock extra features.
 
-### If you just want it running
-
-> **Read this first: the repository is currently private.** That is one GitHub
-> setting, not a limit of the app, but it decides *how* you can install. Check
-> which case you are in before typing anything.
-
-**If you have access** (it is your repository, or you were added as a
-collaborator, or you have it public) — clone it, go in, install it:
-
-```bash
-git clone https://github.com/Erawat4l/local-file-sharer.git
-cd local-file-sharer
-./run install
-```
-
-Then, once:
-
-```bash
-lfs configure     # port, PIN, theme, starting folder (Enter accepts each default)
-lfs               # the menu
-```
-
-**If you do not have access**, nothing on `github.com` will work for you — not
-`git clone`, not the `raw` download link, not `curl`. GitHub answers
-**404 Not Found**, which is identical to the answer for a repository that does
-not exist, so it reads as "wrong URL" rather than "you need permission". The
-only way in is for someone with access to send you the installer:
-
-```bash
-# they download it once (~350 KB) and send it however they like
-# then you run the copy you were given:
-python3 install-lfs.py
-```
-
-`install-lfs.py` carries the whole source inside itself, so it needs **no
-GitHub access at all** once you have the file — only PyPI, for two libraries.
-
-### If you own the repository
-
-Flip it public, and every command above starts working for everyone:
-
-```bash
-gh repo edit Erawat4l/local-file-sharer --visibility public --accept-visibility-change-consequences
-```
-
-GitHub's own UI does the same: **Settings → General → Danger Zone → Change
-repository visibility**. After that the one-file path works for any stranger:
+### The one-liner
 
 ```bash
 curl -LO https://github.com/Erawat4l/local-file-sharer/raw/main/install-lfs.py
 python3 install-lfs.py
 ```
 
-Verify it from a machine that is not logged in — a phone on mobile data, or a
-private browser window. Logged-in browsers hide this problem completely: the
-repository owner can always download their own file, so the `raw` link appears
-to work perfectly.
+`install-lfs.py` carries the whole source inside itself. It needs PyPI on the
+first run (for `rich` and `qrcode`) and nothing else — no git, no clone, no
+account. Copy the file over USB or chat and it still works.
 
-### The three commands
-
-Prefer a checkout you can `git pull`? Clone it, go in, install it.
+### Or clone it, if you want to `git pull`
 
 ```bash
 git clone https://github.com/Erawat4l/local-file-sharer.git
@@ -198,111 +150,94 @@ cd local-file-sharer
 ./run install
 ```
 
-Both routes end the same way: one command, `lfs`, that works from any
-directory. `./run install` links it into a directory that is **already on your
-PATH** (`~/.local/bin` or `~/bin`, whichever your shell searches), so there is
-no PATH editing afterwards.
-
-If neither directory is on your PATH, the installer says so and prints the
-line for your shell — it does not leave you with a successful install and a
-`command not found`:
-
-```text
-! ~/bin is not on PATH, so `lfs` will not be found yet
-  add it for good:
-    fish:  fish_add_path ~/bin
-    bash:  echo 'export PATH="$HOME/bin:$PATH"' >> ~/.bashrc
-  or just run ./run from this folder
-```
-
-`./run install` builds a private `.venv` in the checkout, downloads `rich` and
-`qrcode`, and links `lfs` onto your PATH — a progress bar runs while it
-downloads, so it never looks frozen. When it finishes you have one command,
-`lfs`, and it works from any directory:
+Either route ends the same way: one command, `lfs`, on your `PATH`.
 
 ```bash
-lfs configure    # once: port, PIN, theme, starting folder (Enter accepts each default)
-lfs              # the menu, any time after
+lfs configure    # once: port, PIN, theme, starting folder (Enter takes defaults)
+lfs              # the menu
 ```
 
-Everything you do afterwards is `lfs`: `lfs doctor`, `lfs upgrade`, `lfs ~/Downloads`.
-`./run` still exists inside the checkout and runs exactly the same binary, but it
-is only there for the checkout itself — the command to remember is `lfs`.
+Everything after that is `lfs`: `lfs doctor`, `lfs upgrade`, `lfs ~/Downloads`.
+`./run` still exists inside a checkout and runs the same binary, but it is for
+the checkout only — the command to remember is `lfs`.
 
-**Updating is one command**, and it is not `./run`:
+`./run install` builds a private `.venv` in the checkout and links `lfs` into
+`~/.local/bin` or `~/bin`, whichever your shell already searches, so there is
+no PATH editing afterwards. If neither is on your PATH it says so and prints
+the line for your shell rather than leaving you with `command not found`.
+
+### pipx, if you already use it
+
+```bash
+pipx install "local-file-sharer @ git+https://github.com/Erawat4l/local-file-sharer.git"
+```
+
+Not on PyPI yet, so point pip at the repository. `pipx` avoids the "externally
+managed" question on Debian/Ubuntu entirely, which is why it is preferred over
+`pip --user` there.
+
+### Updating
 
 ```bash
 lfs upgrade
 ```
 
-In a clone this runs `git pull` in the checkout and reinstalls what it pulled,
-behind a progress bar, and prints what changed. Anywhere else — a `pipx`
-install, a frozen build, a copy unpacked from `install-lfs.py` — it reinstalls
-from GitHub instead. Either way it is the same command, and the same one the
-menu's **Update** item runs.
+In a clone this is `git pull` plus a reinstall. Everywhere else — pipx, a
+frozen build, a copy unpacked from `install-lfs.py` — it reinstalls from GitHub.
+Same command either way, and the same one the menu's **Update** item runs.
+`lfs upgrade --ref main` pins a branch.
 
-**First run on Termux** needs Python and pip before any of this (once only):
-
-```bash
-pkg install python python-pip
-```
-
-`run` finds Python but will not install it for you. Termux keeps pip in its own
-package — `python` has the `venv` module but no pip and no `ensurepip`, so a
-virtualenv made without `python-pip` cannot install anything. With it present,
-`run` builds the venv with `--system-site-packages` so it can borrow that pip
-and install into itself.
-
-Termux also has no `/tmp` — `run` keeps its error output in `.lfs-tmp` inside
-the checkout — and if pip is missing anyway, `run` offers to install
-`python-pip` for you (skip that with `LFS_NO_AUTOINSTALL=1`).
-
-One more Termux trap, because it is common and looks nothing like its cause: if
-the interpreter's own C extensions are mismatched, every install fails from deep
-inside pip with `dlopen failed: cannot locate symbol "XML_GetCurrentLineNumber64"`.
-That is `libexpat` being older than the `python` package that links against it,
-and `run` now says so instead of letting pip print 64 lines about build
-toolchains. The fix is:
+### Termux
 
 ```bash
-pkg update && pkg upgrade
-pkg install --reinstall libexpat python
+pkg install python python-pip git
 ```
+
+`python-pip` is not optional: Termux's `python` ships `venv` but no pip and no
+`ensurepip`, so a virtualenv made without it cannot install anything. Then use
+either path above.
+
+Two Termux traps worth knowing, because neither looks like its cause:
+
+- **No `/tmp`.** `run` keeps its error output in `.lfs-tmp` inside the
+  checkout.
+- **`dlopen failed: cannot locate symbol "XML_GetCurrentLineNumber64"`** means
+  `libexpat` is older than the `python` package linking against it. Every
+  install fails from deep inside pip. Fix:
+
+  ```bash
+  pkg update && pkg upgrade
+  pkg install --reinstall libexpat python
+  ```
+
+`termux-setup-storage` once, so the picker can read `/sdcard`.
+
+### Windows
+
+```powershell
+pipx install "local-file-sharer @ git+https://github.com/Erawat4l/local-file-sharer.git"
+```
+
+There is also a standalone **`local-file-sharer.exe`** on every tagged release
+— no Python required, and `lfs upgrade` will not touch it (download a new one
+instead). If PowerShell blocks a script:
+`Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass`.
 
 ### When `lfs` is not the copy you just upgraded
 
-This is the most confusing failure the app has, and it is not rare: a device can
-end up with several `lfs` binaries, and the oldest one is usually first on
-`PATH`, so it answers every command. The symptoms look unrelated — an old menu,
-a subcommand that "does not exist", `lfs configure` doing something else
-entirely — because a *different program* is running.
-
-Ask which copy is which:
+The most confusing failure this app has: a device ends up with several `lfs`
+binaries, and the oldest one is first on `PATH`, so it answers every command.
+The symptoms look unrelated — an old menu, a subcommand that "does not exist" —
+because a *different program* is running.
 
 ```bash
-lfs doctor            # the INSTALL section names the winner
+lfs doctor                # the INSTALL section names the winner
+lfs doctor --fix-copies   # remove only the copies shadowing this one
 ```
 
-It looks like this when something is shadowing you:
-
-```
-INSTALL
-▲   copy wins  /data/data/com.termux/files/home/bin/lfs  (pip, runs first)
-•   copy       /data/data/com.termux/files/usr/bin/lfs   (pip, shadowed)
-    fix: rm /data/data/com.termux/files/home/bin/lfs
-```
-
-Remove the one that wins, in one command:
-
-```bash
-lfs doctor --fix-copies
-```
-
-It removes only copies that shadow this one, and leaves a `pipx` install alone
-(printing `pipx uninstall local-file-sharer` instead, since deleting a pipx
-launcher by hand leaves a broken half-install). Some shells then need telling
-to forget the old path — **the command differs per shell**, and the wrong one
-just prints an error:
+A `pipx` install is left alone (it prints `pipx uninstall local-file-sharer`
+instead, since deleting a pipx launcher by hand leaves a broken half-install).
+Your shell may then need to forget the old path:
 
 | Shell | Command |
 |---|---|
@@ -311,170 +246,35 @@ just prints an error:
 | sh | `command -v lfs` |
 | PowerShell | `$env:PATH = $env:PATH` |
 
-Two wrong answers have been printed here before, both for fish. `hash -r` is
-bash/zsh only (`fish: Unknown command: hash`), and `rehash` was a fish function
-that has since been removed (`fish: Unknown command: rehash`). In fish the
-correct answer is that no command is needed.
+`hash -r` and `rehash` are both wrong in fish — the first is bash/zsh only, the
+second was a fish function that no longer exists. In fish, nothing is needed.
+`lfs doctor --fix-copies` prints the right line for the shell you ran it in.
 
-`lfs doctor --fix-copies` prints the right line for the shell you ran it from.
-
-`lfs` also prints a one-line warning at startup when it detects this, so you are
-not left guessing. Silence it with `LFS_NO_COPY_WARNING=1`.
-
-**If `lfs upgrade` seems stuck** on `0/5 contacting GitHub`, it is not stuck: the
-bar now shows elapsed seconds, and an update that hears nothing from the network
-for four minutes is abandoned with an explanation instead of hanging. A weak
-connection is the usual reason; retrying, or using `install-lfs.py` on a slow
-link, is the fix.
-
-**Upgrading a copy installed from an old branch** used to reinstall that branch
-forever. If a copy was installed once from something like
-`arena/d7f4713b-local-file-sharer`, `lfs upgrade` now recognises it as a finished
-branch and follows `main` instead, saying so on the way past.
-
-### One file (no git, no URL to type)
-
-Prefer not to clone? Download `install-lfs.py` and run it:
-
-```bash
-python3 install-lfs.py
-```
-
-It unpacks a complete checkout to `~/local-file-sharer` and prints the two
-commands that matter. The virtualenv is built on first launch, so:
-
-```bash
-cd ~/local-file-sharer && ./run            # build, then start
-cd ~/local-file-sharer && ./run upgrade    # update
-```
-
-Useful when a terminal font makes `Erawat4l` hard to type — its last character
-is a lowercase **L**, not a digit — or when you would rather not clone.
-
-### Termux (Android)
-
-```bash
-pkg update && pkg install python python-pip git
-pipx install "local-file-sharer @ git+https://github.com/Erawat4l/local-file-sharer.git"
-termux-setup-storage   # once, so the picker can read /sdcard
-lfs                    # ← the command is `lfs`, not `start`
-```
-
-`python-pip` is not optional here: Termux's `python` package provides the
-`venv` module but neither pip nor `ensurepip`, so `pipx` has nothing to work
-with. `pipx` itself comes from `pkg install pipx` if it is missing.
-
-If `lfs` is not found immediately, open a new session (the installer adds
-`~/.local/bin` to PATH). `start` is **not** installed — it collides with other
-Android tooling, which is why the command was renamed.
-
-The installer also offers `aria2`, `zip`, `curl` and `wget`, and writes the fish
-function + completions when fish is present.
-
-### Linux / macOS
-
-```bash
-pipx install "local-file-sharer @ git+https://github.com/Erawat4l/local-file-sharer.git"
-```
-
-Prefer doing it by hand? It is **not on PyPI yet**, so point pip at the repo:
-
-```bash
-pipx install "local-file-sharer @ git+https://github.com/Erawat4l/local-file-sharer.git"
-# or
-python3 -m pip install --user "local-file-sharer @ git+https://github.com/Erawat4l/local-file-sharer.git"
-```
-
-On Debian/Ubuntu the system Python is "externally managed" (PEP 668); a
-`--user` install needs `--break-system-packages`, which the installer adds
-automatically. `pipx` avoids the question entirely and is recommended.
-
-Flags: `--dev` (editable install from a checkout), `--no-extras`, `--no-fish`,
-`--yes`, `--uninstall`.
-
-### Installing from source
-
-`git+https://…` installs work without a GitHub account. If a network blocks
-`raw.githubusercontent.com`, read the installer through the API instead — it
-serves the same bytes:
-
-```bash
-gh api "repos/Erawat4l/local-file-sharer/contents/install-lfs.py" \
-       -H "Accept: application/vnd.github.raw" > install-lfs.py
-python3 install-lfs.py
-```
-
-(`install.sh` is the other installer — pip/pipx rather than a self-contained
-file. It is reachable the same way, replacing `install-lfs.py` in that command.)
-
-Setting the repository to public makes the plain `curl` form work, and then
-this file is all a new person needs.
-
-### Windows
-
-```powershell
-pipx install "local-file-sharer @ git+https://github.com/Erawat4l/local-file-sharer.git"
-```
-
-The PowerShell installer:
-
-1. finds Python 3.9+ (or tells you exactly how to install it),
-2. installs with `pipx` (preferred) or `pip --user`,
-3. wires the **fish** function at `%APPDATA%\fish\functions\lfs.fish` (if fish
-   is installed),
-4. puts **`lfs.cmd`** on your PATH, so `lfs` works in `cmd.exe` and PowerShell —
-   unlike `start`, `lfs` is not a shell built-in, so it can be a real command,
-5. registers PowerShell tab completion.
-
-```text
-any shell:   lfs
-fish:        lfs                  # plus the function, so it behaves the same
-manual:      local-file-sharer    # the underlying entry point
-```
-
-If PowerShell blocks the script, use:
-```powershell
-Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
-```
-
-There is also a **standalone `local-file-sharer.exe`** attached to every tagged
-release — no Python required. `lfs upgrade` replaces it with the newest build when running the
-frozen build.
-
-### From source
+### From source, if you are working on it
 
 ```bash
 git clone https://github.com/Erawat4l/local-file-sharer.git
 cd local-file-sharer
 python3 -m venv .venv && . .venv/bin/activate
 pip install -e ".[dev]"
-lfs --help
 ```
-
 
 ---
 
 ## What a new person needs
 
-The repository is public, so anyone can install it. Two commands:
+Two commands, on any machine with Python 3.9+:
 
 ```bash
 curl -LO https://github.com/Erawat4l/local-file-sharer/raw/main/install-lfs.py
 python3 install-lfs.py
 ```
 
-**Requirements:** Python 3.9+ and network access to PyPI on the first run (it
-downloads `rich` and `qrcode`). Nothing else. `aria2c`, `tailscale` and
-`cloudflared` are optional and unlock extra features.
+PyPI is needed on the first run (for `rich` and `qrcode`) and nothing else.
+The file also works as an offline hand-over: copy it over USB or chat, run it,
+done — no git, no clone, no account.
 
-`install-lfs.py` carries the whole source inside it, so it also works as an
-offline hand-over: copy the file over USB or chat, run it, done. No git, no
-clone, no account.
-
-**Test the link while logged out.** The owner of a repository can always
-download their own files, so a broken `raw` link still works in the owner's
-browser. Use a private window, a phone on mobile data, or `curl` from a machine
-with no credentials.
+Details, including clone and pipx routes: [Install](#install).
 
 ## Updating
 
@@ -482,18 +282,84 @@ with no credentials.
 lfs upgrade
 ```
 
-The package is not on PyPI and has no release tags yet, so `lfs --update`
-(which compares against a GitHub *release*) can only report `404`. `lfs upgrade`
-installs the current code from the branch this copy came from:
+In a clone this is `git pull` plus a reinstall. Everywhere else — pipx, a
+frozen build, a copy unpacked from `install-lfs.py` — it reinstalls from GitHub.
+Same command either way, and the same one the menu's **Update** item runs.
+`lfs upgrade --ref main` pins a branch.
+
+### Termux
 
 ```bash
-lfs upgrade                              # same branch you installed from
-lfs upgrade --ref main                   # a specific branch or tag
+pkg install python python-pip git
 ```
 
-It uses `pipx install --force` for pipx installs, `pip install --upgrade` for
-plain ones (retrying with `--break-system-packages` on Debian/Ubuntu), and
-refuses to touch a standalone `.exe` — download that from Releases instead.
+`python-pip` is not optional: Termux's `python` ships `venv` but no pip and no
+`ensurepip`, so a virtualenv made without it cannot install anything. Then use
+either path above.
+
+Two Termux traps worth knowing, because neither looks like its cause:
+
+- **No `/tmp`.** `run` keeps its error output in `.lfs-tmp` inside the
+  checkout.
+- **`dlopen failed: cannot locate symbol "XML_GetCurrentLineNumber64"`** means
+  `libexpat` is older than the `python` package linking against it. Every
+  install fails from deep inside pip. Fix:
+
+  ```bash
+  pkg update && pkg upgrade
+  pkg install --reinstall libexpat python
+  ```
+
+`termux-setup-storage` once, so the picker can read `/sdcard`.
+
+### Windows
+
+```powershell
+pipx install "local-file-sharer @ git+https://github.com/Erawat4l/local-file-sharer.git"
+```
+
+There is also a standalone **`local-file-sharer.exe`** on every tagged release
+— no Python required, and `lfs upgrade` will not touch it (download a new one
+instead). If PowerShell blocks a script:
+`Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass`.
+
+### When `lfs` is not the copy you just upgraded
+
+The most confusing failure this app has: a device ends up with several `lfs`
+binaries, and the oldest one is first on `PATH`, so it answers every command.
+The symptoms look unrelated — an old menu, a subcommand that "does not exist" —
+because a *different program* is running.
+
+```bash
+lfs doctor                # the INSTALL section names the winner
+lfs doctor --fix-copies   # remove only the copies shadowing this one
+```
+
+A `pipx` install is left alone (it prints `pipx uninstall local-file-sharer`
+instead, since deleting a pipx launcher by hand leaves a broken half-install).
+Your shell may then need to forget the old path:
+
+| Shell | Command |
+|---|---|
+| fish | nothing — fish reads `$PATH` on every command |
+| bash / zsh | `hash -r` |
+| sh | `command -v lfs` |
+| PowerShell | `$env:PATH = $env:PATH` |
+
+`hash -r` and `rehash` are both wrong in fish — the first is bash/zsh only, the
+second was a fish function that no longer exists. In fish, nothing is needed.
+`lfs doctor --fix-copies` prints the right line for the shell you ran it in.
+
+### From source, if you are working on it
+
+```bash
+git clone https://github.com/Erawat4l/local-file-sharer.git
+cd local-file-sharer
+python3 -m venv .venv && . .venv/bin/activate
+pip install -e ".[dev]"
+```
+
+---
 
 ## Uninstalling
 

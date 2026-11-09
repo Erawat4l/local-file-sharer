@@ -7,6 +7,22 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Changed
+- The README's install section is a third of its former length. It opened with
+  a long branch on the repository being **private** — a first-time reader had
+  to work out which of three situations applied before typing anything — but
+  the repository is public, so most of that was a second audience reading
+  documentation for a situation that applied to neither of them. The section is
+  now: one-liner, clone, pipx, update, Termux, Windows, stale-copy, source. The
+  `gh repo edit --visibility` recipe, the "you may not have access" path and the
+  "test the link while logged out" note are gone with the condition they
+  described.
+- The table of contents was pointing at four sections that no longer existed
+  (`#if-you-just-want-it-running`, `#the-three-commands`, `#one-file-no-git-no-url-to-type`,
+  `#linux--macos`) and at two anchors that never resolved
+  (`#platform-support`, `#shell-integration--completions`). All 33 internal
+  links now resolve.
+
 ### Fixed
 - Torrent mode produced a `.torrent` that only worked while the share was
   running. The file named this machine's own tracker and its own HTTP webseed,
